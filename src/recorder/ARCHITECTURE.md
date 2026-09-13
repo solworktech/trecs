@@ -451,46 +451,6 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 }
 ```
 
-## Performance Characteristics
-
-| Component | CPU | Memory | Disk I/O |
-|-----------|-----|--------|----------|
-| Terminal Recording | 1-2% | ~10MB | Continuous |
-| Audio Recording | <1% | ~5MB | Continuous |
-| Camera Recording | 10-20% | ~50MB | Continuous |
-| Screen Recording | 15-30% | ~100MB | Continuous |
-| Playback | 2-5% | ~Size of file | Sequential read |
-
-**Optimization Tips:**
-- Reduce screen resolution for lower CPU
-- Lower framerate for screen/camera
-- Use faster codec settings
-- Run on system with SSD for I/O
-
-## Testing Strategy
-
-Recommended test cases:
-
-```go
-// Terminal tests
-TestTerminalRecorderStart()
-TestTerminalRecorderCapture()
-TestTerminalRecorderNCurses()
-
-// Media tests
-TestAudioRecorderFFMpegArgs()
-TestCameraRecorderPlatformDetection()
-
-// Session tests
-TestSessionRecorderLifecycle()
-TestSessionRecorderMetadata()
-
-// Playback tests
-TestPlayerLoadFrames()
-TestPlayerTiming()
-TestPlayerSeeking()
-```
-
 ## Future Enhancements
 
 - **Synchronised Playback**: Play terminal + video together
