@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 )
 
@@ -45,11 +44,9 @@ func ParseRecording(filePath string) ([]Command, error) {
 
 // extractPrompt gets the shell prompt from the first frame
 func extractPrompt(firstFrameData string) string {
-	// Look for common shell prompts
 	lines := strings.Split(firstFrameData, "\n")
 	if len(lines) > 0 {
 		lastLine := lines[len(lines)-1]
-		// Find the last occurrence of common prompt endings
 		for _, char := range "$#>" {
 			if idx := strings.LastIndex(lastLine, string(char)); idx != -1 {
 				return lastLine[:idx+1]
@@ -65,52 +62,62 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 	var currentCommand *Command
 	var inputPhase = true
 
-	for i, frame := range frames {
-		if currentCommand == nil {
-			currentCommand = &Command{
-				InputFrames:  []TerminalFrame{},
-				OutputFrames: []TerminalFrame{},
-				StartTime:    frame.Timestamp,
-			}
-		}
+	for i := 1; i < len(frames); i++ {
+		frame := frames[i]
+		data := frame.Data
 
-		// Check if this frame ends input (contains newline/return)
-		if inputPhase && containsReturnOrNewline(frame.Data) {
-			inputPhase = false
-			currentCommand.InputFrames = append(currentCommand.InputFrames, frame)
-			currentCommand.InputText = reconstructInput(currentCommand.InputFrames)
+		// Skip title/setup frames that aren't actual commands
+		if isSetupFrame(data) {
 			continue
 		}
 
-		// Check if we've reached the next prompt (start of new command)
-		if !inputPhase && isPromptLine(frame.Data, prompt) {
-			// Save current command and start new one
-			if currentCommand != nil && len(currentCommand.InputFrames) > 0 {
-				currentCommand.OutputText = stripEscapeSequences(reconstructOutput(currentCommand.OutputFrames))
-				currentCommand.OutputTextRaw = reconstructOutput(currentCommand.OutputFrames)
-				if i > 0 {
-					currentCommand.EndTime = frames[i-1].Timestamp
+		// Check if this is actual input (single char or short string without heavy escaping)
+		if inputPhase && isUserInput(data) {
+			if currentCommand == nil {
+				currentCommand = &Command{
+					InputFrames:  []TerminalFrame{},
+					OutputFrames: []TerminalFrame{},
+					StartTime:    frame.Timestamp,
 				}
-				commands = append(commands, *currentCommand)
 			}
-			currentCommand = &Command{
-				InputFrames:  []TerminalFrame{},
-				OutputFrames: []TerminalFrame{},
-				StartTime:    frame.Timestamp,
+			currentCommand.InputFrames = append(currentCommand.InputFrames, frame)
+
+			// Check if input ends (newline)
+			if containsReturnOrNewline(data) {
+				currentCommand.InputText = reconstructInput(currentCommand.InputFrames)
+				inputPhase = false
 			}
-			inputPhase = true
 			continue
 		}
 
-		// Accumulate frames
-		if inputPhase {
-			currentCommand.InputFrames = append(currentCommand.InputFrames, frame)
-		} else {
-			currentCommand.OutputFrames = append(currentCommand.OutputFrames, frame)
+		// We're in output phase - accumulate until we see next prompt
+		if !inputPhase {
+			// Check if we've reached the next prompt
+			if isRealPrompt(data, prompt) {
+				// Save current command
+				if currentCommand != nil && len(currentCommand.InputFrames) > 0 {
+					currentCommand.OutputText = stripEscapeSequences(reconstructOutput(currentCommand.OutputFrames))
+					currentCommand.OutputTextRaw = reconstructOutput(currentCommand.OutputFrames)
+					currentCommand.EndTime = frames[i-1].Timestamp
+					commands = append(commands, *currentCommand)
+				}
+				// Start new command
+				currentCommand = &Command{
+					InputFrames:  []TerminalFrame{},
+					OutputFrames: []TerminalFrame{},
+					StartTime:    frame.Timestamp,
+				}
+				inputPhase = true
+			} else {
+				// Accumulate output
+				if currentCommand != nil {
+					currentCommand.OutputFrames = append(currentCommand.OutputFrames, frame)
+				}
+			}
 		}
 	}
 
-	// Don't forget the last command
+	// Save last command
 	if currentCommand != nil && len(currentCommand.InputFrames) > 0 {
 		currentCommand.InputText = reconstructInput(currentCommand.InputFrames)
 		currentCommand.OutputText = stripEscapeSequences(reconstructOutput(currentCommand.OutputFrames))
@@ -124,46 +131,115 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 	return commands, nil
 }
 
+// isSetupFrame detects frames that are just window title/setup, not actual commands
+func isSetupFrame(data string) bool {
+	// Real prompts contain $ or # or >, setup frames don't
+	if strings.Contains(data, "$") || strings.Contains(data, "#") || strings.Contains(data, ">") {
+		return false
+	}
+	// Frames with just title update and escape codes, no real content
+	return strings.Contains(data, "\x1b]0;") && !containsReturnOrNewline(data) && len(data) < 150
+}
+
+// isUserInput checks if this frame is actual user input (not output, not setup)
+func isUserInput(data string) bool {
+	// If it has window title sequences, it's not input
+	if strings.Contains(data, "\x1b]0;") {
+		return false
+	}
+
+	// If it has too many color/cursor sequences, it's probably output
+	if strings.Count(data, "\x1b[") > 2 {
+		return false
+	}
+
+	// Input is typically short
+	if len(data) > 50 {
+		return false
+	}
+
+	return true
+}
+
+// isRealPrompt detects the actual shell prompt
+func isRealPrompt(data string, prompt string) bool {
+	// Real prompt must have:
+	// 1. The actual prompt character
+	// 2. The title sequence (indicates fresh prompt line)
+
+	hasPromptChar := strings.Contains(data, "$") || strings.Contains(data, "#") || strings.Contains(data, ">")
+	hasTitle := strings.Contains(data, "\x1b]0;")
+
+	return hasPromptChar && hasTitle
+}
+
 func containsReturnOrNewline(data string) bool {
 	return strings.Contains(data, "\r") || strings.Contains(data, "\n")
 }
 
-func isPromptLine(data string, prompt string) bool {
-	if prompt == "" {
-		return false
-	}
-	return strings.Contains(data, prompt)
-}
-
 // reconstructInput builds the actual command typed by handling backspaces
+// reconstructInput builds the actual command typed by handling backspaces and escape sequences
 func reconstructInput(frames []TerminalFrame) string {
 	var result []rune
 
+	// Concatenate all frame data
+	var sb strings.Builder
 	for _, frame := range frames {
-		for _, ch := range frame.Data {
-			// Handle backspace
-			if ch == '\b' || ch == 0x7F { // backspace or DEL
-				if len(result) > 0 {
-					result = result[:len(result)-1]
+		sb.WriteString(frame.Data)
+	}
+	data := sb.String()
+
+	// Process character by character, skipping escape sequences
+	for i := 0; i < len(data); {
+		ch := rune(data[i])
+
+		// Handle escape sequences
+		if ch == '\x1b' {
+			// Skip entire escape sequence
+			i++
+			if i < len(data) && data[i] == '[' {
+				// CSI sequence: ESC [ ... letter
+				i++
+				for i < len(data) && !((data[i] >= 'A' && data[i] <= 'Z') || (data[i] >= 'a' && data[i] <= 'z')) {
+					i++
+				}
+				if i < len(data) {
+					i++
+				}
+				continue
+			} else if i < len(data) && data[i] == ']' {
+				// OSC sequence: ESC ] ... BEL
+				i++
+				for i < len(data) && data[i] != '\x07' {
+					i++
+				}
+				if i < len(data) {
+					i++
 				}
 				continue
 			}
-
-			// Skip control characters except newline/return
-			if ch < 32 && ch != '\n' && ch != '\r' {
-				continue
-			}
-
-			// Skip escape sequences
-			if ch == '\x1b' { // ESC
-				continue
-			}
-
-			result = append(result, rune(ch))
+			continue
 		}
+
+		// Handle backspace
+		if ch == '\b' || ch == 0x7F {
+			if len(result) > 0 {
+				result = result[:len(result)-1]
+			}
+			i++
+			continue
+		}
+
+		// Skip other control characters except newline/return
+		if ch < 32 && ch != '\n' && ch != '\r' {
+			i++
+			continue
+		}
+
+		result = append(result, ch)
+		i++
 	}
 
-	// Clean up result: remove trailing newline/return
 	str := string(result)
 	str = strings.TrimSuffix(str, "\r\n")
 	str = strings.TrimSuffix(str, "\n")
@@ -181,30 +257,50 @@ func reconstructOutput(frames []TerminalFrame) string {
 
 // stripEscapeSequences removes ANSI escape codes for readable display
 func stripEscapeSequences(data string) string {
-	// Remove ANSI escape sequences
-	re := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\[[0-9;]*m`)
-	data = re.ReplaceAllString(data, "")
-
-	// Remove other control sequences
-	re = regexp.MustCompile(`[\x00-\x1f\x7f]`)
-	data = re.ReplaceAllString(data, "")
-
-	// Clean up excessive whitespace while preserving structure
-	lines := strings.Split(data, "\n")
-	var cleaned []string
-	for _, line := range lines {
-		line = strings.TrimRight(line, " \t")
-		if line != "" || len(cleaned) > 0 {
-			cleaned = append(cleaned, line)
+	var result strings.Builder
+	i := 0
+	for i < len(data) {
+		// Skip CSI sequences (ESC [ ... letter)
+		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == '[' {
+			i += 2
+			for i < len(data) && !((data[i] >= 'A' && data[i] <= 'Z') || (data[i] >= 'a' && data[i] <= 'z')) {
+				i++
+			}
+			if i < len(data) {
+				i++
+			}
+			continue
 		}
-	}
 
-	return strings.Join(cleaned, "\n")
+		// Skip OSC sequences (ESC ] ... BEL or ST)
+		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == ']' {
+			i += 2
+			for i < len(data) && data[i] != '\x07' && data[i] != '\x1b' {
+				i++
+			}
+			if i < len(data) {
+				i++
+			}
+			if i < len(data) && data[i] == '\\' {
+				i++
+			}
+			continue
+		}
+
+		// Skip control characters except newline/carriage return
+		if data[i] < 32 && data[i] != '\n' && data[i] != '\r' {
+			i++
+			continue
+		}
+
+		result.WriteByte(data[i])
+		i++
+	}
+	return result.String()
 }
 
 // RebuildRecording takes edited commands and rewrites the JSON file
 func RebuildRecording(originalPath string, backupPath string, commands []Command) error {
-	// Backup original
 	input, err := os.ReadFile(originalPath)
 	if err != nil {
 		return fmt.Errorf("failed to read original: %w", err)
@@ -213,25 +309,20 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
 
-	// Rebuild frames from commands
 	var newFrames []TerminalFrame
 	var timeOffset int64
 
 	for _, cmd := range commands {
-		// Add input frames
 		for _, frame := range cmd.InputFrames {
 			frame.Timestamp = frame.Timestamp - timeOffset
 			newFrames = append(newFrames, frame)
 		}
-
-		// Add output frames
 		for _, frame := range cmd.OutputFrames {
 			frame.Timestamp = frame.Timestamp - timeOffset
 			newFrames = append(newFrames, frame)
 		}
 	}
 
-	// Write new recording file
 	file, err := os.Create(originalPath)
 	if err != nil {
 		return fmt.Errorf("failed to create new recording: %w", err)
@@ -245,5 +336,19 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 		}
 	}
 
+	return nil
+}
+
+// GetCommandAtFrameIndex returns the command containing the given frame index
+func GetCommandAtFrameIndex(frameIndex int, commands []Command) *Command {
+	frameCount := 0
+	for i := range commands {
+		cmd := &commands[i]
+		cmdFrameCount := len(cmd.InputFrames) + len(cmd.OutputFrames)
+		if frameIndex < frameCount+cmdFrameCount {
+			return cmd
+		}
+		frameCount += cmdFrameCount
+	}
 	return nil
 }

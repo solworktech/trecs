@@ -1,4 +1,4 @@
-package main 
+package lib 
 
 import (
 	"bufio"
@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	libtrecs "trecs/lib"
 	"golang.org/x/term"
 	"golang.org/x/sys/unix"
 )
@@ -17,7 +16,7 @@ import (
 // TerminalPlayerImpl implements TerminalPlayer
 type TerminalPlayerImpl struct {
 	file           *os.File
-	frames         []libtrecs.TerminalFrame
+	frames         []TerminalFrame
 	currentIndex   int
 	speed          float64
 	paused         bool
@@ -27,6 +26,7 @@ type TerminalPlayerImpl struct {
 	seeking        bool
 	targetTimestamp int64
 	oldState       *term.State  // Store terminal state for restoration
+	playbackState  PlaybackState
 }
 
 // NewTerminalPlayer creates a new terminal player
@@ -69,6 +69,7 @@ func (tp *TerminalPlayerImpl) Play(terminalFile string) error {
 	}
 	tp.oldState = oldState
 	tp.mutex.Unlock()
+	tp.playbackState = PlaybackPlaying
 
 	// Start playback loop
 	go tp.playbackLoop()
@@ -80,10 +81,10 @@ func (tp *TerminalPlayerImpl) Play(terminalFile string) error {
 func (tp *TerminalPlayerImpl) loadFrames() error {
 	_, _ = tp.file.Seek(0, 0)  // Ignore error - file should be readable
 	scanner := bufio.NewScanner(tp.file)
-	tp.frames = make([]libtrecs.TerminalFrame, 0)
+	tp.frames = make([]TerminalFrame, 0)
 
 	for scanner.Scan() {
-		var frame libtrecs.TerminalFrame
+		var frame TerminalFrame
 		if err := json.Unmarshal(scanner.Bytes(), &frame); err != nil {
 			return fmt.Errorf("failed to parse frame: %w", err)
 		}
@@ -180,6 +181,7 @@ func (tp *TerminalPlayerImpl) Pause() {
 	tp.mutex.Lock()
 	defer tp.mutex.Unlock()
 	tp.paused = true
+	tp.playbackState = PlaybackPaused
 }
 
 // Resume resumes playback from pause
@@ -188,6 +190,7 @@ func (tp *TerminalPlayerImpl) Resume() {
 	defer tp.mutex.Unlock()
 	if tp.paused {
 		tp.paused = false
+		tp.playbackState = PlaybackPlaying
 		select {
 		case tp.pauseResume <- struct{}{}:
 		default:
@@ -269,4 +272,31 @@ func flushTerminalInput() error {
 // Wait blocks until playback completes
 func (tp *TerminalPlayerImpl) Wait() {
 	<-tp.done
+}
+
+func (tp *TerminalPlayerImpl) GetCurrentFrameIndex() int {
+	tp.mutex.Lock()
+	defer tp.mutex.Unlock()
+	return tp.currentIndex
+}
+
+func (tp *TerminalPlayerImpl) GetCurrentFrame() *TerminalFrame {
+	tp.mutex.Lock()
+	defer tp.mutex.Unlock()
+	if tp.currentIndex >= 0 && tp.currentIndex < len(tp.frames) {
+		return &tp.frames[tp.currentIndex]
+	}
+	return nil
+}
+
+func (tp *TerminalPlayerImpl) GetTotalFrames() int {
+	tp.mutex.Lock()
+	defer tp.mutex.Unlock()
+	return len(tp.frames)
+}
+
+func (tp *TerminalPlayerImpl) GetPlaybackState() PlaybackState {
+	tp.mutex.Lock()
+	defer tp.mutex.Unlock()
+	return tp.playbackState
 }

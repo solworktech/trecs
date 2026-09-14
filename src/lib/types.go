@@ -81,7 +81,19 @@ type TerminalPlayer interface {
 	SeekTo(milliseconds int64)
 	SetSpeed(speed float64)
 	Wait()
+	GetCurrentFrameIndex() int
+	GetCurrentFrame() *TerminalFrame
+	GetTotalFrames() int
+	GetPlaybackState() PlaybackState
 }
+
+type PlaybackState string
+
+const (
+	PlaybackPlaying PlaybackState = "playing"
+	PlaybackPaused  PlaybackState = "paused"
+	PlaybackStopped PlaybackState = "stopped"
+)
 
 // RecordingMetadata stores information about a recording session
 type RecordingMetadata struct {

@@ -150,7 +150,7 @@ func runPlay(playFile *string, playSpeed *float64) {
 		os.Exit(1)
 	}
 
-	player := NewTerminalPlayer()
+	player := libtrecs.NewTerminalPlayer()
 
 	if err := player.Play(*playFile); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to play recording: %v\n", err)

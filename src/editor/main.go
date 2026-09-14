@@ -4,8 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	//"path/filepath"
-	//"strings"
 
 	libtrecs "trecs/lib"
 )
@@ -17,9 +15,6 @@ func main() {
 Commands:
   view   <file>    View and edit recording
   help             Show this help
-
-Examples:
-  editor view -file recordings/2024_01_15_10_30_45/terminal.jsonl
 `)
 		os.Exit(1)
 	}
@@ -55,9 +50,10 @@ Commands:
   help             Show this help
 
 The editor allows you to:
-- View all commands and their outputs
-- Edit command inputs and outputs
-- Delete commands and their outputs
+- Watch recording playback
+- Pause at any point
+- Edit command input and output
+- Delete commands
 - Save edited recordings with automatic timestamp compression
 
 Original recordings are backed up before editing.
@@ -69,7 +65,7 @@ Original recordings are backed up before editing.
 	}
 }
 
-// runEditor opens the recording editor
+// runEditor opens the recording in editor mode
 func runEditor(filePath string) error {
 	// Verify file exists
 	if _, err := os.Stat(filePath); err != nil {
@@ -88,10 +84,16 @@ func runEditor(filePath string) error {
 
 	fmt.Printf("Loaded %d commands from recording\n", len(commands))
 
-	// Launch NCurses editor
-	editor := NewTerminalEditor(filePath, commands)
+	// Create player
+	player := libtrecs.NewTerminalPlayer()
+	if err := player.Play(filePath); err != nil {
+		return fmt.Errorf("failed to create player: %w", err)
+	}
+
+	// Launch editor
+	editor := NewEditorMode(player, commands, filePath)
 	if err := editor.Run(); err != nil {
-		return err
+		return fmt.Errorf("editor error: %w", err)
 	}
 
 	return nil
