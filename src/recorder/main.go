@@ -8,8 +8,6 @@ import (
 	"syscall"
 
 	libtrecs "trecs/lib"
-
-
 )
 
 func main() {
@@ -100,7 +98,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 	// Print the recording message, then reset cursor to column 0 before entering raw mode
 	// This prevents terminal cursor position confusion when the shell starts
 	fmt.Fprint(os.Stderr, "Recording in progress. Type 'exit' or Ctrl+D to end the recording.\r\n")
-	
+
 	if err := recorder.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start recording: %v\n", err)
 		os.Exit(1)
@@ -110,11 +108,9 @@ func runRecord(terminal, audio, camera, screen *bool,
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM)
 
-
-
 	// Wait for either shell to exit or SIGTERM
 	go func() {
-		_ = recorder.Wait()  // Ignore error
+		_ = recorder.Wait()        // Ignore error
 		sigChan <- syscall.SIGTERM // Signal that recording is done
 	}()
 

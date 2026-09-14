@@ -1,4 +1,4 @@
-package main 
+package main
 
 import (
 	"encoding/json"
@@ -14,8 +14,8 @@ import (
 // SessionRecorderImpl manages all recording streams
 type SessionRecorderImpl struct {
 	sessionID        string
-	config          *libtrecs.RecordingConfig
-	metadata        *libtrecs.RecordingMetadata
+	config           *libtrecs.RecordingConfig
+	metadata         *libtrecs.RecordingMetadata
 	terminalRecorder libtrecs.TerminalRecorder
 	audioRecorder    libtrecs.MediaRecorder
 	cameraRecorder   libtrecs.MediaRecorder
@@ -145,7 +145,7 @@ func (sr *SessionRecorderImpl) Start() error {
 		sr.wg.Add(1)
 		go func() {
 			defer sr.wg.Done()
-			_ = sr.audioRecorder.Wait()  // Ignore error - already logged by recorder
+			_ = sr.audioRecorder.Wait() // Ignore error - already logged by recorder
 		}()
 	}
 
@@ -156,7 +156,7 @@ func (sr *SessionRecorderImpl) Start() error {
 		sr.wg.Add(1)
 		go func() {
 			defer sr.wg.Done()
-			_ = sr.cameraRecorder.Wait()  // Ignore error - already logged by recorder
+			_ = sr.cameraRecorder.Wait() // Ignore error - already logged by recorder
 		}()
 	}
 
@@ -167,7 +167,7 @@ func (sr *SessionRecorderImpl) Start() error {
 		sr.wg.Add(1)
 		go func() {
 			defer sr.wg.Done()
-			_ = sr.screenRecorder.Wait()  // Ignore error - already logged by recorder
+			_ = sr.screenRecorder.Wait() // Ignore error - already logged by recorder
 		}()
 	}
 
@@ -235,7 +235,7 @@ func (sr *SessionRecorderImpl) saveMetadata(path string) error {
 		return err
 	}
 	defer func() {
-		_ = file.Close()  // Ignore error - already wrote what we needed
+		_ = file.Close() // Ignore error - already wrote what we needed
 	}()
 
 	encoder := json.NewEncoder(file)

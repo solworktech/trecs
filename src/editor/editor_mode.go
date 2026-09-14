@@ -10,22 +10,22 @@ import (
 )
 
 type EditorMode struct {
-	player      libtrecs.TerminalPlayer
-	commands    []libtrecs.Command
-	frames      []libtrecs.TerminalFrame
-	filePath    string
-	app         *tview.Application
-	pages       *tview.Pages
-	currentCmd  *libtrecs.Command
+	player     libtrecs.TerminalPlayer
+	commands   []libtrecs.Command
+	frames     []libtrecs.TerminalFrame
+	filePath   string
+	app        *tview.Application
+	pages      *tview.Pages
+	currentCmd *libtrecs.Command
 }
 
 // NewEditorMode creates a new editor mode
 func NewEditorMode(player libtrecs.TerminalPlayer, commands []libtrecs.Command, filePath string) *EditorMode {
 	return &EditorMode{
-		player:      player,
-		commands:    commands,
-		filePath:    filePath,
-		app:         tview.NewApplication(),
+		player:   player,
+		commands: commands,
+		filePath: filePath,
+		app:      tview.NewApplication(),
 	}
 }
 

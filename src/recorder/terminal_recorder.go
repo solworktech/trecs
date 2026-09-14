@@ -1,4 +1,4 @@
-package main 
+package main
 
 import (
 	"bufio"
@@ -14,25 +14,25 @@ import (
 	"syscall"
 	"time"
 
-	libtrecs "trecs/lib"
 	"github.com/creack/pty"
 	"golang.org/x/term"
+	libtrecs "trecs/lib"
 )
 
 // TerminalRecorderImpl implements TerminalRecorder
 type TerminalRecorderImpl struct {
-	config      *libtrecs.RecordingConfig
-	outputFile  *os.File
-	encoder     *json.Encoder
-	cmd         *exec.Cmd
-	ptmx        *os.File
-	running     bool
-	mutex       sync.Mutex
-	startTime   time.Time
-	frames      chan libtrecs.Frame
-	done        chan struct{}
-	oldState    *term.State          // Original terminal state (for restoration)
-	sigWinch    chan os.Signal       // Window resize signal handler
+	config     *libtrecs.RecordingConfig
+	outputFile *os.File
+	encoder    *json.Encoder
+	cmd        *exec.Cmd
+	ptmx       *os.File
+	running    bool
+	mutex      sync.Mutex
+	startTime  time.Time
+	frames     chan libtrecs.Frame
+	done       chan struct{}
+	oldState   *term.State    // Original terminal state (for restoration)
+	sigWinch   chan os.Signal // Window resize signal handler
 }
 
 // NewTerminalRecorder creates a new terminal recorder
@@ -99,7 +99,7 @@ func (tr *TerminalRecorderImpl) Start() error {
 	// Use pty.Start which creates PTY and properly sets up process group and TTY control
 	ptmx, err := pty.Start(tr.cmd)
 	if err != nil {
-		_ = term.Restore(int(os.Stdin.Fd()), tr.oldState)  // Ignore error
+		_ = term.Restore(int(os.Stdin.Fd()), tr.oldState) // Ignore error
 		return fmt.Errorf("failed to start shell: %w", err)
 	}
 	tr.ptmx = ptmx
@@ -107,9 +107,9 @@ func (tr *TerminalRecorderImpl) Start() error {
 	// Handle window size
 	tr.sigWinch = make(chan os.Signal, 1)
 	signal.Notify(tr.sigWinch, syscall.SIGWINCH)
-	
+
 	// Set initial window size
-	_ = tr.setWindowSize()  // Ignore error - PTY will use default size
+	_ = tr.setWindowSize() // Ignore error - PTY will use default size
 
 	tr.running = true
 
@@ -124,8 +124,8 @@ func (tr *TerminalRecorderImpl) Start() error {
 
 	// Wait for command to finish
 	go func() {
-		_ = tr.cmd.Wait()  // Ignore error
-		_ = tr.Stop()      // Ignore error
+		_ = tr.cmd.Wait() // Ignore error
+		_ = tr.Stop()     // Ignore error
 	}()
 
 	return nil
@@ -154,14 +154,14 @@ func (tr *TerminalRecorderImpl) setWindowSize() error {
 func (tr *TerminalRecorderImpl) handleWindowResize() {
 	for range tr.sigWinch {
 		if tr.running {
-			_ = tr.setWindowSize()  // Ignore error - PTY will use previous size
+			_ = tr.setWindowSize() // Ignore error - PTY will use previous size
 		}
 	}
 }
 
 // forwardInput reads from stdin and writes to PTY (user input forwarding)
 func (tr *TerminalRecorderImpl) forwardInput() {
-	_, _ = io.Copy(tr.ptmx, os.Stdin)  // Ignore bytes written and error - normal when user closes terminal
+	_, _ = io.Copy(tr.ptmx, os.Stdin) // Ignore bytes written and error - normal when user closes terminal
 }
 
 // captureAndEchoOutput reads from PTY, records output, and echoes to stdout
@@ -170,20 +170,20 @@ func (tr *TerminalRecorderImpl) captureAndEchoOutput() {
 	buffer := make([]byte, 4096)
 
 	for tr.running {
-		n, err := reader.Read(buffer)	
+		n, err := reader.Read(buffer)
 		if err != nil {
-			break  // EOF or error - either way, stop reading
+			break // EOF or error - either way, stop reading
 		}
 
 		if n > 0 {
 			// Convert bytes to string
 			data := string(buffer[:n])
-			
+
 			// Remove DCS (Device Control String) sequences that cause playback issues
-			// Pattern: ESC P ... ESC \ 
+			// Pattern: ESC P ... ESC \
 			// These are VIM capability queries that shouldn't be recorded
 			data = filterDCSSequences(data)
-			
+
 			// Create frame with filtered data
 			frame := libtrecs.TerminalFrame{
 				Timestamp: time.Since(tr.startTime).Milliseconds(),
@@ -196,10 +196,11 @@ func (tr *TerminalRecorderImpl) captureAndEchoOutput() {
 			}
 
 			// Echo original (unfiltered) to stdout so user sees everything
-			_, _ = os.Stdout.Write(buffer[:n])  // Ignore error - stdout may be broken
+			_, _ = os.Stdout.Write(buffer[:n]) // Ignore error - stdout may be broken
 		}
 	}
 }
+
 // Stop terminates terminal recording
 func (tr *TerminalRecorderImpl) Stop() error {
 	tr.mutex.Lock()
@@ -217,22 +218,22 @@ func (tr *TerminalRecorderImpl) Stop() error {
 
 	// Restore terminal to original state
 	if tr.oldState != nil {
-		_ = term.Restore(int(os.Stdin.Fd()), tr.oldState)  // Ignore error
+		_ = term.Restore(int(os.Stdin.Fd()), tr.oldState) // Ignore error
 	}
 
 	// Terminate the shell process
 	if tr.cmd != nil && tr.cmd.Process != nil {
-		_ = tr.cmd.Process.Kill()  // Ignore error - process may already be dead
+		_ = tr.cmd.Process.Kill() // Ignore error - process may already be dead
 	}
 
 	// Close PTY master
 	if tr.ptmx != nil {
-		_ = tr.ptmx.Close()  // Ignore error
+		_ = tr.ptmx.Close() // Ignore error
 	}
 
 	// Close output file
 	if tr.outputFile != nil {
-		_ = tr.outputFile.Close()  // Ignore error
+		_ = tr.outputFile.Close() // Ignore error
 	}
 
 	close(tr.done)

@@ -107,7 +107,7 @@ func (mr *MediaRecorderImpl) Start() error {
 // buildAudioArgs constructs FFMpeg arguments for audio recording
 func (mr *MediaRecorderImpl) buildAudioArgs() []string {
 	args := []string{
-		"-loglevel", "error",  // Only show errors, suppress all other output
+		"-loglevel", "error", // Only show errors, suppress all other output
 	}
 
 	// Input device
@@ -146,7 +146,7 @@ func (mr *MediaRecorderImpl) buildAudioArgs() []string {
 // buildCameraArgs constructs FFMpeg arguments for camera recording
 func (mr *MediaRecorderImpl) buildCameraArgs() []string {
 	args := []string{
-		"-loglevel", "error",  // Only show errors, suppress all other output
+		"-loglevel", "error", // Only show errors, suppress all other output
 	}
 
 	device := mr.config.CameraDevice
@@ -185,7 +185,7 @@ func (mr *MediaRecorderImpl) buildCameraArgs() []string {
 // buildScreenArgs constructs FFMpeg arguments for screen recording
 func (mr *MediaRecorderImpl) buildScreenArgs() []string {
 	args := []string{
-		"-loglevel", "error",  // Only show errors, suppress all other output
+		"-loglevel", "error", // Only show errors, suppress all other output
 	}
 
 	display := mr.config.ScreenDisplay
@@ -246,10 +246,10 @@ func (mr *MediaRecorderImpl) Stop() error {
 	if mr.cmd != nil && mr.cmd.Process != nil {
 		// Try graceful shutdown with SIGTERM first
 		_ = mr.cmd.Process.Signal(syscall.SIGTERM)
-		
+
 		// Give it a moment to shutdown gracefully
 		time.Sleep(100 * time.Millisecond)
-		
+
 		// If still running, force kill
 		if mr.cmd.ProcessState == nil {
 			_ = mr.cmd.Process.Kill()

@@ -10,9 +10,9 @@ import (
 
 // TerminalEditor manages the NCurses-based editing interface
 type TerminalEditor struct {
-	filePath string
-	commands []libtrecs.Command
-	backupPath string
+	filePath     string
+	commands     []libtrecs.Command
+	backupPath   string
 	currentIndex int
 }
 
@@ -20,9 +20,9 @@ type TerminalEditor struct {
 func NewTerminalEditor(filePath string, commands []libtrecs.Command) *TerminalEditor {
 	backupPath := filePath + ".backup." + time.Now().Format("20060102_150405")
 	return &TerminalEditor{
-		filePath: filePath,
-		commands: commands,
-		backupPath: backupPath,
+		filePath:     filePath,
+		commands:     commands,
+		backupPath:   backupPath,
 		currentIndex: 0,
 	}
 }
