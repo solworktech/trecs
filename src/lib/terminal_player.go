@@ -1,4 +1,4 @@
-package lib 
+package lib
 
 import (
 	"bufio"
@@ -9,32 +9,54 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/term"
 	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 )
 
 // TerminalPlayerImpl implements TerminalPlayer
 type TerminalPlayerImpl struct {
-	file           *os.File
-	frames         []TerminalFrame
-	currentIndex   int
-	speed          float64
-	paused         bool
-	mutex          sync.Mutex
-	done           chan struct{}
-	pauseResume    chan struct{}
-	seeking        bool
+	file            *os.File
+	frames          []TerminalFrame
+	currentIndex    int
+	speed           float64
+	paused          bool
+	mutex           sync.Mutex
+	done            chan struct{}
+	pauseResume     chan struct{}
+	seeking         bool
 	targetTimestamp int64
-	oldState       *term.State  // Store terminal state for restoration
-	playbackState  PlaybackState
+	oldState        *term.State
+	playbackState   PlaybackState
+	rawModeEnabled  bool
+	outputFrames    bool
+	frameCallback   func(frame TerminalFrame)
+}
+
+// SetFrameCallback registers a function called on every frame during playback
+func (tp *TerminalPlayerImpl) SetFrameCallback(cb func(frame TerminalFrame)) {
+	tp.mutex.Lock()
+	defer tp.mutex.Unlock()
+	tp.frameCallback = cb
+}
+
+// PlayWithoutRawMode plays without entering raw mode or outputting frames
+func (tp *TerminalPlayerImpl) PlayWithoutRawMode(terminalFile string) error {
+	tp.mutex.Lock()
+	tp.rawModeEnabled = false
+	tp.outputFrames = false // NEW
+	tp.mutex.Unlock()
+	return tp.Play(terminalFile)
 }
 
 // NewTerminalPlayer creates a new terminal player
-func NewTerminalPlayer() *TerminalPlayerImpl {
+func NewTerminalPlayer() TerminalPlayer {
 	return &TerminalPlayerImpl{
-		speed:       1.0,
-		done:        make(chan struct{}),
-		pauseResume: make(chan struct{}),
+		speed:          1.0,
+		done:           make(chan struct{}),
+		pauseResume:    make(chan struct{}),
+		playbackState:  PlaybackStopped,
+		rawModeEnabled: true,
+		outputFrames:   true,
 	}
 }
 
@@ -53,23 +75,26 @@ func (tp *TerminalPlayerImpl) Play(terminalFile string) error {
 	// Load all frames into memory for easier seeking
 	if err := tp.loadFrames(); err != nil {
 		tp.mutex.Unlock()
-		_ = file.Close()  // Ignore error
+		_ = file.Close()
 		return err
 	}
 
 	tp.currentIndex = 0
 	tp.paused = false
-	
-	// Enter raw mode so escape sequences are interpreted correctly
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		tp.mutex.Unlock()
-		_ = file.Close()
-		return fmt.Errorf("failed to enter raw mode: %w", err)
+
+	// Enter raw mode only if enabled (default is true)
+	if tp.rawModeEnabled {
+		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+		if err != nil {
+			tp.mutex.Unlock()
+			_ = file.Close()
+			return fmt.Errorf("failed to enter raw mode: %w", err)
+		}
+		tp.oldState = oldState
 	}
-	tp.oldState = oldState
-	tp.mutex.Unlock()
+
 	tp.playbackState = PlaybackPlaying
+	tp.mutex.Unlock()
 
 	// Start playback loop
 	go tp.playbackLoop()
@@ -79,10 +104,7 @@ func (tp *TerminalPlayerImpl) Play(terminalFile string) error {
 
 // loadFrames reads all frames from the terminal file
 func (tp *TerminalPlayerImpl) loadFrames() error {
-	_, _ = tp.file.Seek(0, 0)  // Ignore error - file should be readable
 	scanner := bufio.NewScanner(tp.file)
-	tp.frames = make([]TerminalFrame, 0)
-
 	for scanner.Scan() {
 		var frame TerminalFrame
 		if err := json.Unmarshal(scanner.Bytes(), &frame); err != nil {
@@ -90,13 +112,7 @@ func (tp *TerminalPlayerImpl) loadFrames() error {
 		}
 		tp.frames = append(tp.frames, frame)
 	}
-
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	fmt.Printf("Loaded %d frames\n", len(tp.frames))
-	return nil
+	return scanner.Err()
 }
 
 // playbackLoop manages the playback timing
@@ -153,8 +169,13 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 		}
 
 		// Output the frame directly to stdout as bytes
-		// This ensures escape sequences are interpreted correctly
-		_, _ = os.Stdout.Write([]byte(currentFrame.Data))
+		if tp.outputFrames {
+			_, _ = os.Stdout.Write([]byte(currentFrame.Data))
+		}
+
+		if tp.frameCallback != nil {
+			tp.frameCallback(currentFrame)
+		}
 
 		tp.mutex.Lock()
 		tp.currentIndex++
@@ -164,16 +185,42 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 	// Restore terminal state after playback ends
 	tp.mutex.Lock()
 	if tp.oldState != nil {
-		// Flush any pending input from the terminal (responses to queries, etc)
-		// This prevents garbage from appearing in the shell prompt
 		_ = flushTerminalInput()
-		
 		_ = term.Restore(int(os.Stdin.Fd()), tp.oldState)
 		tp.oldState = nil
 	}
+	tp.playbackState = PlaybackStopped
 	tp.mutex.Unlock()
 
 	close(tp.done)
+}
+
+// flushTerminalInput discards any pending input from the terminal
+func flushTerminalInput() error {
+	buf := make([]byte, 1024)
+	fd := int(os.Stdin.Fd())
+
+	// Get current flags
+	flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFL, 0)
+	if err != nil {
+		return nil
+	}
+
+	// Set non-blocking
+	_, _ = unix.FcntlInt(uintptr(fd), unix.F_SETFL, flags|unix.O_NONBLOCK)
+
+	// Read and discard pending data
+	for {
+		n, _ := syscall.Read(fd, buf)
+		if n <= 0 {
+			break
+		}
+	}
+
+	// Restore original flags
+	_, _ = unix.FcntlInt(uintptr(fd), unix.F_SETFL, flags)
+
+	return nil
 }
 
 // Pause pauses playback
@@ -210,14 +257,16 @@ func (tp *TerminalPlayerImpl) Stop() {
 	}
 
 	if tp.file != nil {
-		_ = tp.file.Close()  // Ignore error
+		_ = tp.file.Close()
 	}
-	
+
 	// Restore terminal state if in raw mode
 	if tp.oldState != nil {
 		_ = term.Restore(int(os.Stdin.Fd()), tp.oldState)
 		tp.oldState = nil
 	}
+
+	tp.playbackState = PlaybackStopped
 }
 
 // SeekTo seeks to a specific timestamp in milliseconds since recording start
@@ -240,46 +289,19 @@ func (tp *TerminalPlayerImpl) SetSpeed(speed float64) {
 	tp.speed = speed
 }
 
-// flushTerminalInput discards any pending input from the terminal
-// This prevents terminal responses from appearing in the shell prompt
-func flushTerminalInput() error {
-	buf := make([]byte, 1024)
-	fd := int(os.Stdin.Fd())
-
-	// Get current flags
-	flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFL, 0)
-	if err != nil {
-		return nil  // If we can't flush, just continue
-	}
-
-	// Set non-blocking
-	_, _ = unix.FcntlInt(uintptr(fd), unix.F_SETFL, flags|unix.O_NONBLOCK)
-
-	// Read and discard pending data
-	for {
-		n, _ := syscall.Read(fd, buf)
-		if n <= 0 {
-			break
-		}
-	}
-
-	// Restore original flags
-	_, _ = unix.FcntlInt(uintptr(fd), unix.F_SETFL, flags)
-
-	return nil
-}
-
 // Wait blocks until playback completes
 func (tp *TerminalPlayerImpl) Wait() {
 	<-tp.done
 }
 
+// GetCurrentFrameIndex returns the current frame index
 func (tp *TerminalPlayerImpl) GetCurrentFrameIndex() int {
 	tp.mutex.Lock()
 	defer tp.mutex.Unlock()
 	return tp.currentIndex
 }
 
+// GetCurrentFrame returns the current frame
 func (tp *TerminalPlayerImpl) GetCurrentFrame() *TerminalFrame {
 	tp.mutex.Lock()
 	defer tp.mutex.Unlock()
@@ -289,14 +311,31 @@ func (tp *TerminalPlayerImpl) GetCurrentFrame() *TerminalFrame {
 	return nil
 }
 
+// GetTotalFrames returns the total number of frames
 func (tp *TerminalPlayerImpl) GetTotalFrames() int {
 	tp.mutex.Lock()
 	defer tp.mutex.Unlock()
 	return len(tp.frames)
 }
 
+// GetPlaybackState returns the current playback state
 func (tp *TerminalPlayerImpl) GetPlaybackState() PlaybackState {
 	tp.mutex.Lock()
 	defer tp.mutex.Unlock()
 	return tp.playbackState
+}
+
+// RestoreTerminal forcefully restores terminal to normal mode
+func (tp *TerminalPlayerImpl) RestoreTerminal() error {
+	tp.mutex.Lock()
+	defer tp.mutex.Unlock()
+
+	if tp.oldState != nil {
+		if err := term.Restore(int(os.Stdin.Fd()), tp.oldState); err != nil {
+			return err
+		}
+		tp.oldState = nil
+	}
+
+	return nil
 }

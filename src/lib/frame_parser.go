@@ -74,10 +74,16 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 		// Check if this is actual input (single char or short string without heavy escaping)
 		if inputPhase && isUserInput(data) {
 			if currentCommand == nil {
+				// This is the very first command in the recording; its
+				// prompt is the file's initial frame (frames[0]), which
+				// the loop above never visits directly.
 				currentCommand = &Command{
-					InputFrames:  []TerminalFrame{},
-					OutputFrames: []TerminalFrame{},
-					StartTime:    frame.Timestamp,
+					InputFrames:        []TerminalFrame{},
+					OutputFrames:       []TerminalFrame{},
+					StartTime:          frame.Timestamp,
+					PromptFrame:        frames[0],
+					HasPrompt:          true,
+					FirstRawFrameIndex: 0,
 				}
 			}
 			currentCommand.InputFrames = append(currentCommand.InputFrames, frame)
@@ -99,13 +105,19 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 					currentCommand.OutputText = stripEscapeSequences(reconstructOutput(currentCommand.OutputFrames))
 					currentCommand.OutputTextRaw = reconstructOutput(currentCommand.OutputFrames)
 					currentCommand.EndTime = frames[i-1].Timestamp
+					currentCommand.LastRawFrameIndex = i - 1
 					commands = append(commands, *currentCommand)
 				}
-				// Start new command
+				// Start new command - this prompt frame is what will be
+				// displayed right before whatever the user types next, so
+				// it belongs to the command we're about to open.
 				currentCommand = &Command{
-					InputFrames:  []TerminalFrame{},
-					OutputFrames: []TerminalFrame{},
-					StartTime:    frame.Timestamp,
+					InputFrames:        []TerminalFrame{},
+					OutputFrames:       []TerminalFrame{},
+					StartTime:          frame.Timestamp,
+					PromptFrame:        frame,
+					HasPrompt:          true,
+					FirstRawFrameIndex: i,
 				}
 				inputPhase = true
 			} else {
@@ -124,6 +136,7 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 		currentCommand.OutputTextRaw = reconstructOutput(currentCommand.OutputFrames)
 		if len(frames) > 0 {
 			currentCommand.EndTime = frames[len(frames)-1].Timestamp
+			currentCommand.LastRawFrameIndex = len(frames) - 1
 		}
 		commands = append(commands, *currentCommand)
 	}
@@ -299,6 +312,35 @@ func stripEscapeSequences(data string) string {
 	return result.String()
 }
 
+// syncCommandFrames ensures a command's InputFrames/OutputFrames reflect
+// whatever is currently in InputText/OutputText. If the text still matches
+// what the original frames reconstruct to, the original frames (with their
+// real per-keystroke timing) are left untouched. If the text has been
+// edited - i.e. no longer matches - the frames are replaced with a single
+// synthetic frame carrying the new text, since the original per-keystroke
+// timing no longer corresponds to anything meaningful.
+func syncCommandFrames(cmd *Command) {
+	if reconstructInput(cmd.InputFrames) != cmd.InputText {
+		ts := cmd.StartTime
+		if len(cmd.InputFrames) > 0 {
+			ts = cmd.InputFrames[0].Timestamp
+		}
+		cmd.InputFrames = []TerminalFrame{
+			{Timestamp: ts, Data: cmd.InputText + "\r\n"},
+		}
+	}
+
+	if stripEscapeSequences(reconstructOutput(cmd.OutputFrames)) != cmd.OutputText {
+		ts := cmd.EndTime
+		if len(cmd.OutputFrames) > 0 {
+			ts = cmd.OutputFrames[0].Timestamp
+		}
+		cmd.OutputFrames = []TerminalFrame{
+			{Timestamp: ts, Data: strings.ReplaceAll(cmd.OutputText, "\n", "\r\n")},
+		}
+	}
+}
+
 // RebuildRecording takes edited commands and rewrites the JSON file
 func RebuildRecording(originalPath string, backupPath string, commands []Command) error {
 	input, err := os.ReadFile(originalPath)
@@ -310,17 +352,16 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	}
 
 	var newFrames []TerminalFrame
-	var timeOffset int64
 
-	for _, cmd := range commands {
-		for _, frame := range cmd.InputFrames {
-			frame.Timestamp = frame.Timestamp - timeOffset
-			newFrames = append(newFrames, frame)
+	for i := range commands {
+		cmd := &commands[i]
+		syncCommandFrames(cmd)
+
+		if cmd.HasPrompt {
+			newFrames = append(newFrames, cmd.PromptFrame)
 		}
-		for _, frame := range cmd.OutputFrames {
-			frame.Timestamp = frame.Timestamp - timeOffset
-			newFrames = append(newFrames, frame)
-		}
+		newFrames = append(newFrames, cmd.InputFrames...)
+		newFrames = append(newFrames, cmd.OutputFrames...)
 	}
 
 	file, err := os.Create(originalPath)
@@ -339,16 +380,92 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	return nil
 }
 
-// GetCommandAtFrameIndex returns the command containing the given frame index
-func GetCommandAtFrameIndex(frameIndex int, commands []Command) *Command {
-	frameCount := 0
+// GetCommandIndexAtFrame returns the index of the command whose raw frame
+// range [FirstRawFrameIndex, LastRawFrameIndex] contains frameIndex.
+// frameIndex must be an index into the original, unfiltered frame list (the
+// same list the player counts through) - not a count over InputFrames and
+// OutputFrames, which omit frames the parser discarded and therefore drift
+// out of sync with the player's real position.
+func GetCommandIndexAtFrame(frameIndex int, commands []Command) int {
 	for i := range commands {
-		cmd := &commands[i]
-		cmdFrameCount := len(cmd.InputFrames) + len(cmd.OutputFrames)
-		if frameIndex < frameCount+cmdFrameCount {
-			return cmd
+		if frameIndex >= commands[i].FirstRawFrameIndex && frameIndex <= commands[i].LastRawFrameIndex {
+			return i
 		}
-		frameCount += cmdFrameCount
 	}
-	return nil
+	// frameIndex fell in a gap (a discarded setup frame) between two
+	// commands, or past the end of the last one - attribute it to the
+	// nearest command that had already started.
+	best := -1
+	for i := range commands {
+		if commands[i].FirstRawFrameIndex <= frameIndex {
+			best = i
+		}
+	}
+	return best
+}
+
+// GetCommandAtFrameIndex returns the command containing the given raw frame
+// index. See GetCommandIndexAtFrame for what frameIndex must be.
+func GetCommandAtFrameIndex(frameIndex int, commands []Command) *Command {
+	idx := GetCommandIndexAtFrame(frameIndex, commands)
+	if idx < 0 {
+		return nil
+	}
+	return &commands[idx]
+}
+
+// FilterForDisplay strips all escape sequences except SGR (colour) codes,
+// suitable for feeding into tview's ANSIWriter.
+func FilterForDisplay(data string) string {
+	var result strings.Builder
+	i := 0
+	for i < len(data) {
+		// CSI sequence: ESC [ ... letter
+		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == '[' {
+			start := i
+			i += 2
+			for i < len(data) && !((data[i] >= 'A' && data[i] <= 'Z') || (data[i] >= 'a' && data[i] <= 'z')) {
+				i++
+			}
+			if i < len(data) {
+				final := data[i]
+				i++
+				if final == 'm' {
+					// Keep SGR (colour) sequences as-is
+					result.WriteString(data[start:i])
+				}
+				// Otherwise discard (cursor movement, erase, etc.)
+			}
+			continue
+		}
+
+		// OSC sequence: ESC ] ... BEL or ST — always discard (window title, etc.)
+		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == ']' {
+			i += 2
+			for i < len(data) && data[i] != '\x07' && data[i] != '\x1b' {
+				i++
+			}
+			if i < len(data) {
+				i++
+			}
+			if i < len(data) && data[i] == '\\' {
+				i++
+			}
+			continue
+		}
+
+		// Discard lone ESC and other control chars except newline/carriage return
+		if data[i] == '\x1b' {
+			i++
+			continue
+		}
+		if data[i] < 32 && data[i] != '\n' && data[i] != '\r' {
+			i++
+			continue
+		}
+
+		result.WriteByte(data[i])
+		i++
+	}
+	return result.String()
 }

@@ -1,4 +1,4 @@
-package lib 
+package lib
 
 import "time"
 
@@ -27,10 +27,10 @@ type RecordingConfig struct {
 	SessionName string // Custom session name (optional - uses timestamp if empty)
 
 	// FFMpeg-based recordings
-	AudioEnabled   bool
-	AudioDevice    string // e.g., "default" or "hw:0,0"
-	AudioCodec     string // e.g., "aac", "libmp3lame"
-	AudioBitrate   string // e.g., "128k"
+	AudioEnabled bool
+	AudioDevice  string // e.g., "default" or "hw:0,0"
+	AudioCodec   string // e.g., "aac", "libmp3lame"
+	AudioBitrate string // e.g., "128k"
 
 	CameraEnabled   bool
 	CameraDevice    string // e.g., "/dev/video0"
@@ -75,6 +75,7 @@ type SessionRecorder interface {
 // TerminalPlayer plays back terminal recordings
 type TerminalPlayer interface {
 	Play(terminalFile string) error
+	PlayWithoutRawMode(terminalFile string) error
 	Pause()
 	Resume()
 	Stop()
@@ -85,6 +86,8 @@ type TerminalPlayer interface {
 	GetCurrentFrame() *TerminalFrame
 	GetTotalFrames() int
 	GetPlaybackState() PlaybackState
+	RestoreTerminal() error
+	SetFrameCallback(cb func(frame TerminalFrame))
 }
 
 type PlaybackState string
@@ -109,6 +112,26 @@ type RecordingMetadata struct {
 
 // Command represents a user command and its output
 type Command struct {
+	// PromptFrame is the raw frame containing the shell prompt (title,
+	// colour codes, and the prompt string itself) that was displayed
+	// immediately before this command was typed. It carries no semantic
+	// meaning for editing, but must be replayed before InputFrames so a
+	// rebuilt recording still shows a prompt line.
+	PromptFrame TerminalFrame
+	HasPrompt   bool
+
+	// FirstRawFrameIndex/LastRawFrameIndex are indices into the original,
+	// unfiltered frame list as loaded from the recording file (the same
+	// list the player counts through during playback). They span every
+	// frame belonging to this command, including any that were classified
+	// as pure setup noise and never stored in InputFrames/OutputFrames.
+	// Use these - not len(InputFrames)+len(OutputFrames) - to work out
+	// which command a live player frame index belongs to; the frame
+	// lists alone omit frames the parser discarded, so a running count
+	// over them drifts out of sync with the player's real position.
+	FirstRawFrameIndex int
+	LastRawFrameIndex  int
+
 	// Input frames (user typing)
 	InputFrames []TerminalFrame
 	InputText   string // Reconstructed user input

@@ -82,13 +82,8 @@ func runEditor(filePath string) error {
 		return fmt.Errorf("no commands found in recording")
 	}
 
-	fmt.Printf("Loaded %d commands from recording\n", len(commands))
-
-	// Create player
+	// Create player (don't start playback here - editor.Run() does that)
 	player := libtrecs.NewTerminalPlayer()
-	if err := player.Play(filePath); err != nil {
-		return fmt.Errorf("failed to create player: %w", err)
-	}
 
 	// Launch editor
 	editor := NewEditorMode(player, commands, filePath)
