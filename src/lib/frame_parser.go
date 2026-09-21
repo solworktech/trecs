@@ -14,7 +14,7 @@ func ParseRecording(filePath string) ([]Command, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open recording file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var frames []TerminalFrame
 	scanner := bufio.NewScanner(file)
@@ -213,7 +213,7 @@ func reconstructInput(frames []TerminalFrame) string {
 			if i < len(data) && data[i] == '[' {
 				// CSI sequence: ESC [ ... letter
 				i++
-				for i < len(data) && !((data[i] >= 'A' && data[i] <= 'Z') || (data[i] >= 'a' && data[i] <= 'z')) {
+				for i < len(data) && (data[i] < 'A' || data[i] > 'Z') && (data[i] < 'a' || data[i] > 'z') {
 					i++
 				}
 				if i < len(data) {
@@ -276,7 +276,7 @@ func stripEscapeSequences(data string) string {
 		// Skip CSI sequences (ESC [ ... letter)
 		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == '[' {
 			i += 2
-			for i < len(data) && !((data[i] >= 'A' && data[i] <= 'Z') || (data[i] >= 'a' && data[i] <= 'z')) {
+			for i < len(data) && (data[i] < 'A' || data[i] > 'Z') && (data[i] < 'a' || data[i] > 'z') {
 				i++
 			}
 			if i < len(data) {
@@ -368,7 +368,7 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	if err != nil {
 		return fmt.Errorf("failed to create new recording: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	encoder := json.NewEncoder(file)
 	for _, frame := range newFrames {
@@ -414,8 +414,12 @@ func GetCommandAtFrameIndex(frameIndex int, commands []Command) *Command {
 	return &commands[idx]
 }
 
-// FilterForDisplay strips all escape sequences except SGR (colour) codes,
-// suitable for feeding into tview's ANSIWriter.
+// FilterForDisplay strips all escape sequences except SGR (colour) codes.
+// Deprecated: kept for reference/backward compatibility, but no longer used
+// by the editor - it discards backspace bytes rather than executing them,
+// so corrections made while typing never visually disappear in a
+// TextView-based playback pane, unlike DisplayBuffer below. Use
+// DisplayBuffer for anything rendering live playback in a widget.
 func FilterForDisplay(data string) string {
 	var result strings.Builder
 	i := 0
@@ -424,7 +428,7 @@ func FilterForDisplay(data string) string {
 		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == '[' {
 			start := i
 			i += 2
-			for i < len(data) && !((data[i] >= 'A' && data[i] <= 'Z') || (data[i] >= 'a' && data[i] <= 'z')) {
+			for i < len(data) && (data[i] < 'A' || data[i] > 'Z') && (data[i] < 'a' || data[i] > 'z') {
 				i++
 			}
 			if i < len(data) {
@@ -468,4 +472,212 @@ func FilterForDisplay(data string) string {
 		i++
 	}
 	return result.String()
+}
+
+// DisplayBuffer incrementally builds a plain-text, colour-tagged rendering
+// of a live terminal recording, suitable for a tview TextView with dynamic
+// colours enabled. Unlike simply forwarding filtered ANSI bytes, it
+// actually interprets backspace and SGR colour state, so that corrections
+// made while typing (backspace, retype) are visually removed during editor
+// playback exactly as they are in a real terminal, instead of accumulating
+// as leftover garbled text that nothing ever erases.
+type DisplayBuffer struct {
+	chars    []rune
+	colorTag []string // colour/attribute tag active for the char at the same index
+
+	fgColor string // current active tview foreground colour name, "" = default
+	bold    bool   // current bold attribute state
+}
+
+// NewDisplayBuffer creates an empty display buffer.
+func NewDisplayBuffer() *DisplayBuffer {
+	return &DisplayBuffer{}
+}
+
+// currentTag returns a key identifying the buffer's current colour/attribute
+// state, in "fg:bg:attrs" form as tview expects it.
+func (db *DisplayBuffer) currentTag() string {
+	fg := db.fgColor
+	if fg == "" {
+		fg = "-"
+	}
+	attrs := "-"
+	if db.bold {
+		attrs = "b"
+	}
+	return fg + ":-:" + attrs
+}
+
+// sgrForegroundNames maps standard and bright ANSI foreground codes to
+// tview/tcell colour names. Background colours and less common attributes
+// aren't handled - this is a practical approximation for typical shell
+// prompt/ls-style colouring, not a full terminal emulator.
+var sgrForegroundNames = map[int]string{
+	30: "black", 31: "red", 32: "green", 33: "yellow",
+	34: "blue", 35: "fuchsia", 36: "aqua", 37: "white",
+	90: "gray", 91: "red", 92: "lime", 93: "yellow",
+	94: "blue", 95: "fuchsia", 96: "aqua", 97: "white",
+}
+
+// applySGR updates the buffer's current colour/attribute state from the
+// numeric, semicolon-separated parameters of an SGR (ESC [ ... m) sequence.
+func (db *DisplayBuffer) applySGR(params string) {
+	if params == "" {
+		db.fgColor = ""
+		db.bold = false
+		return
+	}
+	for _, p := range strings.Split(params, ";") {
+		code := 0
+		valid := len(p) > 0
+		for _, c := range p {
+			if c < '0' || c > '9' {
+				valid = false
+				break
+			}
+			code = code*10 + int(c-'0')
+		}
+		if !valid {
+			continue
+		}
+		switch {
+		case code == 0:
+			db.fgColor = ""
+			db.bold = false
+		case code == 1:
+			db.bold = true
+		case code == 22:
+			db.bold = false
+		case code == 39:
+			db.fgColor = ""
+		default:
+			if name, ok := sgrForegroundNames[code]; ok {
+				db.fgColor = name
+			}
+		}
+	}
+}
+
+// Feed processes one more raw frame of terminal data, updating the buffer's
+// visible content: printable characters are appended tagged with the
+// currently active colour/attribute state; SGR sequences update that state;
+// backspace and DEL remove the previously appended character (actually
+// executing the erase, rather than just discarding the backspace byte); and
+// all other control sequences (cursor movement, erase-in-line, window
+// title, bell, bare carriage return, etc.) are consumed but otherwise
+// discarded, since they have no meaningful representation in a scrolling,
+// append-oriented text pane.
+func (db *DisplayBuffer) Feed(data string) {
+	tag := db.currentTag()
+	i := 0
+	n := len(data)
+	for i < n {
+		ch := data[i]
+
+		if ch == '\x1b' {
+			i++
+			if i < n && data[i] == '[' {
+				start := i + 1
+				i++
+				for i < n && (data[i] < 'A' || data[i] > 'Z') && (data[i] < 'a' || data[i] > 'z') {
+					i++
+				}
+				if i < n {
+					final := data[i]
+					params := data[start:i]
+					i++
+					if final == 'm' {
+						db.applySGR(params)
+						tag = db.currentTag()
+					}
+					// Any other final byte (cursor movement, erase-in-line,
+					// etc.) has no meaningful effect here and is discarded.
+				}
+				continue
+			}
+			if i < n && data[i] == ']' {
+				i++
+				for i < n && data[i] != '\x07' {
+					i++
+				}
+				if i < n {
+					i++
+				}
+				continue
+			}
+			continue
+		}
+
+		if ch == '\b' || ch == 0x7F {
+			if len(db.chars) > 0 {
+				db.chars = db.chars[:len(db.chars)-1]
+				db.colorTag = db.colorTag[:len(db.colorTag)-1]
+			}
+			i++
+			continue
+		}
+
+		if ch == '\r' {
+			// A bare carriage return is how shells redraw the current line
+			// in place; there is no "current line" to redraw over in a
+			// scrolling pane, so it's dropped rather than shown literally.
+			i++
+			continue
+		}
+
+		if ch == '\n' {
+			// Newline must actually be appended, not just fall through to
+			// the generic control-character branch below - '\n' is 0x0A,
+			// which is itself < 32, so without this explicit case it would
+			// be silently swallowed along with bell and other genuinely
+			// invisible control characters, collapsing all output onto one
+			// line.
+			db.chars = append(db.chars, '\n')
+			db.colorTag = append(db.colorTag, tag)
+			i++
+			continue
+		}
+
+		if ch < 32 {
+			// Other control characters (bell, etc.) have no visual effect.
+			i++
+			continue
+		}
+
+		db.chars = append(db.chars, rune(ch))
+		db.colorTag = append(db.colorTag, tag)
+		i++
+	}
+}
+
+// Render produces the buffer's current content as a tview dynamic-colour
+// markup string, ready to pass to TextView.SetText. Tags are generated
+// fresh from the per-character colour metadata on every call, so a
+// backspace can never corrupt or split an already-emitted tag - unlike an
+// approach that bakes tags directly into a growing string.
+func (db *DisplayBuffer) Render() string {
+	var out strings.Builder
+	lastTag := ""
+	for idx, r := range db.chars {
+		tag := db.colorTag[idx]
+		if tag != lastTag {
+			fg, _, attrs := splitTag(tag)
+			out.WriteString("[" + fg + "::" + attrs + "]")
+			lastTag = tag
+		}
+		if r == '[' {
+			out.WriteString("[[")
+		} else {
+			out.WriteRune(r)
+		}
+	}
+	return out.String()
+}
+
+func splitTag(tag string) (fg, bg, attrs string) {
+	parts := strings.SplitN(tag, ":", 3)
+	if len(parts) == 3 {
+		return parts[0], parts[1], parts[2]
+	}
+	return "-", "-", "-"
 }

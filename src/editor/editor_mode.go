@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"time"
@@ -23,7 +22,7 @@ type EditorMode struct {
 	currentCmd      *libtrecs.Command
 	currentCmdIdx   int
 	playbackView    *tview.TextView
-	ansiWriter      io.Writer
+	display         *libtrecs.DisplayBuffer
 	statusView      *tview.TextView
 	inputField      *tview.TextArea
 	outputField     *tview.TextArea
@@ -77,12 +76,19 @@ func (em *EditorMode) Run() error {
 
 	go em.monitorPlayback()
 
-	// Stream frames into the playback pane, stripped of anything but colour
-	// codes, with a colour reset prepended so state never bleeds across frames.
+	em.display = libtrecs.NewDisplayBuffer()
+
+	// Feed frames through DisplayBuffer, which actually executes backspaces
+	// (rather than discarding them like the old FilterForDisplay approach
+	// did), and redraw the pane's full content each time - a TextView can't
+	// selectively un-write a character once it's been appended, so this is
+	// the only reliable way to make corrections during typing visually
+	// disappear during editor playback the way they do in a real terminal.
 	em.player.SetFrameCallback(func(frame libtrecs.TerminalFrame) {
-		filtered := libtrecs.FilterForDisplay(frame.Data)
+		em.display.Feed(frame.Data)
+		rendered := em.display.Render()
 		em.app.QueueUpdateDraw(func() {
-			_, _ = em.ansiWriter.Write([]byte("\x1b[0m" + filtered))
+			em.playbackView.SetText(rendered)
 			em.playbackView.ScrollToEnd()
 		})
 	})
@@ -113,8 +119,6 @@ func (em *EditorMode) createPlaybackView() tview.Primitive {
 	em.playbackView = tview.NewTextView().SetText("\n")
 	em.playbackView.SetDynamicColors(true)
 	em.playbackView.SetScrollable(true)
-
-	em.ansiWriter = tview.ANSIWriter(em.playbackView)
 
 	flex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
