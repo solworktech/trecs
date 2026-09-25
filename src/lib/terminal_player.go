@@ -325,6 +325,18 @@ func (tp *TerminalPlayerImpl) GetPlaybackState() PlaybackState {
 	return tp.playbackState
 }
 
+// GetTotalDurationMs returns the timestamp of the last loaded frame, i.e.
+// the recording's total duration in milliseconds. Returns 0 if no frames
+// have been loaded yet (before Play/PlayWithoutRawMode has run).
+func (tp *TerminalPlayerImpl) GetTotalDurationMs() int64 {
+	tp.mutex.Lock()
+	defer tp.mutex.Unlock()
+	if len(tp.frames) == 0 {
+		return 0
+	}
+	return tp.frames[len(tp.frames)-1].Timestamp
+}
+
 // RestoreTerminal forcefully restores terminal to normal mode
 func (tp *TerminalPlayerImpl) RestoreTerminal() error {
 	tp.mutex.Lock()

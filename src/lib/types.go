@@ -88,6 +88,10 @@ type TerminalPlayer interface {
 	GetPlaybackState() PlaybackState
 	RestoreTerminal() error
 	SetFrameCallback(cb func(frame TerminalFrame))
+	// GetTotalDurationMs returns the timestamp of the last frame in the
+	// recording (milliseconds since recording start), i.e. its total
+	// duration. Returns 0 if no frames are loaded.
+	GetTotalDurationMs() int64
 }
 
 type PlaybackState string
