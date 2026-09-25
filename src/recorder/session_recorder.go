@@ -43,7 +43,7 @@ func NewSessionRecorder(config *libtrecs.RecordingConfig) (*SessionRecorderImpl,
 		sessionID = config.SessionName
 	} else {
 		// Format: YYYY_MM_DD_HH_MM_SS
-		sessionID = time.Now().Format("2006_01_02_15_04_05")
+		sessionID = time.Now().Format("2006-01-02_15-04-05")
 	}
 
 	sessionDir := filepath.Join(config.OutputDir, sessionID)

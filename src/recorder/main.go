@@ -19,7 +19,7 @@ func main() {
 	recordAudio := recordCmd.Bool("audio", false, "Enable audio recording")
 	recordCamera := recordCmd.Bool("camera", false, "Enable camera recording")
 	recordScreen := recordCmd.Bool("screen", false, "Enable screen recording")
-	outputDir := recordCmd.String("output", "./recordings", "Output directory")
+	outputDir := recordCmd.String("output", os.Getenv("XDG_CONFIG_HOME")+"/trecs/recordings", "Output directory")
 	sessionName := recordCmd.String("name", "", "Session name (default: timestamp YYYY_MM_DD_HH_MM_SS)")
 	terminalCmd := recordCmd.String("cmd", "bash", "Terminal command to execute")
 	audioDevice := recordCmd.String("audio-device", "default", "Audio device")
@@ -205,6 +205,5 @@ Examples:
 During Recording:
   - Use Ctrl+C to interrupt commands in the shell (works normally)
   - Type 'exit' or press Ctrl+D to end the recording
-  - The recording will stop and you'll return to your original shell
-`)
+  - The recording will stop and you'll return to your original shell`)
 }

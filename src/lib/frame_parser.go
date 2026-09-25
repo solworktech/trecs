@@ -56,7 +56,7 @@ func extractPrompt(firstFrameData string) string {
 	return ""
 }
 
-// groupIntoCommands organizes frames into command input + output pairs
+// groupIntoCommands organises frames into command input + output pairs
 func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error) {
 	var commands []Command
 	var currentCommand *Command
@@ -268,7 +268,7 @@ func reconstructOutput(frames []TerminalFrame) string {
 	return result.String()
 }
 
-// stripEscapeSequences removes ANSI escape codes for readable display
+// stripEscapeSequences strips ANSI escape codes for readable display
 func stripEscapeSequences(data string) string {
 	var result strings.Builder
 	i := 0
@@ -540,15 +540,15 @@ func (db *DisplayBuffer) applySGR(params string) {
 		if !valid {
 			continue
 		}
-		switch {
-		case code == 0:
+		switch code {
+		case 0:
 			db.fgColor = ""
 			db.bold = false
-		case code == 1:
+		case 1:
 			db.bold = true
-		case code == 22:
+		case 22:
 			db.bold = false
-		case code == 39:
+		case 39:
 			db.fgColor = ""
 		default:
 			if name, ok := sgrForegroundNames[code]; ok {

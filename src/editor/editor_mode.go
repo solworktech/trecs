@@ -127,8 +127,8 @@ func (em *EditorMode) createPlaybackView() tview.Primitive {
 	legend := tview.NewTextView().
 		SetDynamicColors(true).
 		SetText("[yellow]Space[white]/[yellow]P[white] Pause/Resume    [yellow]E[white] Edit Current Command    " +
-			"[yellow]Ctrl+P[white]/[yellow]Ctrl+N[white] Prev/Next Command    " +
-			"[yellow]Ctrl+L[white] Browse Commands    [yellow]Q[white] Quit")
+			"[yellow]^P[white]/[yellow]^N[white] Prev/Next Command    " +
+			"[yellow]^L[white] Browse Commands    [yellow]Q[white] Quit")
 
 	separator := newHorizontalRule()
 
@@ -162,10 +162,9 @@ func (em *EditorMode) createEditView() tview.Primitive {
 
 	legend := tview.NewTextView().
 		SetDynamicColors(true).
-		SetText("[yellow]Ctrl+S[white] Save    [yellow]Ctrl+X[white] Discard & Resume    " +
-			"[yellow]Ctrl+D[white] Delete Command    " +
-			"[yellow]Ctrl+P[white]/[yellow]Ctrl+N[white] Prev/Next Command    [yellow]Ctrl+E[white] Open in editor    " +
-			"[yellow]Tab[white] Toggle Fields")
+		SetText("[yellow]^S[white] Stage Change & Continue Editing   [yellow]^W[white] Write & Resume Playback   " +
+			"[yellow]^P[white]/[yellow]^N[white] Prev/Next Command   [yellow]^E[white] Open in Editor   " +
+			"[yellow]Tab[white] Toggle Fields   [yellow]^D[white] Delete Command   [yellow]^X[white] Exit Editor")
 
 	spacer := tview.NewBox()
 
@@ -220,8 +219,8 @@ func (em *EditorMode) createEditView() tview.Primitive {
 func (em *EditorMode) createCommandListView() tview.Primitive {
 	legend := tview.NewTextView().
 		SetDynamicColors(true).
-		SetText("[yellow]Up[white]/[yellow]Down[white] Navigate    [yellow]Ctrl+P[white] Jump to Playback    " +
-			"[yellow]Ctrl+E[white] Jump to Edit    [yellow]Esc[white] Close")
+		SetText("[yellow]Up[white]/[yellow]Down[white] Navigate    [yellow]^P[white] Jump to Playback    " +
+			"[yellow]^E[white] Jump to Edit    [yellow]Esc[white] Close")
 
 	em.commandList = tview.NewList().ShowSecondaryText(false)
 	em.commandList.SetBorder(true).SetTitle(" Commands ")
@@ -287,8 +286,8 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 
 	if pageName == "edit" {
 		switch event.Key() {
-		case tcell.KeyCtrlR:
-			em.saveEditAndResume()
+		case tcell.KeyCtrlS:
+			em.saveEdit()
 			return nil
 		case tcell.KeyCtrlX:
 			em.discardAndResume()
@@ -296,7 +295,7 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		case tcell.KeyCtrlD:
 			em.deleteCurrentCommand()
 			return nil
-		case tcell.KeyCtrlS:
+		case tcell.KeyCtrlW:
 			em.saveRecording()
 			return nil
 		case tcell.KeyCtrlP:
@@ -440,11 +439,11 @@ func (em *EditorMode) jumpToCommandForPlayback(idx int) {
 	em.setStatus(fmt.Sprintf("Jumped to command %d of %d.", idx+1, len(em.commands)))
 }
 
-func (em *EditorMode) saveEditAndResume() {
+func (em *EditorMode) saveEdit() {
 	em.updateCurrentCommand()
-	em.setStatus(fmt.Sprintf("Command %d updated. Resuming playback.", em.currentCmdIdx+1))
-	em.pages.SwitchToPage("playback")
-	em.player.Resume()
+	em.setStatus(fmt.Sprintf("Command %d updated. CTRL+W to write to disk and resume playback.", em.currentCmdIdx+1))
+	//em.pages.SwitchToPage("playback")
+	//em.player.Resume()
 }
 
 func (em *EditorMode) discardAndResume() {
@@ -469,7 +468,7 @@ func (em *EditorMode) updateCurrentCommand() {
 func (em *EditorMode) deleteCurrentCommand() {
 	if em.currentCmdIdx >= 0 && em.currentCmdIdx < len(em.commands) {
 		em.deletedCommands[em.currentCmdIdx] = true
-		em.setStatus(fmt.Sprintf("Command %d marked for deletion.", em.currentCmdIdx+1))
+		em.setStatus(fmt.Sprintf("Command %d marked for deletion. CTRL+W to write to disk and resume playback.", em.currentCmdIdx+1))
 	}
 }
 
