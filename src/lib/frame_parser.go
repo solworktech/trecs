@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode/utf8"
 )
 
 // ParseRecording reads a terminal.jsonl file and extracts commands
@@ -139,6 +140,18 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 			currentCommand.LastRawFrameIndex = len(frames) - 1
 		}
 		commands = append(commands, *currentCommand)
+	}
+
+	// The last command in a Trecs recording is always "exit" (or Ctrl+D) -
+	// that's simply how the recording session was stopped, not meaningful
+	// recorded content, so it's dropped rather than shown as an editable
+	// command. This has no effect on `recorder -play`, which plays the raw
+	// frame stream directly and never groups it into commands at all; it
+	// only affects the editor's list, and consequently anything saved
+	// through it (rebuilding a recording after an edit naturally excludes
+	// whatever isn't in this list).
+	if len(commands) > 0 && strings.TrimSpace(commands[len(commands)-1].InputText) == "exit" {
+		commands = commands[:len(commands)-1]
 	}
 
 	return commands, nil
@@ -341,6 +354,86 @@ func syncCommandFrames(cmd *Command) {
 	}
 }
 
+// CompressTimestamps returns a new slice containing only the commands not
+// present in deleted (keyed by index into the original commands slice, the
+// same indexing the editor tracks deletions with), with every frame's
+// timestamp - including each surviving command's PromptFrame - shifted so
+// that no dead time remains where a deleted command used to be: a
+// surviving command now begins exactly where the previous surviving
+// command's last frame ended, rather than at its own original timestamp
+// with a gap the size of everything deleted in between still sitting in
+// front of it. Natural pacing elsewhere (the gap between a command's own
+// output ending and its own prompt reappearing, for instance) is
+// untouched, since that isn't attributable to anything deleted.
+//
+// commands is not modified; the returned commands are copies with their
+// own, independent frame slices.
+func CompressTimestamps(commands []Command, deleted map[int]bool) []Command {
+	var result []Command
+	var shift int64
+
+	for i, cmd := range commands {
+		if deleted[i] {
+			start := commandFirstTimestamp(cmd)
+			end := commandLastTimestamp(cmd)
+			if end > start {
+				shift += end - start
+			}
+			continue
+		}
+
+		shifted := cmd
+		if shifted.HasPrompt {
+			shifted.PromptFrame.Timestamp -= shift
+		}
+		shifted.InputFrames = shiftFrameTimestamps(cmd.InputFrames, shift)
+		shifted.OutputFrames = shiftFrameTimestamps(cmd.OutputFrames, shift)
+		shifted.StartTime -= shift
+		shifted.EndTime -= shift
+		result = append(result, shifted)
+	}
+
+	return result
+}
+
+// commandFirstTimestamp returns the earliest timestamp belonging to cmd -
+// its prompt frame if it has one, otherwise its first input frame.
+func commandFirstTimestamp(cmd Command) int64 {
+	if cmd.HasPrompt {
+		return cmd.PromptFrame.Timestamp
+	}
+	if len(cmd.InputFrames) > 0 {
+		return cmd.InputFrames[0].Timestamp
+	}
+	return cmd.StartTime
+}
+
+// commandLastTimestamp returns the latest timestamp belonging to cmd - its
+// last output frame if it produced any, otherwise its last input frame.
+func commandLastTimestamp(cmd Command) int64 {
+	if len(cmd.OutputFrames) > 0 {
+		return cmd.OutputFrames[len(cmd.OutputFrames)-1].Timestamp
+	}
+	if len(cmd.InputFrames) > 0 {
+		return cmd.InputFrames[len(cmd.InputFrames)-1].Timestamp
+	}
+	return cmd.EndTime
+}
+
+// shiftFrameTimestamps returns a copy of frames with shift subtracted from
+// every timestamp.
+func shiftFrameTimestamps(frames []TerminalFrame, shift int64) []TerminalFrame {
+	if len(frames) == 0 {
+		return frames
+	}
+	out := make([]TerminalFrame, len(frames))
+	for i, f := range frames {
+		f.Timestamp -= shift
+		out[i] = f
+	}
+	return out
+}
+
 // RebuildRecording takes edited commands and rewrites the JSON file
 func RebuildRecording(originalPath string, backupPath string, commands []Command) error {
 	input, err := os.ReadFile(originalPath)
@@ -474,19 +567,51 @@ func FilterForDisplay(data string) string {
 	return result.String()
 }
 
-// DisplayBuffer incrementally builds a plain-text, colour-tagged rendering
-// of a live terminal recording, suitable for a tview TextView with dynamic
-// colours enabled. Unlike simply forwarding filtered ANSI bytes, it
-// actually interprets backspace and SGR colour state, so that corrections
-// made while typing (backspace, retype) are visually removed during editor
-// playback exactly as they are in a real terminal, instead of accumulating
-// as leftover garbled text that nothing ever erases.
-type DisplayBuffer struct {
-	chars    []rune
-	colorTag []string // colour/attribute tag active for the char at the same index
+// cell is one character position on the emulated screen grid: the rune
+// displayed there and the colour/attribute tag active when it was written.
+type cell struct {
+	ch  rune
+	tag string
+}
 
-	fgColor string // current active tview foreground colour name, "" = default
-	bold    bool   // current bold attribute state
+// DisplayBuffer is a small terminal emulator: a 2D grid of cells plus a
+// real cursor position, driven by the same escape sequences a real
+// terminal interprets (cursor positioning, erase-display, erase-line,
+// SGR colour), for any display surface that can't run an actual PTY itself
+// (a tview.TextView, or a web <div>).
+//
+// This replaces an earlier, simpler model that only ever appended
+// characters and treated backspace as "delete the previous character".
+// That worked for ordinary shell line-editing (backspace during typing),
+// but full-screen, cursor-addressed programs like htop or onefetch don't
+// use backspace at all - they redraw specific screen regions via absolute
+// cursor positioning (CUP) and erase sequences, which the old model simply
+// discarded, so every redraw just piled up as one long garbled scroll
+// instead of overwriting the same cells in place. A real cursor and grid
+// handles both cases correctly, including the original backspace-editing
+// one: backspace now genuinely moves the cursor left (as it does on a real
+// terminal), and a following erase-in-line clears from there to the end of
+// the row, which is exactly the `\b`+`ESC[K` pattern shells emit.
+//
+// The grid has no fixed size: it grows as content addresses new rows or
+// columns, rather than assuming a terminal size up front. Recordings don't
+// reliably carry accurate width/height per frame, and a program like htop
+// only ever needs as many rows as the real terminal had, so growing
+// on demand converges on the right size without having to guess it.
+//
+// Known limitation: line-wrap at a fixed column width isn't emulated
+// (there being no fixed width to wrap at), and alternate character sets
+// (line-drawing mode) are ignored - like the vim case already noted
+// elsewhere, this is a practical terminal emulator, not a complete one.
+type DisplayBuffer struct {
+	grid [][]cell
+
+	cursorRow int
+	cursorCol int
+
+	fgColor string
+	bgColor string
+	bold    bool
 }
 
 // NewDisplayBuffer creates an empty display buffer.
@@ -495,80 +620,373 @@ func NewDisplayBuffer() *DisplayBuffer {
 }
 
 // currentTag returns a key identifying the buffer's current colour/attribute
-// state, in "fg:bg:attrs" form as tview expects it.
+// state, in "fg:bg:attrs" form as tview expects it. Colours are always
+// stored as "#rrggbb" hex (tcell's markup parser accepts hex directly), so
+// the same representation covers the standard 16 colours, 256-colour
+// palette indices, and 24-bit truecolour uniformly - see applySGR.
 func (db *DisplayBuffer) currentTag() string {
 	fg := db.fgColor
 	if fg == "" {
 		fg = "-"
 	}
+	bg := db.bgColor
+	if bg == "" {
+		bg = "-"
+	}
 	attrs := "-"
 	if db.bold {
 		attrs = "b"
 	}
-	return fg + ":-:" + attrs
+	return fg + ":" + bg + ":" + attrs
 }
 
-// sgrForegroundNames maps standard and bright ANSI foreground codes to
-// tview/tcell colour names. Background colours and less common attributes
-// aren't handled - this is a practical approximation for typical shell
-// prompt/ls-style colouring, not a full terminal emulator.
-var sgrForegroundNames = map[int]string{
-	30: "black", 31: "red", 32: "green", 33: "yellow",
-	34: "blue", 35: "fuchsia", 36: "aqua", 37: "white",
-	90: "gray", 91: "red", 92: "lime", 93: "yellow",
-	94: "blue", 95: "fuchsia", 96: "aqua", 97: "white",
+// ansi16Hex is the standard 16-colour ANSI palette (indices 0-7 normal,
+// 8-15 bright), in the Tango/GNOME Terminal shades already used
+// elsewhere in this codebase, expressed as hex so they compose uniformly
+// with 256-colour and truecolour SGR codes, which are hex by nature.
+var ansi16Hex = [16]string{
+	"#000000", "#cc0000", "#4e9a06", "#c4a000",
+	"#3465a4", "#75507b", "#06989a", "#d3d7cf",
+	"#555753", "#ef2929", "#8ae234", "#fce94f",
+	"#729fcf", "#ad7fa8", "#34e2e2", "#eeeeec",
+}
+
+// xterm256Hex converts a 256-colour palette index (as used by the SGR
+// "38;5;n" / "48;5;n" extended colour sequences) to a hex colour: indices
+// 0-15 are the standard 16-colour palette, 16-231 form a 6x6x6 RGB cube,
+// and 232-255 are a 24-step grayscale ramp - the standard xterm mapping.
+func xterm256Hex(n int) string {
+	if n < 0 {
+		n = 0
+	}
+	if n < 16 {
+		return ansi16Hex[n]
+	}
+	if n <= 231 {
+		levels := [6]int{0, 95, 135, 175, 215, 255}
+		n -= 16
+		r := levels[(n/36)%6]
+		g := levels[(n/6)%6]
+		b := levels[n%6]
+		return rgbHex(r, g, b)
+	}
+	if n > 255 {
+		n = 255
+	}
+	gray := 8 + (n-232)*10
+	return rgbHex(gray, gray, gray)
+}
+
+func rgbHex(r, g, b int) string {
+	clamp := func(v int) int {
+		if v < 0 {
+			return 0
+		}
+		if v > 255 {
+			return 255
+		}
+		return v
+	}
+	const hexDigits = "0123456789abcdef"
+	r, g, b = clamp(r), clamp(g), clamp(b)
+	buf := [7]byte{'#'}
+	vals := [3]int{r, g, b}
+	for i, v := range vals {
+		buf[1+i*2] = hexDigits[v>>4]
+		buf[2+i*2] = hexDigits[v&0xF]
+	}
+	return string(buf[:])
 }
 
 // applySGR updates the buffer's current colour/attribute state from the
-// numeric, semicolon-separated parameters of an SGR (ESC [ ... m) sequence.
+// numeric, semicolon-separated parameters of an SGR (ESC [ ... m)
+// sequence. Handles the standard 16 foreground/background codes, their
+// bright variants, and the extended "38;5;n"/"48;5;n" (256-colour) and
+// "38;2;r;g;b"/"48;2;r;g;b" (truecolour) forms used by tools like onefetch
+// that go well beyond the basic 16-colour palette - those forms consume
+// two or four parameters beyond the initial 38/48, so parameters are
+// walked with an index rather than handled one at a time independently.
 func (db *DisplayBuffer) applySGR(params string) {
 	if params == "" {
 		db.fgColor = ""
+		db.bgColor = ""
 		db.bold = false
 		return
 	}
-	for _, p := range strings.Split(params, ";") {
-		code := 0
-		valid := len(p) > 0
-		for _, c := range p {
+
+	fields := strings.Split(params, ";")
+	nums := make([]int, len(fields))
+	for i, f := range fields {
+		n := 0
+		for _, c := range f {
 			if c < '0' || c > '9' {
-				valid = false
+				n = 0
 				break
 			}
-			code = code*10 + int(c-'0')
+			n = n*10 + int(c-'0')
 		}
-		if !valid {
-			continue
-		}
-		switch code {
-		case 0:
+		nums[i] = n
+	}
+
+	for i := 0; i < len(nums); i++ {
+		code := nums[i]
+		switch {
+		case code == 0:
 			db.fgColor = ""
+			db.bgColor = ""
 			db.bold = false
-		case 1:
+		case code == 1:
 			db.bold = true
-		case 22:
+		case code == 22:
 			db.bold = false
-		case 39:
+		case code == 39:
 			db.fgColor = ""
-		default:
-			if name, ok := sgrForegroundNames[code]; ok {
-				db.fgColor = name
+		case code == 49:
+			db.bgColor = ""
+		case code >= 30 && code <= 37:
+			db.fgColor = ansi16Hex[code-30]
+		case code >= 90 && code <= 97:
+			db.fgColor = ansi16Hex[8+code-90]
+		case code >= 40 && code <= 47:
+			db.bgColor = ansi16Hex[code-40]
+		case code >= 100 && code <= 107:
+			db.bgColor = ansi16Hex[8+code-100]
+		case code == 38 || code == 48:
+			if i+1 >= len(nums) {
+				break
 			}
+			mode := nums[i+1]
+			if mode == 5 && i+2 < len(nums) {
+				hex := xterm256Hex(nums[i+2])
+				if code == 38 {
+					db.fgColor = hex
+				} else {
+					db.bgColor = hex
+				}
+				i += 2
+			} else if mode == 2 && i+4 < len(nums) {
+				hex := rgbHex(nums[i+2], nums[i+3], nums[i+4])
+				if code == 38 {
+					db.fgColor = hex
+				} else {
+					db.bgColor = hex
+				}
+				i += 4
+			} else {
+				// Unrecognised subformat - consume just the mode byte so
+				// we don't misinterpret whatever follows as unrelated
+				// SGR codes.
+				i++
+			}
+		default:
+			// Underline, blink, italic, strikethrough, etc. have no
+			// representation here and are ignored.
 		}
 	}
 }
 
-// Feed processes one more raw frame of terminal data, updating the buffer's
-// visible content: printable characters are appended tagged with the
-// currently active colour/attribute state; SGR sequences update that state;
-// backspace and DEL remove the previously appended character (actually
-// executing the erase, rather than just discarding the backspace byte); and
-// all other control sequences (cursor movement, erase-in-line, window
-// title, bell, bare carriage return, etc.) are consumed but otherwise
-// discarded, since they have no meaningful representation in a scrolling,
-// append-oriented text pane.
+// ensureRow grows the grid, if necessary, so row is a valid index.
+func (db *DisplayBuffer) ensureRow(row int) {
+	for row >= len(db.grid) {
+		db.grid = append(db.grid, nil)
+	}
+}
+
+// ensureCol grows the given row, if necessary, so col is a valid index,
+// filling any newly-created cells with blanks in the default tag.
+func (db *DisplayBuffer) ensureCol(row, col int) {
+	r := db.grid[row]
+	for col >= len(r) {
+		r = append(r, cell{ch: ' ', tag: "-:-:-"})
+	}
+	db.grid[row] = r
+}
+
+// put writes ch at the given position under the buffer's current colour
+// state, growing the grid as needed.
+func (db *DisplayBuffer) put(row, col int, ch rune) {
+	db.ensureRow(row)
+	db.ensureCol(row, col)
+	db.grid[row][col] = cell{ch: ch, tag: db.currentTag()}
+}
+
+// clearRange blanks cells (r0,c0) through (r1,c1) inclusive, in reading
+// order (left-to-right, top-to-bottom) - used by erase-in-display and
+// erase-in-line, both of which erase a contiguous reading-order range
+// rather than a rectangular block.
+func (db *DisplayBuffer) clearRange(r0, c0, r1, c1 int) {
+	if r1 < r0 || (r1 == r0 && c1 < c0) {
+		return
+	}
+	db.ensureRow(r1)
+	for row := r0; row <= r1; row++ {
+		db.ensureRow(row)
+		startCol := 0
+		if row == r0 {
+			startCol = c0
+		}
+		endCol := len(db.grid[row]) - 1
+		if row == r1 {
+			endCol = c1
+			db.ensureCol(row, c1)
+		}
+		for col := startCol; col <= endCol && col < len(db.grid[row]); col++ {
+			db.grid[row][col] = cell{ch: ' ', tag: "-:-:-"}
+		}
+	}
+}
+
+// parseParams splits a CSI sequence's semicolon-separated numeric
+// parameters, defaulting any empty or non-numeric field to 0 (the caller
+// substitutes the sequence-appropriate default, usually 0 or 1).
+func parseParams(params string) []int {
+	if params == "" {
+		return nil
+	}
+	fields := strings.Split(params, ";")
+	nums := make([]int, len(fields))
+	for i, f := range fields {
+		n := 0
+		for _, c := range f {
+			if c < '0' || c > '9' {
+				n = 0
+				break
+			}
+			n = n*10 + int(c-'0')
+		}
+		nums[i] = n
+	}
+	return nums
+}
+
+func paramOr(nums []int, idx, def int) int {
+	if idx >= len(nums) || nums[idx] == 0 {
+		return def
+	}
+	return nums[idx]
+}
+
+// applyCSI handles one CSI sequence's effect on cursor position and screen
+// content. params is everything between "ESC[" and the final byte
+// (including any leading "?" for private-mode sequences); final is that
+// last byte, which selects what the sequence does.
+func (db *DisplayBuffer) applyCSI(params string, final byte) {
+	private := strings.HasPrefix(params, "?")
+	if private {
+		params = params[1:]
+	}
+	nums := parseParams(params)
+
+	switch final {
+	case 'm':
+		db.applySGR(params)
+
+	case 'H', 'f':
+		row := paramOr(nums, 0, 1) - 1
+		col := paramOr(nums, 1, 1) - 1
+		if row < 0 {
+			row = 0
+		}
+		if col < 0 {
+			col = 0
+		}
+		db.cursorRow, db.cursorCol = row, col
+		db.ensureRow(row)
+		db.ensureCol(row, col)
+
+	case 'A': // cursor up
+		db.cursorRow -= paramOr(nums, 0, 1)
+		if db.cursorRow < 0 {
+			db.cursorRow = 0
+		}
+	case 'B': // cursor down
+		db.cursorRow += paramOr(nums, 0, 1)
+		db.ensureRow(db.cursorRow)
+	case 'C': // cursor forward
+		db.cursorCol += paramOr(nums, 0, 1)
+		db.ensureRow(db.cursorRow)
+		db.ensureCol(db.cursorRow, db.cursorCol)
+	case 'D': // cursor back
+		db.cursorCol -= paramOr(nums, 0, 1)
+		if db.cursorCol < 0 {
+			db.cursorCol = 0
+		}
+	case 'E': // cursor next line
+		db.cursorRow += paramOr(nums, 0, 1)
+		db.cursorCol = 0
+		db.ensureRow(db.cursorRow)
+	case 'F': // cursor previous line
+		db.cursorRow -= paramOr(nums, 0, 1)
+		if db.cursorRow < 0 {
+			db.cursorRow = 0
+		}
+		db.cursorCol = 0
+	case 'G': // cursor horizontal absolute
+		db.cursorCol = paramOr(nums, 0, 1) - 1
+		if db.cursorCol < 0 {
+			db.cursorCol = 0
+		}
+		db.ensureRow(db.cursorRow)
+		db.ensureCol(db.cursorRow, db.cursorCol)
+	case 'd': // vertical line position absolute
+		db.cursorRow = paramOr(nums, 0, 1) - 1
+		if db.cursorRow < 0 {
+			db.cursorRow = 0
+		}
+		db.ensureRow(db.cursorRow)
+
+	case 'J': // erase in display
+		n := paramOr(nums, 0, 0)
+		db.ensureRow(db.cursorRow)
+		switch n {
+		case 0:
+			lastRow := len(db.grid) - 1
+			lastCol := 0
+			if lastRow >= 0 {
+				lastCol = len(db.grid[lastRow]) - 1
+			}
+			db.clearRange(db.cursorRow, db.cursorCol, lastRow, lastCol)
+		case 1:
+			db.clearRange(0, 0, db.cursorRow, db.cursorCol)
+		case 2, 3:
+			for r := range db.grid {
+				for c := range db.grid[r] {
+					db.grid[r][c] = cell{ch: ' ', tag: "-:-:-"}
+				}
+			}
+		}
+
+	case 'K': // erase in line
+		n := paramOr(nums, 0, 0)
+		db.ensureRow(db.cursorRow)
+		lastCol := len(db.grid[db.cursorRow]) - 1
+		switch n {
+		case 0:
+			db.clearRange(db.cursorRow, db.cursorCol, db.cursorRow, lastCol)
+		case 1:
+			db.clearRange(db.cursorRow, 0, db.cursorRow, db.cursorCol)
+		case 2:
+			db.clearRange(db.cursorRow, 0, db.cursorRow, lastCol)
+		}
+
+	default:
+		// Scroll-region (r), window manipulation (t), mode set/reset
+		// (h/l, including alternate-screen and bracketed-paste toggles),
+		// and anything else not handled above have no representation in
+		// this model and are safely ignored.
+	}
+}
+
+// Feed processes one more raw frame of terminal data, updating the
+// emulated screen: printable characters are written at the cursor
+// position under the currently active colour/attribute state and advance
+// the cursor; CSI sequences move the cursor, erase screen content, or
+// update colour state as handled by applyCSI; backspace/DEL move the
+// cursor left (real terminal behaviour - erasure happens via a following
+// erase-in-line, exactly the `\b`+`ESC[K` pattern shells emit, not via the
+// backspace itself); carriage return moves the cursor to column 0; and
+// newline moves the cursor down a row, growing the grid if needed.
 func (db *DisplayBuffer) Feed(data string) {
-	tag := db.currentTag()
 	i := 0
 	n := len(data)
 	for i < n {
@@ -576,64 +994,66 @@ func (db *DisplayBuffer) Feed(data string) {
 
 		if ch == '\x1b' {
 			i++
-			if i < n && data[i] == '[' {
-				start := i + 1
-				i++
-				for i < n && (data[i] < 'A' || data[i] > 'Z') && (data[i] < 'a' || data[i] > 'z') {
-					i++
-				}
-				if i < n {
-					final := data[i]
-					params := data[start:i]
-					i++
-					if final == 'm' {
-						db.applySGR(params)
-						tag = db.currentTag()
-					}
-					// Any other final byte (cursor movement, erase-in-line,
-					// etc.) has no meaningful effect here and is discarded.
-				}
-				continue
+			if i >= n {
+				break
 			}
-			if i < n && data[i] == ']' {
-				i++
-				for i < n && data[i] != '\x07' {
-					i++
+			switch data[i] {
+			case '[':
+				start := i + 1
+				j := start
+				for j < n && (data[j] < 'A' || data[j] > 'Z') && (data[j] < 'a' || data[j] > 'z') {
+					j++
 				}
+				if j < n {
+					db.applyCSI(data[start:j], data[j])
+					i = j + 1
+				} else {
+					i = j
+				}
+			case ']':
+				j := i + 1
+				for j < n && data[j] != '\x07' {
+					j++
+				}
+				i = j
 				if i < n {
 					i++
 				}
-				continue
+			case '(', ')':
+				// Character-set designation (e.g. ESC(B for ASCII):
+				// ESC + intermediate + one final byte. Alternate
+				// character sets (line-drawing mode) aren't emulated.
+				i += 2
+			case '=', '>':
+				// Keypad application/normal mode: ESC + one byte.
+				i++
+			default:
+				// Unrecognised single-byte ESC sequence: consume the one
+				// byte so we always make forward progress.
+				i++
 			}
 			continue
 		}
 
 		if ch == '\b' || ch == 0x7F {
-			if len(db.chars) > 0 {
-				db.chars = db.chars[:len(db.chars)-1]
-				db.colorTag = db.colorTag[:len(db.colorTag)-1]
+			db.cursorCol--
+			if db.cursorCol < 0 {
+				db.cursorCol = 0
 			}
 			i++
 			continue
 		}
 
 		if ch == '\r' {
-			// A bare carriage return is how shells redraw the current line
-			// in place; there is no "current line" to redraw over in a
-			// scrolling pane, so it's dropped rather than shown literally.
+			db.cursorCol = 0
 			i++
 			continue
 		}
 
 		if ch == '\n' {
-			// Newline must actually be appended, not just fall through to
-			// the generic control-character branch below - '\n' is 0x0A,
-			// which is itself < 32, so without this explicit case it would
-			// be silently swallowed along with bell and other genuinely
-			// invisible control characters, collapsing all output onto one
-			// line.
-			db.chars = append(db.chars, '\n')
-			db.colorTag = append(db.colorTag, tag)
+			db.cursorRow++
+			db.cursorCol = 0
+			db.ensureRow(db.cursorRow)
 			i++
 			continue
 		}
@@ -644,31 +1064,40 @@ func (db *DisplayBuffer) Feed(data string) {
 			continue
 		}
 
-		db.chars = append(db.chars, rune(ch))
-		db.colorTag = append(db.colorTag, tag)
-		i++
+		r, size := utf8.DecodeRuneInString(data[i:])
+		db.put(db.cursorRow, db.cursorCol, r)
+		db.cursorCol++
+		i += size
 	}
 }
 
 // Render produces the buffer's current content as a tview dynamic-colour
-// markup string, ready to pass to TextView.SetText. Tags are generated
-// fresh from the per-character colour metadata on every call, so a
-// backspace can never corrupt or split an already-emitted tag - unlike an
-// approach that bakes tags directly into a growing string.
+// markup string, ready to pass to TextView.SetText. Each row is trimmed of
+// trailing blank cells before being joined with the next, so ordinary
+// scrolling shell output doesn't carry a wall of trailing spaces on every
+// line.
 func (db *DisplayBuffer) Render() string {
 	var out strings.Builder
 	lastTag := ""
-	for idx, r := range db.chars {
-		tag := db.colorTag[idx]
-		if tag != lastTag {
-			fg, _, attrs := splitTag(tag)
-			out.WriteString("[" + fg + "::" + attrs + "]")
-			lastTag = tag
+	for rowIdx, row := range db.grid {
+		if rowIdx > 0 {
+			out.WriteByte('\n')
 		}
-		if r == '[' {
-			out.WriteString("[[")
-		} else {
-			out.WriteRune(r)
+		end := len(row)
+		for end > 0 && row[end-1].ch == ' ' && row[end-1].tag == "-:-:-" {
+			end--
+		}
+		for _, c := range row[:end] {
+			if c.tag != lastTag {
+				fg, bg, attrs := splitTag(c.tag)
+				out.WriteString("[" + fg + ":" + bg + ":" + attrs + "]")
+				lastTag = c.tag
+			}
+			if c.ch == '[' {
+				out.WriteString("[[")
+			} else {
+				out.WriteRune(c.ch)
+			}
 		}
 	}
 	return out.String()

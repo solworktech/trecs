@@ -512,7 +512,13 @@ func (em *EditorMode) saveRecording() {
 
 	backupPath := em.filePath + ".backup"
 
-	if err := libtrecs.RebuildRecording(em.filePath, backupPath, finalCommands); err != nil {
+	// Ripple-delete semantics: every surviving command's timestamps are
+	// shifted so no dead time remains where a deleted command used to be,
+	// rather than writing finalCommands as-is with their original
+	// (now gappy) timestamps.
+	compressedCommands := libtrecs.CompressTimestamps(em.commands, em.deletedCommands)
+
+	if err := libtrecs.RebuildRecording(em.filePath, backupPath, compressedCommands); err != nil {
 		em.setStatus(fmt.Sprintf("Failed to save: %v", err))
 		return
 	}
