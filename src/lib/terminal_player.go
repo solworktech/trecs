@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -15,21 +16,29 @@ import (
 
 // TerminalPlayerImpl implements TerminalPlayer
 type TerminalPlayerImpl struct {
-	file            *os.File
-	frames          []TerminalFrame
-	currentIndex    int
-	speed           float64
-	paused          bool
-	mutex           sync.Mutex
-	done            chan struct{}
-	pauseResume     chan struct{}
+	file         *os.File
+	frames       []TerminalFrame
+	currentIndex int
+	speed        float64
+	paused       bool
+	mutex        sync.Mutex
+	done         chan struct{}
+	pauseResume  chan struct{}
+	// wake interrupts playbackLoop's wait between frames when a seek or
+	// pause is requested, so the loop re-evaluates immediately instead of
+	// sleeping through the rest of the gap and then emitting a frame that
+	// was chosen before the request.
+	wake            chan struct{}
 	seeking         bool
 	targetTimestamp int64
-	oldState        *term.State
-	playbackState   PlaybackState
-	rawModeEnabled  bool
-	outputFrames    bool
-	frameCallback   func(frame TerminalFrame)
+	// targetIndex, when >= 0, is an exact frame to seek to (SeekToFrame);
+	// otherwise the seek is by targetTimestamp (SeekTo).
+	targetIndex    int
+	oldState       *term.State
+	playbackState  PlaybackState
+	rawModeEnabled bool
+	outputFrames   bool
+	frameCallback  func(frame TerminalFrame)
 }
 
 // SetFrameCallback registers a function called on every frame during playback
@@ -51,9 +60,16 @@ func (tp *TerminalPlayerImpl) PlayWithoutRawMode(terminalFile string) error {
 // NewTerminalPlayer creates a new terminal player
 func NewTerminalPlayer() TerminalPlayer {
 	return &TerminalPlayerImpl{
-		speed:          1.0,
-		done:           make(chan struct{}),
-		pauseResume:    make(chan struct{}),
+		speed: 1.0,
+		done:  make(chan struct{}),
+		// Buffered (1): Resume() signals with a non-blocking send, and a
+		// jump does Pause -> SeekTo -> Resume within microseconds. With an
+		// unbuffered channel that signal is dropped if the loop hasn't
+		// reached its receive yet, leaving it blocked on pauseResume with
+		// paused already false - permanently stuck. A stale token is
+		// harmless: the loop re-checks paused after every receive.
+		pauseResume:    make(chan struct{}, 1),
+		wake:           make(chan struct{}, 1),
 		playbackState:  PlaybackStopped,
 		rawModeEnabled: true,
 		outputFrames:   true,
@@ -103,14 +119,37 @@ func (tp *TerminalPlayerImpl) Play(terminalFile string) error {
 }
 
 // loadFrames reads all frames from the terminal file
+// loadFrames reads this player's terminal.jsonl file, keeping only frame
+// lines. Annotation lines (see recordingLine/loadFrames in frame_parser.go,
+// which this deliberately mirrors) are skipped rather than unmarshalled
+// directly into a bare TerminalFrame - an annotation line has no "data"
+// field, so doing that would silently turn it into a bogus zero-Data frame
+// carrying the annotation's own (typically much earlier) timestamp. Since
+// RebuildRecording writes every annotation after all the real frames,
+// that bogus frame would land last in tp.frames, and GetTotalDurationMs
+// reads exactly that slot - this is what made a recording's reported
+// duration collapse to an early annotation's timestamp instead of the
+// recording's real length once it had any annotations saved.
 func (tp *TerminalPlayerImpl) loadFrames() error {
 	scanner := bufio.NewScanner(tp.file)
 	for scanner.Scan() {
-		var frame TerminalFrame
-		if err := json.Unmarshal(scanner.Bytes(), &frame); err != nil {
+		line := scanner.Bytes()
+		if len(strings.TrimSpace(string(line))) == 0 {
+			continue
+		}
+		var raw recordingLine
+		if err := json.Unmarshal(line, &raw); err != nil {
 			return fmt.Errorf("failed to parse frame: %w", err)
 		}
-		tp.frames = append(tp.frames, frame)
+		if raw.Type == "annotation" {
+			continue
+		}
+		tp.frames = append(tp.frames, TerminalFrame{
+			Timestamp: raw.Timestamp,
+			Data:      raw.Data,
+			Width:     raw.Width,
+			Height:    raw.Height,
+		})
 	}
 	return scanner.Err()
 }
@@ -122,18 +161,37 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 		return
 	}
 
+	// skipDelay makes the first frame after a seek play immediately: its
+	// normal delay is the gap between it and the frame before it in the
+	// original recording, which after a seek is just however long the
+	// person originally paused between commands - not something to sit
+	// through again.
+	skipDelay := false
+
+	// When a pause interrupts a frame's wait, how much of it was left, so
+	// resuming continues from there instead of restarting the full delay.
+	interruptedIdx := -1
+	var interruptedRemaining time.Duration
+
 	for tp.currentIndex < len(tp.frames) {
 		tp.mutex.Lock()
 
 		if tp.seeking {
 			// Jump to seek position
-			for i, frame := range tp.frames {
-				if frame.Timestamp >= tp.targetTimestamp {
-					tp.currentIndex = i
-					break
+			if tp.targetIndex >= 0 {
+				if tp.targetIndex < len(tp.frames) {
+					tp.currentIndex = tp.targetIndex
+				}
+			} else {
+				for i, frame := range tp.frames {
+					if frame.Timestamp >= tp.targetTimestamp {
+						tp.currentIndex = i
+						break
+					}
 				}
 			}
 			tp.seeking = false
+			skipDelay = true
 			tp.mutex.Unlock()
 			continue
 		}
@@ -141,31 +199,67 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 		if tp.paused {
 			tp.mutex.Unlock()
 			// Wait for resume signal
-			<-tp.pauseResume
+			select {
+			case <-tp.pauseResume:
+			case <-tp.done:
+				return
+			}
 			continue
 		}
 
-		currentFrame := tp.frames[tp.currentIndex]
+		idx := tp.currentIndex
+		currentFrame := tp.frames[idx]
 		tp.mutex.Unlock()
 
-		// Calculate delay to next frame
+		// Calculate delay before this frame
 		var delay time.Duration
-		if tp.currentIndex == 0 {
+		switch {
+		case skipDelay:
+			delay = 0
+		case interruptedIdx == idx:
+			delay = interruptedRemaining
+		case idx == 0:
 			delay = time.Duration(currentFrame.Timestamp) * time.Millisecond
-		} else {
-			prevFrame := tp.frames[tp.currentIndex-1]
+			delay = time.Duration(float64(delay) / tp.speed)
+		default:
+			prevFrame := tp.frames[idx-1]
 			deltaMS := currentFrame.Timestamp - prevFrame.Timestamp
 			delay = time.Duration(deltaMS) * time.Millisecond
+			// Apply speed multiplier
+			delay = time.Duration(float64(delay) / tp.speed)
+		}
+		skipDelay = false
+		interruptedIdx = -1
+		if delay < 0 {
+			delay = 0
 		}
 
-		// Apply speed multiplier
-		delay = time.Duration(float64(delay) / tp.speed)
-
-		// Wait for delay or stop signal
+		// Wait for the delay, a seek/pause request, or the stop signal
+		deadline := time.Now().Add(delay)
+		timer := time.NewTimer(delay)
 		select {
-		case <-time.After(delay):
+		case <-timer.C:
+		case <-tp.wake:
+			timer.Stop()
+			interruptedIdx = idx
+			interruptedRemaining = time.Until(deadline)
+			continue
 		case <-tp.done:
+			timer.Stop()
 			return
+		}
+
+		// The wait can end in the same instant a seek or pause was
+		// requested. This frame was chosen before that request, so it must
+		// not be emitted after it - a seek would otherwise deliver one
+		// stale frame from the old position first.
+		tp.mutex.Lock()
+		stale := tp.seeking || tp.paused
+		tp.mutex.Unlock()
+		if stale {
+			interruptedIdx = idx
+			interruptedRemaining = 0
+			continue
 		}
 
 		// Output the frame directly to stdout as bytes
@@ -193,6 +287,15 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 	tp.mutex.Unlock()
 
 	close(tp.done)
+}
+
+// wakeLoop nudges playbackLoop out of its wait between frames. Non-blocking:
+// a pending nudge already means "re-evaluate", so extras are dropped.
+func (tp *TerminalPlayerImpl) wakeLoop() {
+	select {
+	case tp.wake <- struct{}{}:
+	default:
+	}
 }
 
 // flushTerminalInput discards any pending input from the terminal
@@ -229,6 +332,7 @@ func (tp *TerminalPlayerImpl) Pause() {
 	defer tp.mutex.Unlock()
 	tp.paused = true
 	tp.playbackState = PlaybackPaused
+	tp.wakeLoop()
 }
 
 // Resume resumes playback from pause
@@ -275,7 +379,20 @@ func (tp *TerminalPlayerImpl) SeekTo(targetMs int64) {
 	defer tp.mutex.Unlock()
 
 	tp.targetTimestamp = targetMs
+	tp.targetIndex = -1
 	tp.seeking = true
+	tp.wakeLoop()
+}
+
+// SeekToFrame seeks to an exact frame index, unambiguous where SeekTo is not
+// (frames can share a timestamp).
+func (tp *TerminalPlayerImpl) SeekToFrame(index int) {
+	tp.mutex.Lock()
+	defer tp.mutex.Unlock()
+
+	tp.targetIndex = index
+	tp.seeking = true
+	tp.wakeLoop()
 }
 
 // SetSpeed sets the playback speed multiplier

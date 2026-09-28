@@ -6,29 +6,111 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
-// ParseRecording reads a terminal.jsonl file and extracts commands
-func ParseRecording(filePath string) ([]Command, error) {
+// recordingLine is the on-disk shape of one line of a .jsonl recording,
+// covering both possible line kinds - "type" distinguishes them. A line
+// with no "type" at all is treated as a frame, for backward compatibility
+// with every recording made before annotations existed. Unmarshalling
+// every line directly into a bare TerminalFrame (as this file used to)
+// would silently turn an annotation line - which has no "data" field -
+// into a bogus zero-Data frame and corrupt command grouping; loadFrames
+// below checks "type" first specifically to avoid that.
+type recordingLine struct {
+	Type            string `json:"type,omitempty"`
+	Timestamp       int64  `json:"timestamp"`
+	Data            string `json:"data,omitempty"`
+	Width           int    `json:"width,omitempty"`
+	Height          int    `json:"height,omitempty"`
+	ID              string `json:"id,omitempty"`
+	Text            string `json:"text,omitempty"`
+	Author          string `json:"author,omitempty"`
+	CreatedAt       string `json:"createdAt,omitempty"`
+	DurationSeconds int    `json:"durationSeconds,omitempty"`
+}
+
+// loadFrames reads a .jsonl recording and splits it into frames and
+// annotations by line.
+func loadFrames(filePath string) ([]TerminalFrame, []Annotation, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open recording file: %w", err)
+		return nil, nil, fmt.Errorf("failed to open recording file: %w", err)
 	}
 	defer func() { _ = file.Close() }()
 
 	var frames []TerminalFrame
+	var annotations []Annotation
 	scanner := bufio.NewScanner(file)
 
 	for scanner.Scan() {
-		var frame TerminalFrame
-		if err := json.Unmarshal(scanner.Bytes(), &frame); err != nil {
-			return nil, fmt.Errorf("failed to parse frame: %w", err)
+		line := scanner.Bytes()
+		if len(strings.TrimSpace(string(line))) == 0 {
+			continue
 		}
-		frames = append(frames, frame)
+		var raw recordingLine
+		if err := json.Unmarshal(line, &raw); err != nil {
+			return nil, nil, fmt.Errorf("failed to parse line: %w", err)
+		}
+		if raw.Type == "annotation" {
+			annotations = append(annotations, Annotation{
+				ID:              raw.ID,
+				Timestamp:       raw.Timestamp,
+				Text:            raw.Text,
+				Author:          raw.Author,
+				CreatedAt:       raw.CreatedAt,
+				DurationSeconds: raw.DurationSeconds,
+			})
+			continue
+		}
+		frames = append(frames, TerminalFrame{
+			Timestamp: raw.Timestamp,
+			Data:      raw.Data,
+			Width:     raw.Width,
+			Height:    raw.Height,
+		})
 	}
 
 	if err := scanner.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	return frames, annotations, nil
+}
+
+// attachAnnotations matches each annotation to the command it belongs to:
+// the latest command whose start is at or before the annotation's
+// timestamp. This is deliberately not an inclusive [start, end] range
+// check - a command's last output frame and the next command's prompt
+// frame commonly land on the exact same millisecond (the prompt reappears
+// immediately after output ends), which would make that timestamp match
+// both commands ambiguously and let one annotation silently overwrite
+// another depending on processing order. Commands are chronological, so
+// once a command's start is past the annotation's timestamp, every
+// command after it is too.
+func attachAnnotations(commands []Command, annotations []Annotation) {
+	for _, ann := range annotations {
+		best := -1
+		for i := range commands {
+			if commandFirstTimestamp(commands[i]) <= ann.Timestamp {
+				best = i
+			} else {
+				break
+			}
+		}
+		if best >= 0 {
+			commands[best].Annotation = ann
+			commands[best].HasAnnotation = true
+		}
+	}
+}
+
+// ParseRecording reads a terminal.jsonl file, extracts commands, and
+// attaches any annotations to the command each belongs to.
+func ParseRecording(filePath string) ([]Command, error) {
+	frames, annotations, err := loadFrames(filePath)
+	if err != nil {
 		return nil, err
 	}
 
@@ -40,7 +122,14 @@ func ParseRecording(filePath string) ([]Command, error) {
 	prompt := extractPrompt(frames[0].Data)
 
 	// Group frames into commands
-	return groupIntoCommands(frames, prompt)
+	commands, err := groupIntoCommands(frames, prompt)
+	if err != nil {
+		return nil, err
+	}
+
+	attachAnnotations(commands, annotations)
+
+	return commands, nil
 }
 
 // extractPrompt gets the shell prompt from the first frame
@@ -150,8 +239,20 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 	// only affects the editor's list, and consequently anything saved
 	// through it (rebuilding a recording after an edit naturally excludes
 	// whatever isn't in this list).
-	if len(commands) > 0 && strings.TrimSpace(commands[len(commands)-1].InputText) == "exit" {
-		commands = commands[:len(commands)-1]
+	//
+	// Checked against InputText OR InputText+OutputText together: the
+	// shell's "turn off bracketed paste mode" sequence sometimes arrives
+	// as its own frame right as the final prompt reappears, gets
+	// misclassified as a complete (but empty) input on its own, and pushes
+	// the actual "exit\r\n" keystrokes into that command's output instead
+	// of its input - checking InputText alone misses that case entirely.
+	if len(commands) > 0 {
+		last := commands[len(commands)-1]
+		trimmedInput := strings.TrimSpace(last.InputText)
+		trimmedOutput := strings.TrimSpace(last.OutputText)
+		if trimmedInput == "exit" || (trimmedInput == "" && trimmedOutput == "exit") {
+			commands = commands[:len(commands)-1]
+		}
 	}
 
 	return commands, nil
@@ -434,7 +535,11 @@ func shiftFrameTimestamps(frames []TerminalFrame, shift int64) []TerminalFrame {
 	return out
 }
 
-// RebuildRecording takes edited commands and rewrites the JSON file
+// RebuildRecording takes edited commands and rewrites the JSON file,
+// including each command's annotation, if it has one. A newly-added
+// annotation (created in the editor, with no ID yet) is assigned one here,
+// along with a timestamp anchored to its command's start and a CreatedAt,
+// so it round-trips through future saves like any other.
 func RebuildRecording(originalPath string, backupPath string, commands []Command) error {
 	input, err := os.ReadFile(originalPath)
 	if err != nil {
@@ -445,6 +550,7 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	}
 
 	var newFrames []TerminalFrame
+	var annotations []Annotation
 
 	for i := range commands {
 		cmd := &commands[i]
@@ -455,6 +561,17 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 		}
 		newFrames = append(newFrames, cmd.InputFrames...)
 		newFrames = append(newFrames, cmd.OutputFrames...)
+
+		if cmd.HasAnnotation && strings.TrimSpace(cmd.Annotation.Text) != "" {
+			if cmd.Annotation.ID == "" {
+				cmd.Annotation.ID = fmt.Sprintf("ann_%x", time.Now().UnixNano())
+			}
+			if cmd.Annotation.CreatedAt == "" {
+				cmd.Annotation.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+			}
+			cmd.Annotation.Timestamp = commandFirstTimestamp(*cmd)
+			annotations = append(annotations, cmd.Annotation)
+		}
 	}
 
 	file, err := os.Create(originalPath)
@@ -465,8 +582,15 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 
 	encoder := json.NewEncoder(file)
 	for _, frame := range newFrames {
-		if err := encoder.Encode(frame); err != nil {
+		line := recordingLine{Type: "frame", Timestamp: frame.Timestamp, Data: frame.Data, Width: frame.Width, Height: frame.Height}
+		if err := encoder.Encode(line); err != nil {
 			return fmt.Errorf("failed to encode frame: %w", err)
+		}
+	}
+	for _, ann := range annotations {
+		line := recordingLine{Type: "annotation", ID: ann.ID, Timestamp: ann.Timestamp, Text: ann.Text, Author: ann.Author, CreatedAt: ann.CreatedAt, DurationSeconds: ann.DurationSeconds}
+		if err := encoder.Encode(line); err != nil {
+			return fmt.Errorf("failed to encode annotation: %w", err)
 		}
 	}
 
@@ -617,6 +741,23 @@ type DisplayBuffer struct {
 // NewDisplayBuffer creates an empty display buffer.
 func NewDisplayBuffer() *DisplayBuffer {
 	return &DisplayBuffer{}
+}
+
+// IsBlank reports whether nothing visible is on the display: every cell is
+// empty or a plain, default-coloured space. A coloured space is visible
+// (a background-coloured bar is made of them), so it counts as content.
+func (db *DisplayBuffer) IsBlank() bool {
+	for _, row := range db.grid {
+		for _, c := range row {
+			if c.ch != 0 && c.ch != ' ' {
+				return false
+			}
+			if c.tag != "" && c.tag != "-:-:-" {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // currentTag returns a key identifying the buffer's current colour/attribute

@@ -5,7 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -15,21 +18,72 @@ import (
 
 // EditorMode wraps playback with interactive editing
 type EditorMode struct {
-	player          libtrecs.TerminalPlayer
-	commands        []libtrecs.Command
-	filePath        string
-	app             *tview.Application
-	pages           *tview.Pages
-	previousPage    string
-	currentCmd      *libtrecs.Command
-	currentCmdIdx   int
-	playbackView    *tview.TextView
-	progressBar     *progressBar
-	display         *libtrecs.DisplayBuffer
-	totalDurationMs int64
-	statusView      *tview.TextView
-	inputField      *tview.TextArea
-	outputField     *tview.TextArea
+	player                     libtrecs.TerminalPlayer
+	commands                   []libtrecs.Command
+	filePath                   string
+	app                        *tview.Application
+	pages                      *tview.Pages
+	previousPage               string
+	currentCmd                 *libtrecs.Command
+	currentCmdIdx              int
+	rootFlex                   *tview.Flex
+	playbackFlex               *tview.Flex
+	playbackLegend             *tview.TextView
+	playbackSeparator          *tview.Box
+	playbackMargin             *tview.Box
+	playbackView               *tview.TextView
+	progressBar                *progressBar
+	display                    *libtrecs.DisplayBuffer
+	totalDurationMs            int64
+	statusView                 *tview.TextView
+	inputField                 *tview.TextArea
+	outputField                *tview.TextArea
+	annotationField            *tview.TextArea
+	annotationDurationField    *tview.InputField
+	annotationModalView        *tview.TextView
+	annotationModalTopView     *tview.TextView
+	annotationModalIsTop       bool
+	annotationModalVisible     bool
+	wasPlayingBeforeAnnotation bool
+	// lastSeenCmdIdx tracks the command index the frame callback last saw,
+	// so an auto-shown annotation triggers exactly once per transition
+	// into a new command rather than on every frame within it.
+	//
+	// stateMu protects lastSeenCmdIdx, which is read and written from two
+	// different goroutines: the frame callback runs on the player's own
+	// background goroutine, while jumps and reloads run on the UI
+	// goroutine.
+	//
+	// There is deliberately no "already shown" set alongside it. An
+	// annotation previews whenever playback transitions into its command,
+	// and playback only transitions into a command once per pass through
+	// the timeline: a seek resets lastSeenCmdIdx, so everything from the
+	// seek point onward (not just the seek target) previews again as it's
+	// reached, and the player guarantees no stale pre-seek frame is
+	// delivered afterwards to cause a spurious transition. A remembered
+	// set added nothing to that except suppressing previews after a seek.
+	stateMu        sync.Mutex
+	lastSeenCmdIdx int
+	// displayGeneration increments every time em.display is reset/rebuilt
+	// (a jump, a reload, an annotation clearing the screen). A frame
+	// callback captures the generation current when it received its frame
+	// and discards its update if that no longer matches by the time it
+	// actually runs - see makeFrameCallback - which is what stops a frame
+	// that was already in flight from a moment before a rebuild from
+	// landing in the wrong (newly rebuilt) buffer afterwards. atomic.Int64
+	// deliberately, not a plain int: it's read on the player's background
+	// goroutine and written on the UI goroutine, and an unsynchronized
+	// plain int would itself be exactly the same class of bug this field
+	// exists to fix.
+	displayGeneration atomic.Int64
+	debugLog          *os.File
+	// pendingAnnotationFrame holds a command's first frame when its
+	// annotation is being auto-previewed: that frame is deliberately not
+	// fed to the display yet ("show the annotation before rendering the
+	// command"), and is delivered once the preview ends.
+	pendingAnnotationFrame *libtrecs.TerminalFrame
+	annotationTimer        *time.Timer
+	fullScreen             bool
 	// buttonFlex      *tview.Flex
 	commandList     *tview.List
 	deletedCommands map[int]bool
@@ -38,6 +92,13 @@ type EditorMode struct {
 
 // NewEditorMode creates a new editor mode
 func NewEditorMode(player libtrecs.TerminalPlayer, commands []libtrecs.Command, filePath string) *EditorMode {
+	// Opt-in debug log (TRECS_DEBUG=1) of playback transitions, jumps and
+	// annotation decisions, written to /tmp/trecs-debug.log. Off by default.
+	var logFile *os.File
+	if os.Getenv("TRECS_DEBUG") != "" {
+		logFile, _ = os.OpenFile("/tmp/trecs-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	}
+
 	return &EditorMode{
 		player:          player,
 		commands:        commands,
@@ -45,7 +106,19 @@ func NewEditorMode(player libtrecs.TerminalPlayer, commands []libtrecs.Command, 
 		app:             tview.NewApplication(),
 		deletedCommands: make(map[int]bool),
 		editedCommands:  make(map[int]bool),
+		lastSeenCmdIdx:  -1,
+		debugLog:        logFile,
 	}
+}
+
+// debugf writes a timestamped line to the debug log, if one is open.
+// Safe to call from either goroutine, since os.File writes are safe for
+// concurrent use.
+func (em *EditorMode) debugf(format string, args ...interface{}) {
+	if em.debugLog == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(em.debugLog, "[%s] "+format+"\n", append([]interface{}{time.Now().Format("15:04:05.000")}, args...)...)
 }
 
 // Run starts the interactive playback editor
@@ -70,6 +143,7 @@ func (em *EditorMode) Run() error {
 		SetDirection(tview.FlexRow).
 		AddItem(em.pages, 0, 1, true).
 		AddItem(em.statusView, 1, 0, false)
+	em.rootFlex = root
 
 	em.app.SetRoot(root, true)
 	em.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -89,20 +163,7 @@ func (em *EditorMode) Run() error {
 
 	em.display = libtrecs.NewDisplayBuffer()
 
-	// Feed frames through DisplayBuffer, which actually executes backspaces
-	// (rather than discarding them), and redraw the pane's full content
-	// each time - a TextView can't selectively un-write a character once
-	// it's been appended. Also drives the elapsed-time/progress bar, since
-	// every frame carries its own timestamp already.
-	em.player.SetFrameCallback(func(frame libtrecs.TerminalFrame) {
-		em.display.Feed(frame.Data)
-		rendered := em.display.Render()
-		em.app.QueueUpdateDraw(func() {
-			em.playbackView.SetText(rendered)
-			em.playbackView.ScrollToEnd()
-			em.progressBar.SetProgress(frame.Timestamp, em.totalDurationMs)
-		})
-	})
+	em.player.SetFrameCallback(em.makeFrameCallback())
 
 	// Start playback without raw mode / stdout writes - tview owns the terminal
 	if err := em.player.PlayWithoutRawMode(em.filePath); err != nil {
@@ -123,32 +184,220 @@ func (em *EditorMode) Run() error {
 	return em.app.Run()
 }
 
+// makeFrameCallback builds the per-frame handler shared by Run() and
+// reloadFromDisk(): normally it feeds the frame to the display buffer and
+// updates the screen/progress bar/status as before, but when playback is
+// about to cross into a new command whose annotation has an auto-preview
+// duration, it instead holds that frame back, pauses, and shows the
+// annotation - the frame is delivered once the preview ends (see
+// hideAnnotationModal).
+func (em *EditorMode) makeFrameCallback() func(libtrecs.TerminalFrame) {
+	return func(frame libtrecs.TerminalFrame) {
+		em.stateMu.Lock()
+		rawIdx := em.player.GetCurrentFrameIndex()
+		newIdx := libtrecs.GetCommandIndexAtFrame(rawIdx, em.commands)
+		shouldTrigger := false
+		if newIdx != em.lastSeenCmdIdx {
+			prevSeen := em.lastSeenCmdIdx
+			em.lastSeenCmdIdx = newIdx
+			var reason string
+			eligible := false
+			if newIdx >= 0 && newIdx < len(em.commands) {
+				cmd := em.commands[newIdx]
+				switch {
+				case !cmd.HasAnnotation:
+					reason = "HasAnnotation=false"
+				case cmd.Annotation.DurationSeconds <= 0:
+					reason = fmt.Sprintf("DurationSeconds=%d", cmd.Annotation.DurationSeconds)
+				default:
+					reason = "eligible"
+					eligible = true
+				}
+			} else {
+				reason = "index out of range"
+			}
+			em.debugf("TRANSITION rawIdx=%d prevSeen=%d newIdx=%d reason=%s", rawIdx, prevSeen, newIdx, reason)
+			if eligible {
+				shouldTrigger = true
+			}
+		}
+		em.stateMu.Unlock()
+
+		if shouldTrigger {
+			em.debugf("AUTO-PREVIEW TRIGGERING for command %d", newIdx)
+			em.player.Pause()
+			frameCopy := frame
+			gen := em.displayGeneration.Load()
+			em.app.QueueUpdateDraw(func() {
+				if em.displayGeneration.Load() != gen {
+					em.debugf("AUTO-PREVIEW for command %d discarded as stale (gen mismatch)", newIdx)
+					return // a rebuild happened after this frame was produced - stale, discard
+				}
+				em.autoShowAnnotation(newIdx, frameCopy)
+			})
+			return
+		}
+
+		// Feed/Render deliberately happen inside QueueUpdateDraw, not out
+		// here: this closure runs on the player's own background
+		// goroutine, and em.display can be reassigned (rebuilt) from the
+		// UI goroutine at any time (a jump) with no lock between the two -
+		// mutating it out here was a genuine data race with that
+		// reassignment, which is what actually let a frame from whatever
+		// was playing before a jump land in the freshly rebuilt buffer.
+		gen := em.displayGeneration.Load()
+		em.app.QueueUpdateDraw(func() {
+			if em.displayGeneration.Load() != gen {
+				return
+			}
+			em.display.Feed(frame.Data)
+			rendered := em.display.Render()
+			em.playbackView.SetText(rendered)
+			em.playbackView.ScrollToEnd()
+			em.progressBar.SetProgress(frame.Timestamp, em.totalDurationMs)
+			em.statusView.SetText(em.currentAnnotationHint())
+		})
+	}
+}
+
+// annotationLingerDelay is how long the previous command's final output
+// stays on screen, paused, before it's cleared to reveal an auto-previewed
+// annotation - clearing the instant playback transitions into the new
+// command felt abrupt, as if the just-finished command had been cut off
+// mid-view rather than given a moment to be read.
+const annotationLingerDelay = 3 * time.Second
+
+// autoShowAnnotation begins an auto-preview for the command at idx: it
+// pauses playback and holds frame back (it belongs to that command, and
+// would otherwise render before the annotation had a chance to appear),
+// but leaves whatever's currently on screen untouched for
+// annotationLingerDelay before actually clearing and revealing the
+// annotation (revealAutoAnnotation) - unless the screen is already blank
+// (e.g. straight after a jump), in which case there's nothing to linger
+// over and it reveals at once. Must be called on the UI goroutine (from
+// within QueueUpdateDraw).
+func (em *EditorMode) autoShowAnnotation(idx int, frame libtrecs.TerminalFrame) {
+	em.wasPlayingBeforeAnnotation = true // we only ever get here from an active, playing frame callback
+	frameCopy := frame
+	em.pendingAnnotationFrame = &frameCopy
+
+	// Marked visible (and thus guarded in handleInput) for this whole
+	// sequence, linger included - the player is paused and a frame is
+	// being held back throughout, not just once the panel is actually
+	// showing, so other bindings need to stay blocked from the start; see
+	// the modal-guard comment in handleInput for why.
+	em.annotationModalVisible = true
+	em.annotationModalIsTop = true
+
+	// The linger exists so the previous command's output isn't wiped the
+	// instant playback moves on. With nothing on screen - right after a
+	// jump has cleared it, or when the very first command is annotated -
+	// there's nothing to linger over, so reveal immediately.
+	if em.display.IsBlank() {
+		em.debugf("AUTO-PREVIEW for command %d: screen blank, skipping linger", idx)
+		em.revealAutoAnnotation(idx)
+		return
+	}
+
+	em.annotationTimer = time.AfterFunc(annotationLingerDelay, func() {
+		em.app.QueueUpdateDraw(func() {
+			em.revealAutoAnnotation(idx)
+		})
+	})
+}
+
+// revealAutoAnnotation clears the screen and raises the annotation panel,
+// once annotationLingerDelay has given the previous command's output a
+// moment to be read. Starts the timer for the annotation's own configured
+// preview duration, at the end of which hideAnnotationModal delivers the
+// held-back frame.
+func (em *EditorMode) revealAutoAnnotation(idx int) {
+	cmd := em.commands[idx]
+
+	// Clear now, before the panel goes up - otherwise the previous
+	// command's content is still sitting there underneath/around it,
+	// making it look like that command was the annotated one rather than
+	// the one about to play. The held-back frame is fed into another
+	// fresh buffer when the preview ends (hideAnnotationModal), since
+	// nothing should be fed into this now-cleared one in the meantime.
+	em.display = libtrecs.NewDisplayBuffer()
+	em.displayGeneration.Add(1)
+	em.playbackView.SetText("")
+
+	em.annotationModalTopView.SetText(cmd.Annotation.Text)
+	em.playbackFlex.ResizeItem(em.annotationModalTopView, 5, 0)
+	em.setStatus(em.currentAnnotationHint())
+
+	duration := time.Duration(cmd.Annotation.DurationSeconds) * time.Second
+	em.annotationTimer = time.AfterFunc(duration, func() {
+		em.app.QueueUpdateDraw(func() {
+			em.hideAnnotationModal()
+		})
+	})
+}
+
+// setFullScreen shows or hides the playback page's chrome (legend,
+// separator, margin, progress bar) and the shared status bar, maximising
+// the terminal output area. All key bindings continue to work either way -
+// this only changes what's drawn, not what handleInput accepts.
+func (em *EditorMode) setFullScreen(on bool) {
+	em.fullScreen = on
+	chromeSize := 1
+	statusSize := 1
+	if on {
+		chromeSize = 0
+		statusSize = 0
+	}
+	em.playbackFlex.ResizeItem(em.playbackLegend, chromeSize, 0)
+	em.playbackFlex.ResizeItem(em.playbackSeparator, chromeSize, 0)
+	em.playbackFlex.ResizeItem(em.playbackMargin, chromeSize, 0)
+	em.playbackFlex.ResizeItem(em.progressBar, chromeSize, 0)
+	em.rootFlex.ResizeItem(em.statusView, statusSize, 0)
+}
+
+func (em *EditorMode) toggleFullScreen() {
+	em.setFullScreen(!em.fullScreen)
+}
+
 func (em *EditorMode) createPlaybackView() tview.Primitive {
-	legend := tview.NewTextView().
+	em.playbackLegend = tview.NewTextView().
 		SetDynamicColors(true).
 		SetText("[yellow]Space[white]/[yellow]P[white] Pause/Resume    [yellow]E[white] Edit Current Command    " +
 			"[yellow]^P[white]/[yellow]^N[white] Prev/Next Command    " +
-			"[yellow]^L[white] Browse Commands    [yellow]Q[white] Quit")
+			"[yellow]^L[white] Browse Commands    [yellow]^F[white] Full Screen    [yellow]Q[white] Quit")
 
-	separator := newHorizontalRule()
+	em.playbackSeparator = newHorizontalRule()
 
 	em.playbackView = tview.NewTextView().SetText("\n")
 	em.playbackView.SetDynamicColors(true)
 	em.playbackView.SetScrollable(true)
 
-	margin := tview.NewBox()
+	// Two separate panels, each hidden by default (0 rows), rather than
+	// one repositioned widget: an auto-preview ("before rendering the
+	// command") shows at the top, just under the legend, while a manually
+	// requested one (Ctrl+A on already-playing content) shows at the
+	// bottom, just above the progress bar - each stays fixed in the
+	// layout, and only one is ever visible at a time (see
+	// annotationModalIsTop). ColorNavy, not ColorBlue - ColorBlue renders
+	// closer to cyan and makes the white foreground hard to read.
+	em.annotationModalTopView = newAnnotationModalView()
+	em.annotationModalView = newAnnotationModalView()
+
+	em.playbackMargin = tview.NewBox()
 
 	em.progressBar = newProgressBar()
 
-	flex := tview.NewFlex().
+	em.playbackFlex = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(legend, 1, 0, false).
-		AddItem(separator, 1, 0, false).
+		AddItem(em.playbackLegend, 1, 0, false).
+		AddItem(em.playbackSeparator, 1, 0, false).
+		AddItem(em.annotationModalTopView, 0, 0, false).
 		AddItem(em.playbackView, 0, 1, false).
-		AddItem(margin, 1, 0, false).
+		AddItem(em.annotationModalView, 0, 0, false).
+		AddItem(em.playbackMargin, 1, 0, false).
 		AddItem(em.progressBar, 1, 0, false)
 
-	return flex
+	return em.playbackFlex
 }
 
 func (em *EditorMode) createEditView() tview.Primitive {
@@ -159,6 +408,20 @@ func (em *EditorMode) createEditView() tview.Primitive {
 	em.outputField = tview.NewTextArea()
 	em.outputField.SetWrap(true)
 	em.outputField.SetBorder(true).SetTitle(" Output ")
+
+	em.annotationField = tview.NewTextArea()
+	em.annotationField.SetWrap(true)
+	em.annotationField.SetBorder(true).SetTitle(" Annotation ")
+
+	em.annotationDurationField = tview.NewInputField()
+	em.annotationDurationField.SetAcceptanceFunc(tview.InputFieldInteger)
+	// tview.InputField defaults its field (typed-text) background to a
+	// contrasting blue distinct from the surrounding Box background, which
+	// has the same white-on-unreadable-blue problem as ColorBlue elsewhere.
+	// Black, matching the other fields.
+	em.annotationDurationField.SetFieldBackgroundColor(tcell.ColorBlack)
+	em.annotationDurationField.SetFieldTextColor(tcell.ColorWhite)
+	em.annotationDurationField.SetBorder(true).SetTitle(" Annotation Duration (seconds, 0 = off) ")
 
 	legend := tview.NewTextView().
 		SetDynamicColors(true).
@@ -207,7 +470,9 @@ func (em *EditorMode) createEditView() tview.Primitive {
 		//AddItem(hr, 1, 0, false).
 		AddItem(spacer, 1, 0, false).
 		AddItem(em.inputField, 7, 0, true).
-		AddItem(em.outputField, 10, 0, false)
+		AddItem(em.outputField, 10, 0, false).
+		AddItem(em.annotationField, 5, 0, false).
+		AddItem(em.annotationDurationField, 3, 0, false)
 		//AddItem(em.buttonFlex, 1, 0, false)
 
 	return flex
@@ -252,15 +517,35 @@ func (em *EditorMode) refreshCommandList() {
 func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	// Hard-quit works everywhere
 	if event.Key() == tcell.KeyCtrlC {
-		em.player.Stop()
-		em.app.Stop()
+		em.quit()
+		return nil
+	}
+
+	// Full-screen toggles from anywhere; every other binding still works
+	// the same regardless of which state it's in - this only changes what
+	// chrome is drawn.
+	if event.Key() == tcell.KeyCtrlF {
+		em.toggleFullScreen()
 		return nil
 	}
 
 	pageName, _ := em.pages.GetFrontPage()
 
+	// On the playback page specifically, Esc also exits full screen (the
+	// command browser page already has its own Esc behaviour - closing
+	// itself - which takes precedence there instead).
+	if event.Key() == tcell.KeyEscape && pageName == "playback" && em.fullScreen {
+		em.setFullScreen(false)
+		return nil
+	}
+
 	// Ctrl+L toggles the command browser from anywhere (except itself,
-	// where Esc closes it instead).
+	// where Esc closes it instead). It deliberately leaves an in-progress
+	// annotation alone: merely opening a browser isn't a reason to destroy
+	// a preview, and cancelling it here left the player paused for an
+	// annotation that no longer existed, with nothing left to say so. It
+	// finishes on its own, or is still showing on Esc. Whatever actually
+	// leaves the playback page (a jump, the editor) cancels it itself.
 	if event.Key() == tcell.KeyCtrlL && pageName != "commandlist" {
 		em.previousPage = pageName
 		em.refreshCommandList()
@@ -275,6 +560,7 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			em.pages.SwitchToPage(em.previousPage)
 			return nil
 		case tcell.KeyCtrlP:
+			em.cancelAnnotation()
 			em.jumpToCommandForPlayback(em.commandList.GetCurrentItem())
 			return nil
 		case tcell.KeyCtrlE:
@@ -314,6 +600,12 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 				em.app.SetFocus(em.outputField)
 				return nil
 			case em.outputField:
+				em.app.SetFocus(em.annotationField)
+				return nil
+			case em.annotationField:
+				em.app.SetFocus(em.annotationDurationField)
+				return nil
+			case em.annotationDurationField:
 				em.app.SetFocus(em.inputField)
 				return nil
 			}
@@ -322,13 +614,25 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	}
 
 	// Playback mode controls
+
+	if event.Key() == tcell.KeyCtrlA {
+		if em.annotationModalVisible {
+			em.hideAnnotationModal()
+		} else {
+			em.showAnnotationModal()
+		}
+		return nil
+	}
+
 	if event.Key() == tcell.KeyCtrlP {
 		cur := libtrecs.GetCommandIndexAtFrame(em.player.GetCurrentFrameIndex(), em.commands)
+		em.cancelAnnotation()
 		em.jumpToCommandForPlayback(cur - 1)
 		return nil
 	}
 	if event.Key() == tcell.KeyCtrlN {
 		cur := libtrecs.GetCommandIndexAtFrame(em.player.GetCurrentFrameIndex(), em.commands)
+		em.cancelAnnotation()
 		em.jumpToCommandForPlayback(cur + 1)
 		return nil
 	}
@@ -336,16 +640,27 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyRune {
 		switch event.Rune() {
 		case ' ', 'p', 'P':
+			if em.annotationModalVisible {
+				// No-op, not "same as Ctrl+A": playback is already paused
+				// for the annotation regardless of phase (linger or
+				// actually showing), and during the linger phase there's
+				// no visible indication anything's even happening, so
+				// treating a pause attempt as "skip the annotation" here
+				// is just confusing - it looks like pressing pause cleared
+				// the screen. Ctrl+A remains the only explicit dismiss.
+				return nil
+			}
 			switch em.player.GetPlaybackState() {
 			case libtrecs.PlaybackPlaying:
 				em.player.Pause()
-				em.setStatus("Paused.")
+				em.setStatus("Paused." + em.currentAnnotationHint())
 			case libtrecs.PlaybackPaused:
 				em.player.Resume()
-				em.setStatus("Resumed.")
+				em.setStatus("Resumed." + em.currentAnnotationHint())
 			}
 			return nil
 		case 'e', 'E':
+			em.cancelAnnotation()
 			if em.player.GetPlaybackState() == libtrecs.PlaybackPlaying {
 				em.player.Pause()
 			}
@@ -354,6 +669,8 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 				em.currentCmd = &em.commands[em.currentCmdIdx]
 				em.inputField.SetText(em.currentCmd.InputText, false)
 				em.outputField.SetText(em.currentCmd.OutputText, false)
+				em.annotationField.SetText(em.currentCmd.Annotation.Text, false)
+				em.annotationDurationField.SetText(strconv.Itoa(em.currentCmd.Annotation.DurationSeconds))
 			}
 
 			em.setStatus(fmt.Sprintf("Editing command %d of %d.", em.currentCmdIdx+1, len(em.commands)))
@@ -362,8 +679,7 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			em.app.SetFocus(em.inputField)
 			return nil
 		case 'q', 'Q':
-			em.player.Stop()
-			em.app.Stop()
+			em.quit()
 			return nil
 		}
 	}
@@ -376,6 +692,81 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 // not call this from the frame-callback goroutine - use QueueUpdateDraw there.
 func (em *EditorMode) setStatus(msg string) {
 	em.statusView.SetText(msg)
+}
+
+// currentAnnotationHint returns the text to append to the status line
+// reflecting whether the command at the player's current position has an
+// annotation - "" if not, so callers can just concatenate it onto
+// whatever else they're setting the status to.
+func (em *EditorMode) currentAnnotationHint() string {
+	if em.annotationModalVisible {
+		return "   [yellow]^A[white] Close Annotation"
+	}
+	idx := libtrecs.GetCommandIndexAtFrame(em.player.GetCurrentFrameIndex(), em.commands)
+	if idx < 0 || idx >= len(em.commands) || !em.commands[idx].HasAnnotation {
+		return ""
+	}
+	return "   [yellow]^A[white] Display Annotation"
+}
+
+// showAnnotationModal pauses playback (if playing) and expands the
+// annotation panel above the progress bar to show the current command's
+// annotation, with a blue background / white foreground per spec. Does
+// nothing if the current command has none.
+func (em *EditorMode) showAnnotationModal() {
+	idx := libtrecs.GetCommandIndexAtFrame(em.player.GetCurrentFrameIndex(), em.commands)
+	if idx < 0 || idx >= len(em.commands) || !em.commands[idx].HasAnnotation {
+		return
+	}
+
+	em.wasPlayingBeforeAnnotation = em.player.GetPlaybackState() == libtrecs.PlaybackPlaying
+	if em.wasPlayingBeforeAnnotation {
+		em.player.Pause()
+	}
+
+	em.annotationModalVisible = true
+	em.annotationModalIsTop = false
+	em.annotationModalView.SetText(em.commands[idx].Annotation.Text)
+	em.playbackFlex.ResizeItem(em.annotationModalView, 5, 0)
+	em.setStatus(em.currentAnnotationHint())
+}
+
+// hideAnnotationModal collapses the annotation panel back to hidden.
+// For a manually-opened annotation (Ctrl+A on already-rendered content) it
+// just resumes playback, if it was actually playing (as opposed to already
+// paused by the person) before the annotation interrupted it. For an
+// auto-previewed one (whether ended naturally via its timer or dismissed
+// early with Ctrl+A) it additionally clears the screen and delivers the
+// command's held-back first frame before resuming, so the command starts
+// rendering fresh rather than resuming mid-stream into stale content.
+func (em *EditorMode) hideAnnotationModal() {
+	em.annotationModalVisible = false
+	if em.annotationModalIsTop {
+		em.playbackFlex.ResizeItem(em.annotationModalTopView, 0, 0)
+	} else {
+		em.playbackFlex.ResizeItem(em.annotationModalView, 0, 0)
+	}
+
+	if em.annotationTimer != nil {
+		em.annotationTimer.Stop()
+		em.annotationTimer = nil
+	}
+
+	if em.pendingAnnotationFrame != nil {
+		frame := *em.pendingAnnotationFrame
+		em.pendingAnnotationFrame = nil
+		em.display = libtrecs.NewDisplayBuffer()
+		em.displayGeneration.Add(1)
+		em.display.Feed(frame.Data)
+		em.playbackView.SetText(em.display.Render())
+		em.playbackView.ScrollToEnd()
+		em.progressBar.SetProgress(frame.Timestamp, em.totalDurationMs)
+		em.player.Resume()
+	} else if em.wasPlayingBeforeAnnotation {
+		em.player.Resume()
+	}
+
+	em.setStatus(em.currentAnnotationHint())
 }
 
 // jumpToCommand moves the edit view directly to another command without
@@ -391,12 +782,14 @@ func (em *EditorMode) jumpToCommand(idx int) {
 	em.currentCmd = &em.commands[idx]
 	em.inputField.SetText(em.currentCmd.InputText, false)
 	em.outputField.SetText(em.currentCmd.OutputText, false)
+	em.annotationField.SetText(em.currentCmd.Annotation.Text, false)
+	em.annotationDurationField.SetText(strconv.Itoa(em.currentCmd.Annotation.DurationSeconds))
 
 	seekTarget := em.currentCmd.StartTime
 	if em.currentCmd.HasPrompt {
 		seekTarget = em.currentCmd.PromptFrame.Timestamp
 	}
-	em.player.SeekTo(seekTarget)
+	em.player.SeekToFrame(em.currentCmd.FirstRawFrameIndex)
 	em.progressBar.SetProgress(seekTarget, em.totalDurationMs)
 
 	em.setStatus(fmt.Sprintf("Editing command %d of %d.", idx+1, len(em.commands)))
@@ -409,6 +802,10 @@ func (em *EditorMode) jumpToCommandForEdit(idx int) {
 	if idx < 0 || idx >= len(em.commands) {
 		return
 	}
+	// The browser no longer cancels an in-progress annotation on open, so
+	// do it here: otherwise its timer could fire while the editor is up and
+	// resume playback underneath it.
+	em.cancelAnnotation()
 	if em.player.GetPlaybackState() == libtrecs.PlaybackPlaying {
 		em.player.Pause()
 	}
@@ -419,24 +816,70 @@ func (em *EditorMode) jumpToCommandForEdit(idx int) {
 
 // jumpToCommandForPlayback is used both from the Ctrl+L command browser and
 // from Ctrl+P/Ctrl+N during ordinary playback: seeks playback to the chosen
-// command and resumes if it was paused, returning to the playback page.
+// command and resumes playback from there, returning to the playback page.
+// It always resumes: whether the player happens to be paused at this point
+// says nothing about intent - it may be paused only because an annotation
+// preview paused it, which is exactly what left ^L then ^P seeking without
+// ever playing.
 func (em *EditorMode) jumpToCommandForPlayback(idx int) {
 	if idx < 0 || idx >= len(em.commands) {
 		return
 	}
+	em.debugf("JUMP requested: idx=%d", idx)
+
+	// Always pause first, even if already paused: if playback is actively
+	// running, its background goroutine can otherwise keep feeding frames
+	// from wherever it currently is - not yet aware a seek is coming -
+	// straight into the buffer clearDisplayForJump is about to replace,
+	// for as long as it takes to notice the seek. Pausing first bounds
+	// that to at most one frame already in flight, which the generation
+	// counter in makeFrameCallback discards regardless.
+	em.player.Pause()
+
 	cmd := em.commands[idx]
 	seekTarget := cmd.StartTime
 	if cmd.HasPrompt {
 		seekTarget = cmd.PromptFrame.Timestamp
 	}
-	em.player.SeekTo(seekTarget)
+	// By frame index, not timestamp: a command's last output frame and the
+	// next command's prompt commonly share a millisecond, and a timestamp
+	// seek lands on the first of them - i.e. on the previous command's
+	// frame, which would preview that command's annotation ahead of the one
+	// actually jumped to.
+	em.player.SeekToFrame(cmd.FirstRawFrameIndex)
+	em.debugf("JUMP: SeekToFrame(%d) for target idx=%d", cmd.FirstRawFrameIndex, idx)
+	em.clearDisplayForJump()
 	em.currentCmdIdx = idx
+	// Deliberately reset rather than set to idx: SeekTo lands exactly on
+	// the target's own prompt frame, which the *next* frame callback
+	// invocation will process as playback resumes below. Setting this to
+	// idx here would make that callback's newIdx == lastSeenCmdIdx already
+	// match, silently pre-empting its own transition detection - and with
+	// it, the annotation auto-preview trigger for the very command being
+	// jumped to. Resetting to the "unknown" sentinel guarantees that
+	// callback sees a fresh transition instead.
+	em.stateMu.Lock()
+	prevLastSeen := em.lastSeenCmdIdx
+	em.lastSeenCmdIdx = -1
+	em.stateMu.Unlock()
+	em.debugf("JUMP: reset lastSeenCmdIdx %d -> -1", prevLastSeen)
 	em.progressBar.SetProgress(seekTarget, em.totalDurationMs)
-	if em.player.GetPlaybackState() == libtrecs.PlaybackPaused {
-		em.player.Resume()
-	}
+	em.player.Resume()
 	em.pages.SwitchToPage("playback")
-	em.setStatus(fmt.Sprintf("Jumped to command %d of %d.", idx+1, len(em.commands)))
+	em.setStatus(fmt.Sprintf("Jumped to command %d of %d.", idx+1, len(em.commands)) + em.currentAnnotationHint())
+}
+
+// clearDisplayForJump wipes the screen ahead of a jump to a different
+// command: a jump seeks exactly to that command's own content (its
+// annotation, if any, then its input and output), not a replay of every
+// command that happened to come before it. SeekTo lands the player's
+// position exactly on the target's own prompt frame, so the normal resumed
+// playback immediately following this call feeds it - and everything
+// after - next; nothing needs to be fed here.
+func (em *EditorMode) clearDisplayForJump() {
+	em.display = libtrecs.NewDisplayBuffer()
+	em.displayGeneration.Add(1)
+	em.playbackView.SetText("")
 }
 
 func (em *EditorMode) saveEdit() {
@@ -456,10 +899,19 @@ func (em *EditorMode) updateCurrentCommand() {
 	if em.currentCmdIdx >= 0 && em.currentCmdIdx < len(em.commands) {
 		newInput := em.inputField.GetText()
 		newOutput := em.outputField.GetText()
+		newAnnotation := em.annotationField.GetText()
+		newDuration, err := strconv.Atoi(em.annotationDurationField.GetText())
+		if err != nil {
+			newDuration = 0
+		}
 
-		if newInput != em.commands[em.currentCmdIdx].InputText || newOutput != em.commands[em.currentCmdIdx].OutputText {
-			em.commands[em.currentCmdIdx].InputText = newInput
-			em.commands[em.currentCmdIdx].OutputText = newOutput
+		cmd := &em.commands[em.currentCmdIdx]
+		if newInput != cmd.InputText || newOutput != cmd.OutputText || newAnnotation != cmd.Annotation.Text || newDuration != cmd.Annotation.DurationSeconds {
+			cmd.InputText = newInput
+			cmd.OutputText = newOutput
+			cmd.Annotation.Text = newAnnotation
+			cmd.Annotation.DurationSeconds = newDuration
+			cmd.HasAnnotation = strings.TrimSpace(newAnnotation) != ""
 			em.editedCommands[em.currentCmdIdx] = true
 		}
 	}
@@ -470,6 +922,40 @@ func (em *EditorMode) deleteCurrentCommand() {
 		em.deletedCommands[em.currentCmdIdx] = true
 		em.setStatus(fmt.Sprintf("Command %d marked for deletion. CTRL+W to write to disk and resume playback.", em.currentCmdIdx+1))
 	}
+}
+
+// quit stops playback and the application - shared by every quit path
+// (Ctrl+C, Q on the playback page, Q while the annotation modal is
+// showing) so they can't drift out of sync with each other.
+func (em *EditorMode) quit() {
+	em.player.Stop()
+	em.app.Stop()
+}
+
+// cancelAnnotation stops any in-progress annotation sequence (auto-preview
+// linger/display, or a manually-opened one) and discards its held-back
+// frame without delivering it, without touching playback state itself -
+// callers decide what happens next (seeking elsewhere, resuming, switching
+// pages). Discarding rather than delivering is correct here specifically
+// because the caller is about to move the display to a different point in
+// the timeline anyway (clearDisplayForJump or similar); delivering a
+// frame that belongs to the position being left would be the out-of-order
+// mistake, not the discard. Safe to call even when no annotation is
+// active.
+func (em *EditorMode) cancelAnnotation() {
+	if em.annotationTimer != nil {
+		em.annotationTimer.Stop()
+		em.annotationTimer = nil
+	}
+	if em.annotationModalVisible {
+		if em.annotationModalIsTop {
+			em.playbackFlex.ResizeItem(em.annotationModalTopView, 0, 0)
+		} else {
+			em.playbackFlex.ResizeItem(em.annotationModalView, 0, 0)
+		}
+	}
+	em.annotationModalVisible = false
+	em.pendingAnnotationFrame = nil
 }
 
 func (em *EditorMode) monitorPlayback() {
@@ -541,29 +1027,25 @@ func (em *EditorMode) reloadFromDisk(targetIdx int, backupPath string) {
 
 	newPlayer := libtrecs.NewTerminalPlayer()
 	em.display = libtrecs.NewDisplayBuffer()
+	em.displayGeneration.Add(1)
 	em.playbackView.Clear()
 
-	newPlayer.SetFrameCallback(func(frame libtrecs.TerminalFrame) {
-		em.display.Feed(frame.Data)
-		rendered := em.display.Render()
-		em.app.QueueUpdateDraw(func() {
-			em.playbackView.SetText(rendered)
-			em.playbackView.ScrollToEnd()
-			em.progressBar.SetProgress(frame.Timestamp, em.totalDurationMs)
-		})
-	})
+	newPlayer.SetFrameCallback(em.makeFrameCallback())
 
 	em.commands = newCommands
 	em.deletedCommands = make(map[int]bool)
 	em.editedCommands = make(map[int]bool)
+	em.stateMu.Lock()
+	em.lastSeenCmdIdx = -1
+	em.stateMu.Unlock()
 	em.currentCmdIdx = -1
 	em.currentCmd = nil
 
+	em.player = newPlayer
 	if err := newPlayer.PlayWithoutRawMode(em.filePath); err != nil {
 		em.setStatus(fmt.Sprintf("Saved, but failed to restart playback: %v", err))
 		return
 	}
-	em.player = newPlayer
 	em.totalDurationMs = newPlayer.GetTotalDurationMs()
 
 	if targetIdx >= 0 && targetIdx < len(newCommands) {
@@ -572,7 +1054,7 @@ func (em *EditorMode) reloadFromDisk(targetIdx int, backupPath string) {
 		if cmd.HasPrompt {
 			seekTarget = cmd.PromptFrame.Timestamp
 		}
-		newPlayer.SeekTo(seekTarget)
+		newPlayer.SeekToFrame(cmd.FirstRawFrameIndex)
 		em.currentCmdIdx = targetIdx
 		em.progressBar.SetProgress(seekTarget, em.totalDurationMs)
 	}
@@ -677,6 +1159,21 @@ func (em *EditorMode) editFocusedFieldExternally() {
 // spanning its full width, whatever that happens to be - unlike a fixed-
 // length string of "─" characters, this adapts to the actual terminal size
 // rather than falling short (or wrapping) on anything but one exact width.
+// newAnnotationModalView creates one annotation display panel - the
+// top-positioned (auto-preview) and bottom-positioned (manual Ctrl+A)
+// panels are separate widgets sharing this same styling, per
+// createPlaybackView. ColorNavy, not ColorBlue - ColorBlue renders closer
+// to cyan and makes the white foreground hard to read.
+func newAnnotationModalView() *tview.TextView {
+	v := tview.NewTextView().SetDynamicColors(true)
+	v.SetWrap(true)
+	v.SetBackgroundColor(tcell.ColorNavy)
+	v.SetTextColor(tcell.ColorWhite)
+	v.SetBorder(true).SetTitle(" Annotation ")
+	v.SetBorderColor(tcell.ColorWhite)
+	return v
+}
+
 func newHorizontalRule() *tview.Box {
 	box := tview.NewBox()
 	box.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {

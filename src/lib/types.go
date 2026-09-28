@@ -80,6 +80,11 @@ type TerminalPlayer interface {
 	Resume()
 	Stop()
 	SeekTo(milliseconds int64)
+	// SeekToFrame seeks to an exact frame index. Prefer it over SeekTo
+	// whenever the index is known: several frames can share one timestamp
+	// (a command's last output frame and the next command's prompt often
+	// land in the same millisecond), and SeekTo lands on the first of them.
+	SeekToFrame(index int)
 	SetSpeed(speed float64)
 	Wait()
 	GetCurrentFrameIndex() int
@@ -148,4 +153,33 @@ type Command struct {
 
 	// Original output (with escape codes preserved)
 	OutputTextRaw string
+
+	// Annotation is an optional note attached to this command, shown
+	// during playback (both TUI and web) as a dismissible overlay/modal
+	// rather than being part of the terminal output itself. Follows the
+	// same HasX-flag pattern as PromptFrame/HasPrompt above: HasAnnotation
+	// is false and Annotation is the zero value when there is none.
+	Annotation    Annotation
+	HasAnnotation bool
+}
+
+// Annotation is a timestamped note attached to a command. Timestamp is
+// milliseconds since recording start, the same axis TerminalFrame uses -
+// normally set to the command's own start time (see
+// commandFirstTimestamp), which is what lets an annotation be written to
+// and read from the recording file independently of which command index
+// it happens to belong to after edits or deletions shift things around.
+type Annotation struct {
+	ID        string `json:"id"`
+	Timestamp int64  `json:"timestamp"`
+	Text      string `json:"text"`
+	Author    string `json:"author,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	// DurationSeconds, if greater than zero, means this annotation is
+	// shown automatically - pausing playback, displaying it, then clearing
+	// the screen and resuming - right before its command's content
+	// starts rendering. Zero (the default) means it's never shown
+	// automatically; it's still viewable on demand via the manual
+	// show/hide toggle (Ctrl+A in the TUI) regardless of this value.
+	DurationSeconds int `json:"durationSeconds,omitempty"`
 }
