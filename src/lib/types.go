@@ -10,6 +10,24 @@ type TerminalFrame struct {
 	Height    int    `json:"height"`
 }
 
+// RecordingMetaLine is the on-disk shape of the metadata line a recorder
+// writes once, as the very first line of a .jsonl recording, capturing the
+// real terminal size at record time. See RecordingMeta (frame_parser.go)
+// for how it's read back - the two are deliberately separate types: this
+// one is what a writer constructs, that one is what a reader gets, and nothing
+// requires them to evolve together.
+type RecordingMetaLine struct {
+	Type   string `json:"type"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+
+// NewRecordingMetaLine builds the metadata line for a terminal of the given
+// size.
+func NewRecordingMetaLine(width, height int) RecordingMetaLine {
+	return RecordingMetaLine{Type: "meta", Width: width, Height: height}
+}
+
 // Frame represents a single captured frame with timestamp
 type Frame struct {
 	Timestamp time.Time

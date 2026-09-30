@@ -33,7 +33,8 @@ type EditorMode struct {
 	playbackMargin             *tview.Box
 	playbackView               *tview.TextView
 	progressBar                *progressBar
-	display                    *libtrecs.DisplayBuffer
+	display                    libtrecs.Screen
+	displayCols, displayRows   int
 	totalDurationMs            int64
 	statusView                 *tview.TextView
 	inputField                 *tview.TextArea
@@ -159,9 +160,8 @@ func (em *EditorMode) Run() error {
 		em.app.Stop()
 	}()
 
-	go em.monitorPlayback()
-
-	em.display = libtrecs.NewDisplayBuffer()
+	em.measureDisplaySize()
+	em.display = em.newDisplay()
 
 	em.player.SetFrameCallback(em.makeFrameCallback())
 
@@ -182,6 +182,54 @@ func (em *EditorMode) Run() error {
 	}()
 
 	return em.app.Run()
+}
+
+// measureDisplaySize sizes the playback display to the recording's actual
+// terminal usage (see MeasureSize) and caches the result in
+// displayCols/displayRows for newDisplay to use. Frame data is loaded
+// independently here (rather than reusing the player's own, internally
+// loaded frames) because this runs before the player has loaded anything
+// (Run) or after a save has changed the file out from under it
+// (reloadFromDisk); a LoadFrames failure here isn't fatal - it just leaves
+// whatever size was already cached (the minimum, the first time) rather
+// than blocking playback.
+// measureDisplaySize sizes the playback display to the recording's actual
+// terminal usage and caches the result in displayCols/displayRows for
+// newDisplay to use. It prefers the size the recorder itself captured at
+// record time (RecordingMeta, written once as the first line of the file -
+// see terminal_recorder.go); MeasureSize's replay-based estimate (see its
+// own doc comment) is only a fallback for a recording made before that
+// existed, or the rare one where the recorder genuinely couldn't read the
+// terminal size. The persisted size is authoritative when present - it's
+// what the terminal really was, not an estimate from what happened to get
+// drawn - so there's no reason to fall back to measuring even if it seems
+// implausibly small or large.
+//
+// Frame data is loaded independently here (rather than reusing the
+// player's own, internally loaded frames) because this runs before the
+// player has loaded anything (Run) or after a save has changed the file
+// out from under it (reloadFromDisk); a LoadFrames failure here isn't
+// fatal - it just leaves whatever size was already cached (the minimum,
+// the first time) rather than blocking playback.
+func (em *EditorMode) measureDisplaySize() {
+	frames, _, meta, err := libtrecs.LoadFrames(em.filePath)
+	if err != nil {
+		em.debugf("measureDisplaySize: %v (keeping previous size)", err)
+		return
+	}
+	if meta.Width > 0 && meta.Height > 0 {
+		em.displayCols, em.displayRows = meta.Width, meta.Height
+		em.debugf("measureDisplaySize: %dx%d (from recording metadata)", em.displayCols, em.displayRows)
+		return
+	}
+	em.displayCols, em.displayRows = libtrecs.MeasureSize(frames)
+	em.debugf("measureDisplaySize: %dx%d (estimated: no recording metadata)", em.displayCols, em.displayRows)
+}
+
+// newDisplay creates an empty display sized by the most recent
+// measureDisplaySize call (or the minimum size, if that has never run).
+func (em *EditorMode) newDisplay() libtrecs.Screen {
+	return libtrecs.NewVTScreenSized(em.displayCols, em.displayRows)
 }
 
 // makeFrameCallback builds the per-frame handler shared by Run() and
@@ -246,6 +294,7 @@ func (em *EditorMode) makeFrameCallback() func(libtrecs.TerminalFrame) {
 		// reassignment, which is what actually let a frame from whatever
 		// was playing before a jump land in the freshly rebuilt buffer.
 		gen := em.displayGeneration.Load()
+		isLastFrame := rawIdx == em.player.GetTotalFrames()-1
 		em.app.QueueUpdateDraw(func() {
 			if em.displayGeneration.Load() != gen {
 				return
@@ -255,7 +304,22 @@ func (em *EditorMode) makeFrameCallback() func(libtrecs.TerminalFrame) {
 			em.playbackView.SetText(rendered)
 			em.playbackView.ScrollToEnd()
 			em.progressBar.SetProgress(frame.Timestamp, em.totalDurationMs)
-			em.statusView.SetText(em.currentAnnotationHint())
+			if isLastFrame {
+				// playbackLoop deliberately keeps running (idling) rather
+				// than exiting once it reaches the last frame - see its
+				// own comment - specifically so a later seek can still
+				// resume it. Nothing else announces that this happened,
+				// so this is done here, synchronously with the same
+				// per-frame update the ordinary status line uses, rather
+				// than from a separate poller: a poller checking
+				// GetPlaybackState() on its own timer could just as
+				// easily run right after this same closure and
+				// overwrite this message with the ordinary
+				// currentAnnotationHint() the very next moment.
+				em.setStatus("Finished. Space/P to replay from the start.")
+			} else {
+				em.statusView.SetText(em.currentAnnotationHint())
+			}
 		})
 	}
 }
@@ -320,7 +384,7 @@ func (em *EditorMode) revealAutoAnnotation(idx int) {
 	// the one about to play. The held-back frame is fed into another
 	// fresh buffer when the preview ends (hideAnnotationModal), since
 	// nothing should be fed into this now-cleared one in the meantime.
-	em.display = libtrecs.NewDisplayBuffer()
+	em.display = em.newDisplay()
 	em.displayGeneration.Add(1)
 	em.playbackView.SetText("")
 
@@ -657,6 +721,17 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			case libtrecs.PlaybackPaused:
 				em.player.Resume()
 				em.setStatus("Resumed." + em.currentAnnotationHint())
+			case libtrecs.PlaybackStopped:
+				// Playback reached the end on its own (see playbackLoop's
+				// own comment on why the player stays alive rather than
+				// exiting at that point) - treat the same key that
+				// pauses/resumes as "replay from the start" here, since
+				// there's nothing left to pause or resume. Reuses the
+				// exact jump machinery ^P/^N use for any other command
+				// jump, just targeting the first one, so it gets the same
+				// display-clearing and annotation-retriggering behaviour
+				// a jump to command 0 would.
+				em.jumpToCommandForPlayback(0)
 			}
 			return nil
 		case 'e', 'E':
@@ -755,7 +830,7 @@ func (em *EditorMode) hideAnnotationModal() {
 	if em.pendingAnnotationFrame != nil {
 		frame := *em.pendingAnnotationFrame
 		em.pendingAnnotationFrame = nil
-		em.display = libtrecs.NewDisplayBuffer()
+		em.display = em.newDisplay()
 		em.displayGeneration.Add(1)
 		em.display.Feed(frame.Data)
 		em.playbackView.SetText(em.display.Render())
@@ -877,7 +952,7 @@ func (em *EditorMode) jumpToCommandForPlayback(idx int) {
 // playback immediately following this call feeds it - and everything
 // after - next; nothing needs to be fed here.
 func (em *EditorMode) clearDisplayForJump() {
-	em.display = libtrecs.NewDisplayBuffer()
+	em.display = em.newDisplay()
 	em.displayGeneration.Add(1)
 	em.playbackView.SetText("")
 }
@@ -958,16 +1033,6 @@ func (em *EditorMode) cancelAnnotation() {
 	em.pendingAnnotationFrame = nil
 }
 
-func (em *EditorMode) monitorPlayback() {
-	for {
-		if em.player.GetPlaybackState() == libtrecs.PlaybackStopped {
-			em.app.Stop()
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
 // saveRecording writes the current state of the recording to disk, then
 // reloads the file fresh from disk and repositions playback at the command
 // that was being edited (mapped through any commands deleted before it).
@@ -1026,7 +1091,8 @@ func (em *EditorMode) reloadFromDisk(targetIdx int, backupPath string) {
 	em.player.Stop()
 
 	newPlayer := libtrecs.NewTerminalPlayer()
-	em.display = libtrecs.NewDisplayBuffer()
+	em.measureDisplaySize()
+	em.display = em.newDisplay()
 	em.displayGeneration.Add(1)
 	em.playbackView.Clear()
 

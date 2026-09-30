@@ -16,7 +16,7 @@ import (
 // with every recording made before annotations existed. Unmarshalling
 // every line directly into a bare TerminalFrame (as this file used to)
 // would silently turn an annotation line - which has no "data" field -
-// into a bogus zero-Data frame and corrupt command grouping; loadFrames
+// into a bogus zero-Data frame and corrupt command grouping; LoadFrames
 // below checks "type" first specifically to avoid that.
 type recordingLine struct {
 	Type            string `json:"type,omitempty"`
@@ -31,17 +31,32 @@ type recordingLine struct {
 	DurationSeconds int    `json:"durationSeconds,omitempty"`
 }
 
-// loadFrames reads a .jsonl recording and splits it into frames and
-// annotations by line.
-func loadFrames(filePath string) ([]TerminalFrame, []Annotation, error) {
+// RecordingMeta carries recording-level metadata captured once at record
+// time (see recorder/terminal_recorder.go) - currently just the real
+// terminal size. Width and Height are 0 for a recording made before this
+// existed, or if the size genuinely couldn't be determined at record time;
+// callers should treat that as "unknown", not as a literal 0x0 terminal.
+type RecordingMeta struct {
+	Width  int
+	Height int
+}
+
+// LoadFrames reads a .jsonl recording and splits it into frames,
+// annotations, and recording-level metadata (see RecordingMeta) by line.
+// Exported alongside ParseRecording for callers that
+// need the raw, unfiltered frame stream itself - e.g. MeasureSize, which
+// must see every frame ParseRecording's command-grouping would otherwise
+// filter out as "setup noise".
+func LoadFrames(filePath string) ([]TerminalFrame, []Annotation, RecordingMeta, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open recording file: %w", err)
+		return nil, nil, RecordingMeta{}, fmt.Errorf("failed to open recording file: %w", err)
 	}
 	defer func() { _ = file.Close() }()
 
 	var frames []TerminalFrame
 	var annotations []Annotation
+	var meta RecordingMeta
 	scanner := bufio.NewScanner(file)
 
 	for scanner.Scan() {
@@ -51,9 +66,10 @@ func loadFrames(filePath string) ([]TerminalFrame, []Annotation, error) {
 		}
 		var raw recordingLine
 		if err := json.Unmarshal(line, &raw); err != nil {
-			return nil, nil, fmt.Errorf("failed to parse line: %w", err)
+			return nil, nil, RecordingMeta{}, fmt.Errorf("failed to parse line: %w", err)
 		}
-		if raw.Type == "annotation" {
+		switch raw.Type {
+		case "annotation":
 			annotations = append(annotations, Annotation{
 				ID:              raw.ID,
 				Timestamp:       raw.Timestamp,
@@ -62,6 +78,14 @@ func loadFrames(filePath string) ([]TerminalFrame, []Annotation, error) {
 				CreatedAt:       raw.CreatedAt,
 				DurationSeconds: raw.DurationSeconds,
 			})
+			continue
+		case "meta":
+			// Recorded once, at the very start of the file (see
+			// terminal_recorder.go) - if a future format ever writes more
+			// than one (e.g. to capture a resize mid-recording), the last
+			// one wins, but nothing does that yet.
+			meta.Width = raw.Width
+			meta.Height = raw.Height
 			continue
 		}
 		frames = append(frames, TerminalFrame{
@@ -73,10 +97,10 @@ func loadFrames(filePath string) ([]TerminalFrame, []Annotation, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, nil, err
+		return nil, nil, RecordingMeta{}, err
 	}
 
-	return frames, annotations, nil
+	return frames, annotations, meta, nil
 }
 
 // attachAnnotations matches each annotation to the command it belongs to:
@@ -109,7 +133,7 @@ func attachAnnotations(commands []Command, annotations []Annotation) {
 // ParseRecording reads a terminal.jsonl file, extracts commands, and
 // attaches any annotations to the command each belongs to.
 func ParseRecording(filePath string) ([]Command, error) {
-	frames, annotations, err := loadFrames(filePath)
+	frames, annotations, _, err := LoadFrames(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -732,15 +756,28 @@ type DisplayBuffer struct {
 
 	cursorRow int
 	cursorCol int
+	// cursorVisible tracks DECTCEM (ESC[?25h/l). A real terminal's own
+	// blinking cursor is how a person sees where they are in a full-screen
+	// program like vim: moving with the arrow keys inside the already-visible
+	// part of a file sends nothing but a bare cursor-position sequence - no
+	// character is rewritten anywhere - so the block cursor is the entire
+	// visual signal that anything happened. Render() paints it in reverse
+	// video at (cursorRow, cursorCol); without that, only whatever an
+	// application separately redraws (e.g. vim's ruler in the corner) would
+	// ever appear to change; everything else the person actually navigated
+	// past would look frozen even though the emulated cursor moved correctly.
+	cursorVisible bool
 
 	fgColor string
 	bgColor string
 	bold    bool
 }
 
-// NewDisplayBuffer creates an empty display buffer.
+// NewDisplayBuffer creates an empty display buffer. The cursor starts
+// visible, matching a real terminal's default (DECTCEM) state before any
+// program explicitly hides it.
 func NewDisplayBuffer() *DisplayBuffer {
-	return &DisplayBuffer{}
+	return &DisplayBuffer{cursorVisible: true}
 }
 
 // IsBlank reports whether nothing visible is on the display: every cell is
@@ -1111,10 +1148,22 @@ func (db *DisplayBuffer) applyCSI(params string, final byte) {
 		}
 
 	default:
-		// Scroll-region (r), window manipulation (t), mode set/reset
-		// (h/l, including alternate-screen and bracketed-paste toggles),
-		// and anything else not handled above have no representation in
-		// this model and are safely ignored.
+		// Scroll-region (r) and window manipulation (t) have no
+		// representation in this model and are safely ignored.
+		//
+		// Of the mode set/reset sequences (h/l), only cursor visibility
+		// (DECTCEM, "?25") is tracked, since it's the one that changes what
+		// Render() should draw. Everything else this private-mode family
+		// covers - the alternate screen buffer (1049), bracketed paste
+		// (2004), focus reporting (1004), and so on - has no visible
+		// representation in a single flat grid and is ignored the same way.
+		if private && (final == 'h' || final == 'l') {
+			for _, n := range nums {
+				if n == 25 {
+					db.cursorVisible = final == 'h'
+				}
+			}
+		}
 	}
 }
 
@@ -1212,27 +1261,83 @@ func (db *DisplayBuffer) Feed(data string) {
 	}
 }
 
+// cellAt returns the cell at (row, col), or a default blank if that
+// position hasn't been written to (out of bounds is not an error here: it
+// just means nothing has drawn there yet, which is exactly what a blank
+// cell represents).
+func (db *DisplayBuffer) cellAt(row, col int) cell {
+	if row < 0 || row >= len(db.grid) {
+		return cell{ch: ' ', tag: "-:-:-"}
+	}
+	r := db.grid[row]
+	if col < 0 || col >= len(r) {
+		return cell{ch: ' ', tag: "-:-:-"}
+	}
+	return r[col]
+}
+
+// reverseTag returns tag with reverse video added, for painting the cursor.
+// It cannot simply prepend "-" to mean "start from nothing": tview's markup
+// parser treats a leading '-' in the attributes field as "reset to initial
+// attributes" and stops there, discarding anything after it - "-r" would
+// render as plain reset, not reset-then-reverse. Appending "r" (or "br" for
+// an already-bold cell) is a request tview parses one flag at a time, only
+// ever adding to the existing state, which is what's wanted here: the
+// cursor should look like the underlying cell with its colours flipped, not
+// like a plain space regardless of what was actually there.
+func reverseTag(tag string) string {
+	fg, bg, attrs := splitTag(tag)
+	if attrs == "-" {
+		attrs = "r"
+	} else {
+		attrs += "r"
+	}
+	return fg + ":" + bg + ":" + attrs
+}
+
 // Render produces the buffer's current content as a tview dynamic-colour
 // markup string, ready to pass to TextView.SetText. Each row is trimmed of
 // trailing blank cells before being joined with the next, so ordinary
 // scrolling shell output doesn't carry a wall of trailing spaces on every
 // line.
+//
+// When the cursor is visible, the cell it's on is painted in reverse video -
+// see the cursorVisible field comment for why this matters well beyond
+// cosmetics: for a full-screen program moving the cursor within its already-
+// drawn viewport (arrow-key navigation in vim, for instance), this is often
+// the ONLY visible change in the entire frame.
 func (db *DisplayBuffer) Render() string {
 	var out strings.Builder
 	lastTag := ""
-	for rowIdx, row := range db.grid {
+	for rowIdx := 0; rowIdx < len(db.grid); rowIdx++ {
 		if rowIdx > 0 {
 			out.WriteByte('\n')
 		}
+		row := db.grid[rowIdx]
 		end := len(row)
 		for end > 0 && row[end-1].ch == ' ' && row[end-1].tag == "-:-:-" {
 			end--
 		}
-		for _, c := range row[:end] {
-			if c.tag != lastTag {
-				fg, bg, attrs := splitTag(c.tag)
+
+		cursorHere := db.cursorVisible && rowIdx == db.cursorRow
+		if cursorHere && db.cursorCol >= end {
+			// The cursor rests past this row's real content (a blank
+			// tail, or a row that was never written this far at all).
+			// Extend up to it so the cursor cell survives the trailing-
+			// blank trim above instead of being cut off before it's drawn.
+			end = db.cursorCol + 1
+		}
+
+		for col := 0; col < end; col++ {
+			c := db.cellAt(rowIdx, col)
+			tag := c.tag
+			if cursorHere && col == db.cursorCol {
+				tag = reverseTag(tag)
+			}
+			if tag != lastTag {
+				fg, bg, attrs := splitTag(tag)
 				out.WriteString("[" + fg + ":" + bg + ":" + attrs + "]")
-				lastTag = c.tag
+				lastTag = tag
 			}
 			if c.ch == '[' {
 				out.WriteString("[[")

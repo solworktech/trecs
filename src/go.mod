@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/creack/pty v1.1.21
 	github.com/gdamore/tcell/v2 v2.8.1
+	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/rivo/tview v0.42.0
 	golang.org/x/sys v0.29.0
 	golang.org/x/term v0.28.0

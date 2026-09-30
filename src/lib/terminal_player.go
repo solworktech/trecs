@@ -173,8 +173,44 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 	interruptedIdx := -1
 	var interruptedRemaining time.Duration
 
-	for tp.currentIndex < len(tp.frames) {
+	// finished is true once playback has reached the end of the frames and
+	// been reported as PlaybackStopped, until a seek (replay, or jumping
+	// back to an earlier command) sends it somewhere valid again. This
+	// loop deliberately never exits on its own after reaching the end -
+	// only Stop() (closing tp.done) does that - specifically so a later
+	// seek still has a live loop to deliver frames to: SeekToFrame/SeekTo
+	// only ever set state for this loop to notice and wake it via
+	// tp.wake, they don't play anything themselves. A goroutine that had
+	// already returned would leave those seeks updating state nobody was
+	// left to act on - the progress bar moving with nothing actually
+	// playing, which is exactly the bug this avoids.
+	finished := false
+
+	for {
 		tp.mutex.Lock()
+
+		if !finished && tp.currentIndex >= len(tp.frames) && !tp.seeking {
+			if tp.oldState != nil {
+				_ = flushTerminalInput()
+				_ = term.Restore(int(os.Stdin.Fd()), tp.oldState)
+				tp.oldState = nil
+			}
+			tp.playbackState = PlaybackStopped
+			finished = true
+		}
+
+		if finished && !tp.seeking {
+			tp.mutex.Unlock()
+			select {
+			case <-tp.wake:
+				// Might be a real seek, might be a Pause() call while
+				// already finished (harmless) - either way, loop back to
+				// the top and let the checks above decide.
+				continue
+			case <-tp.done:
+				return
+			}
+		}
 
 		if tp.seeking {
 			// Jump to seek position
@@ -192,6 +228,30 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 			}
 			tp.seeking = false
 			skipDelay = true
+			// A seek always leaves "finished" behind, even one that lands
+			// exactly back at the end again - that will be re-detected at
+			// the top of the next iteration and handled the same way as
+			// reaching it normally would.
+			finished = false
+			// A seek is about to resume delivering frames immediately
+			// (right below, in this same loop) unless the caller is
+			// deliberately holding it paused (jumpToCommandForPlayback
+			// pauses first, seeks, then explicitly resumes) - so the
+			// reported state must reflect that now, not whatever it was
+			// left at by the seek's target position (typically
+			// PlaybackStopped, if this seek is a replay from the finished
+			// state). Nothing else sets it back to Playing on this path:
+			// Resume() only ever acts when tp.paused is already true, so a
+			// bare SeekToFrame with no preceding Pause() - the common case
+			// for "replay from the start" - would otherwise leave
+			// GetPlaybackState() (and Wait(), which polls exactly this)
+			// permanently reporting Stopped while frames were actually
+			// still being delivered.
+			if tp.paused {
+				tp.playbackState = PlaybackPaused
+			} else {
+				tp.playbackState = PlaybackPlaying
+			}
 			tp.mutex.Unlock()
 			continue
 		}
@@ -275,18 +335,6 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 		tp.currentIndex++
 		tp.mutex.Unlock()
 	}
-
-	// Restore terminal state after playback ends
-	tp.mutex.Lock()
-	if tp.oldState != nil {
-		_ = flushTerminalInput()
-		_ = term.Restore(int(os.Stdin.Fd()), tp.oldState)
-		tp.oldState = nil
-	}
-	tp.playbackState = PlaybackStopped
-	tp.mutex.Unlock()
-
-	close(tp.done)
 }
 
 // wakeLoop nudges playbackLoop out of its wait between frames. Non-blocking:
@@ -406,9 +454,37 @@ func (tp *TerminalPlayerImpl) SetSpeed(speed float64) {
 	tp.speed = speed
 }
 
-// Wait blocks until playback completes
+// Wait blocks until playback reaches PlaybackStopped: naturally finishing
+// or Stop() being called (a mere Pause() does not count and does not
+// unblock it). It polls rather than blocking on tp.done, because tp.done is
+// now reserved purely for "the playback goroutine has permanently exited"
+// (Stop()) - natural completion deliberately leaves that goroutine running,
+// idle, so a later seek can still resume it (see playbackLoop) - so it
+// alone is no longer a reliable "has playback stopped" signal.
+//
+// A pending, not-yet-applied seek also holds this open: SeekToFrame/SeekTo
+// only set state for playbackLoop to notice and don't themselves touch
+// playbackState, so a caller doing SeekToFrame(0); Wait() right after a
+// natural stop could otherwise catch the still-stale PlaybackStopped from
+// before the goroutine has actually picked the seek up and started
+// delivering frames again - returning immediately from what looks like a
+// replay that never happened, rather than waiting for the replay it just
+// asked for.
 func (tp *TerminalPlayerImpl) Wait() {
-	<-tp.done
+	for {
+		tp.mutex.Lock()
+		state := tp.playbackState
+		pendingSeek := tp.seeking
+		tp.mutex.Unlock()
+		if state == PlaybackStopped && !pendingSeek {
+			return
+		}
+		select {
+		case <-tp.done:
+			return
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
 }
 
 // GetCurrentFrameIndex returns the current frame index
