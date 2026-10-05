@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"flag"
 	"fmt"
 	"os"
@@ -14,13 +15,17 @@ import (
 func main() {
 	recordCmd := flag.NewFlagSet("record", flag.ExitOnError)
 	playCmd := flag.NewFlagSet("play", flag.ExitOnError)
+	var defaultOutputDir = cmp.Or(
+		os.Getenv("XDG_CONFIG_HOME"),
+		os.Getenv("HOME"),
+	)
 
 	// Record flags
 	recordTerminal := recordCmd.Bool("terminal", true, "Enable terminal recording")
 	recordAudio := recordCmd.Bool("audio", false, "Enable audio recording")
 	recordCamera := recordCmd.Bool("camera", false, "Enable camera recording")
 	recordScreen := recordCmd.Bool("screen", false, "Enable screen recording")
-	outputDir := recordCmd.String("output", os.Getenv("XDG_CONFIG_HOME")+"/trecs/recordings", "Output directory")
+	outputDir := recordCmd.String("output", defaultOutputDir+"/trecs/recordings", "Output directory")
 	sessionName := recordCmd.String("name", "", "Session name (default: timestamp YYYY_MM_DD_HH_MM_SS)")
 	terminalCmd := recordCmd.String("cmd", "bash", "Terminal command to execute")
 	audioDevice := recordCmd.String("audio-device", "default", "Audio device")
