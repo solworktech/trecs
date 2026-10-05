@@ -50,7 +50,7 @@ func (te *TerminalEditor) showPreview() {
 	fmt.Printf("=============\n\n")
 
 	for i, cmd := range te.commands {
-		fmt.Printf("[%d] Input: %s\n", i, truncate(cmd.InputText, 60))
+		fmt.Printf("[%d] Input: %s\n", i, truncate(libtrecs.CollapseCommand(cmd.InputText), 60))
 		fmt.Printf("    Output: %s\n", truncate(cmd.OutputText, 60))
 		fmt.Printf("    Time: %dms - %dms\n\n", cmd.StartTime, cmd.EndTime)
 	}

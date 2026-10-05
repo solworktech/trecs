@@ -152,6 +152,11 @@ type Command struct {
 	PromptFrame TerminalFrame
 	HasPrompt   bool
 
+	// ContinuationPrompt is the prompt ("> ") the shell drew in front of each
+	// line after the first when the command ran over several lines; empty
+	// otherwise. Needed to read the command back from InputFrames.
+	ContinuationPrompt string
+
 	// FirstRawFrameIndex/LastRawFrameIndex are indices into the original,
 	// unfiltered frame list as loaded from the recording file (the same
 	// list the player counts through during playback). They span every
@@ -166,7 +171,7 @@ type Command struct {
 
 	// Input frames (user typing)
 	InputFrames []TerminalFrame
-	InputText   string // Reconstructed user input
+	InputText   string // Reconstructed user input; a command that ran over several lines keeps its line breaks
 	StartTime   int64  // First frame timestamp
 
 	// Output frames (terminal response)

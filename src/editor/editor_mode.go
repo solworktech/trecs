@@ -585,7 +585,7 @@ func (em *EditorMode) refreshCommandList() {
 	}
 	em.commandList.Clear()
 	for i, cmd := range em.commands {
-		label := fmt.Sprintf("%s   %s", formatDuration(cmd.StartTime), cmd.InputText)
+		label := fmt.Sprintf("%s   %s", formatDuration(cmd.StartTime), libtrecs.CollapseCommand(cmd.InputText))
 		if em.deletedCommands[i] {
 			label = "(deleted) " + label
 		}

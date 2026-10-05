@@ -138,8 +138,117 @@ func TestReconstructInputFollowsTheLineNotTheKeystrokes(t *testing.T) {
 		"a CR redraw after i-search":       {fr("\r(reverse-i-search)`': \x1b[K", "\r\x1b]0;t\x07\x1b[01;32mu@h\x1b[00m:~$ ls -al\x1b[K\b\b\b\b\b\b\r\n"), "ls -al"},
 		"delete a character mid-line":      {fr("ls  -l", "\b\b\b\b", "\x1b[1P", "\r\n"), "ls -l"},
 	} {
-		if got := reconstructInput(c.in, prompt); got != c.want {
+		if got := reconstructInput(c.in, prompt, ""); got != c.want {
 			t.Errorf("%s: got %q, want %q", name, got, c.want)
+		}
+	}
+}
+
+// multiline.jsonl: a command continued with backslashes (like a long md2pdf
+// invocation), one continued by an open quote, and one whose OUTPUT begins with
+// "> ". Before, the command was only its first line and the rest of it, with the
+// real output, was filed as output.
+func TestMultiLineCommandsAreOneCommand(t *testing.T) {
+	cmds, err := ParseRecording("testdata/multiline.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"printf \"%s\\n\" -author \"Jesse\" -i \\\n    https://example.com/README.md -o out.pdf \\\n    -theme dark -with-footer",
+		"echo \"first\nsecond\"",
+		"echo \"> not a continuation prompt\"",
+		"echo done",
+	}
+	if got := inputTexts(cmds); !reflect.DeepEqual(got, want) {
+		t.Errorf("commands:\n got  %q\n want %q", got, want)
+	}
+	if cmds[0].ContinuationPrompt != "> " || cmds[2].ContinuationPrompt != "" {
+		t.Errorf("continuation prompts: %q, %q", cmds[0].ContinuationPrompt, cmds[2].ContinuationPrompt)
+	}
+	if !strings.Contains(cmds[0].OutputText, "-author") || !strings.Contains(cmds[0].OutputText, "https://example.com/README.md") {
+		t.Errorf("the output belongs to the command: %q", cmds[0].OutputText)
+	}
+	if strings.TrimSpace(cmds[2].OutputText) != "> not a continuation prompt" {
+		t.Errorf("output that begins with \"> \" must stay output: %q", cmds[2].OutputText)
+	}
+	if got := CollapseCommand(cmds[0].InputText); got != "printf \"%s\\n\" -author \"Jesse\" -i https://example.com/README.md -o out.pdf -theme dark -with-footer" {
+		t.Errorf("CollapseCommand = %q", got)
+	}
+}
+
+// Saving must not take a multi-line command for an edited one (syncCommandFrames
+// rewrites the frames of a command whose text no longer matches them) nor lose or
+// repeat a byte of the continuation lines.
+func TestSavingAMultiLineCommandChangesNothing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "terminal.jsonl")
+	data, err := os.ReadFile("testdata/multiline.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmds, err := ParseRecording(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := RebuildRecording(path, path+".bak", cmds); err != nil {
+		t.Fatal(err)
+	}
+	again, err := ParseRecording(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(inputTexts(again), inputTexts(cmds)) {
+		t.Errorf("commands changed by a save:\n before %q\n after  %q", inputTexts(cmds), inputTexts(again))
+	}
+	for i := range cmds {
+		if cmds[i].OutputText != again[i].OutputText {
+			t.Errorf("command %d output changed by a save", i)
+		}
+	}
+}
+
+// md2pdf-history.jsonl: a three-line command recalled from history with the Up
+// arrow. It is drawn in reverse video, redrawn after cursor-up moves, and Enter
+// arrives as a bare "bracketed paste off" with no CRLF of its own. Before, those
+// frames were discarded as "not input" and the first line of the command's
+// OUTPUT was taken for the command.
+func TestMultiLineCommandRecalledFromHistory(t *testing.T) {
+	cmds, err := ParseRecording("testdata/md2pdf-history.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"md2pdf -author \"Jesse Portnoy\" -i \\\n    https://github.com/solworktech/md2pdf/raw/refs/heads/master/README.md -o md2pdf.pdf \\\n    -theme dark -title \"Deb packages\" -with-footer",
+		"wget https://github.com/jessp01/crash-course-in/raw/refs/heads/main/courses/apt_dpkg_deb/apt_dpkg_deb.md -P ~/docs",
+	} // the trailing `exit` (Ctrl-D) is dropped by ParseRecording
+	if got := inputTexts(cmds); !reflect.DeepEqual(got, want) {
+		t.Errorf("commands:\n got  %q\n want %q", got, want)
+	}
+	if !strings.Contains(cmds[0].OutputText, "Downloaded image to: /tmp/md2pdf/badge.svg") {
+		t.Errorf("the output belongs to the command: %q", cmds[0].OutputText)
+	}
+
+	// and saving it changes nothing: same commands, same output, each byte once
+	path := filepath.Join(t.TempDir(), "terminal.jsonl")
+	data, _ := os.ReadFile("testdata/md2pdf-history.jsonl")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RebuildRecording(path, path+".bak", cmds); err != nil {
+		t.Fatal(err)
+	}
+	again, err := ParseRecording(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(inputTexts(again), want) {
+		t.Errorf("commands changed by a save: %q", inputTexts(again))
+	}
+	for i := range cmds {
+		if cmds[i].OutputText != again[i].OutputText {
+			t.Errorf("command %d output changed by a save", i)
 		}
 	}
 }
