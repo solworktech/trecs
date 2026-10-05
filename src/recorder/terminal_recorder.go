@@ -21,18 +21,19 @@ import (
 
 // TerminalRecorderImpl implements TerminalRecorder
 type TerminalRecorderImpl struct {
-	config     *libtrecs.RecordingConfig
-	outputFile *os.File
-	encoder    *json.Encoder
-	cmd        *exec.Cmd
-	ptmx       *os.File
-	running    bool
-	mutex      sync.Mutex
-	startTime  time.Time
-	frames     chan libtrecs.Frame
-	done       chan struct{}
-	oldState   *term.State    // Original terminal state (for restoration)
-	sigWinch   chan os.Signal // Window resize signal handler
+	config      *libtrecs.RecordingConfig
+	outputFile  *os.File
+	encoder     *json.Encoder
+	cmd         *exec.Cmd
+	ptmx        *os.File
+	running     bool
+	mutex       sync.Mutex
+	startTime   time.Time
+	frames      chan libtrecs.Frame
+	done        chan struct{}
+	captureDone chan struct{}  // closed when captureAndEchoOutput has read everything the PTY had
+	oldState    *term.State    // Original terminal state (for restoration)
+	sigWinch    chan os.Signal // Window resize signal handler
 }
 
 // NewTerminalRecorder creates a new terminal recorder
@@ -108,8 +109,22 @@ func (tr *TerminalRecorderImpl) Start() error {
 	tr.sigWinch = make(chan os.Signal, 1)
 	signal.Notify(tr.sigWinch, syscall.SIGWINCH)
 
-	// Set initial window size
-	_ = tr.setWindowSize() // Ignore error - PTY will use default size
+	// Set initial window size, and record it as the very first line of the
+	// output file - see RecordingMetaLine. Recording this is what lets
+	// playback size its terminal emulation to match the real one instead
+	// of estimating it from wherever the recording's own content happened
+	// to draw (see lib.MeasureSize's doc comment for why that estimate is
+	// only ever a fallback, not something to prefer even when it's
+	// available). A width/height of 0 (GetSize failed) is written as-is;
+	// a reader treats that the same as a recording made before this
+	// existed - falling back to estimating.
+	width, height, err := tr.setWindowSize()
+	if err != nil {
+		width, height = 0, 0 // PTY will use its default size; nothing to record
+	}
+	if err := tr.encoder.Encode(libtrecs.NewRecordingMetaLine(width, height)); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to encode recording metadata: %v\n", err)
+	}
 
 	tr.running = true
 
@@ -120,41 +135,55 @@ func (tr *TerminalRecorderImpl) Start() error {
 	go tr.forwardInput()
 
 	// Start capturing and echoing output
+	tr.captureDone = make(chan struct{})
 	go tr.captureAndEchoOutput()
 
 	// Wait for command to finish
 	go func() {
 		_ = tr.cmd.Wait() // Ignore error
-		_ = tr.Stop()     // Ignore error
+		// The shell has exited, but its last output - the echo of the final
+		// Enter, the exit itself - may still be sitting unread in the PTY.
+		// Let the capture loop drain it to EOF before stopping: stopping
+		// first closes the PTY and the output file under it, and those last
+		// frames are lost (and "file already closed" is logged).
+		select {
+		case <-tr.captureDone:
+		case <-time.After(2 * time.Second):
+		}
+		_ = tr.Stop() // Ignore error
 	}()
 
 	return nil
 }
 
-// setWindowSize sets the PTY window size to match the terminal
-func (tr *TerminalRecorderImpl) setWindowSize() error {
+// setWindowSize sets the PTY window size to match the terminal, and returns
+// the size that was set (0,0 if it couldn't be determined).
+func (tr *TerminalRecorderImpl) setWindowSize() (width, height int, err error) {
 	if tr.ptmx == nil {
-		return nil
+		return 0, 0, nil
 	}
 
 	// Get the current window size from stdin
-	width, height, err := term.GetSize(int(os.Stdin.Fd()))
+	width, height, err = term.GetSize(int(os.Stdin.Fd()))
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 
 	// Set the PTY window size
-	return pty.Setsize(tr.ptmx, &pty.Winsize{
+	if err := pty.Setsize(tr.ptmx, &pty.Winsize{
 		Rows: uint16(height),
 		Cols: uint16(width),
-	})
+	}); err != nil {
+		return 0, 0, err
+	}
+	return width, height, nil
 }
 
 // handleWindowResize responds to terminal window resize signals
 func (tr *TerminalRecorderImpl) handleWindowResize() {
 	for range tr.sigWinch {
 		if tr.running {
-			_ = tr.setWindowSize() // Ignore error - PTY will use previous size
+			_, _, _ = tr.setWindowSize() // Ignore error/result - PTY will use previous size
 		}
 	}
 }
@@ -166,10 +195,13 @@ func (tr *TerminalRecorderImpl) forwardInput() {
 
 // captureAndEchoOutput reads from PTY, records output, and echoes to stdout
 func (tr *TerminalRecorderImpl) captureAndEchoOutput() {
+	defer close(tr.captureDone)
 	reader := bufio.NewReaderSize(tr.ptmx, 4096)
 	buffer := make([]byte, 4096)
 
-	for tr.running {
+	// Runs until the PTY reports EOF/an error - which is what closing it (Stop)
+	// or the shell exiting produces - so everything the shell wrote is read.
+	for {
 		n, err := reader.Read(buffer)
 		if err != nil {
 			break // EOF or error - either way, stop reading
@@ -229,6 +261,15 @@ func (tr *TerminalRecorderImpl) Stop() error {
 	// Close PTY master
 	if tr.ptmx != nil {
 		_ = tr.ptmx.Close() // Ignore error
+	}
+
+	// Let the capture loop finish writing whatever it was in the middle of
+	// before the file goes away (it ends as soon as the PTY above is closed).
+	if tr.captureDone != nil {
+		select {
+		case <-tr.captureDone:
+		case <-time.After(time.Second):
+		}
 	}
 
 	// Close output file
