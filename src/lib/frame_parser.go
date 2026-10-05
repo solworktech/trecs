@@ -185,8 +185,17 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 			continue
 		}
 
+		// The shell echoes Enter as CRLF. For a command that finishes at once,
+		// that echo and the command's first output are read together as one
+		// frame - or, for a command with no output at all (`true`), together
+		// with the next prompt. Judged by length alone such a frame is not
+		// "input", so the input phase never ended and the following commands
+		// were merged into this one. The CRLF ends the input; whatever follows
+		// it is handled below as ordinary output (or the next prompt).
+		enterEcho := inputPhase && strings.HasPrefix(data, "\r\n")
+
 		// Check if this is actual input (single char or short string without heavy escaping)
-		if inputPhase && isUserInput(data) {
+		if inputPhase && (isUserInput(data) || enterEcho) {
 			if currentCommand == nil {
 				// This is the very first command in the recording; its
 				// prompt is the file's initial frame (frames[0]), which
@@ -200,20 +209,47 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 					FirstRawFrameIndex: 0,
 				}
 			}
-			currentCommand.InputFrames = append(currentCommand.InputFrames, frame)
-
-			// Check if input ends (newline)
-			if containsReturnOrNewline(data) {
+			if enterEcho {
+				// Split the frame in two without losing or repeating a byte:
+				// RebuildRecording writes prompt + input + output frames back
+				// out, so the pieces must add up to exactly the original.
+				enter := frame
+				enter.Data = "\r\n"
+				currentCommand.InputFrames = append(currentCommand.InputFrames, enter)
 				currentCommand.InputText = reconstructInput(currentCommand.InputFrames)
 				inputPhase = false
+				data = data[2:]
+				frame.Data = data
+				if data == "" {
+					continue
+				}
+				// fall through to the output handling below
+			} else {
+				currentCommand.InputFrames = append(currentCommand.InputFrames, frame)
+
+				// Check if input ends (newline)
+				if containsReturnOrNewline(data) {
+					currentCommand.InputText = reconstructInput(currentCommand.InputFrames)
+					inputPhase = false
+				}
+				continue
 			}
-			continue
 		}
 
 		// We're in output phase - accumulate until we see next prompt
 		if !inputPhase {
 			// Check if we've reached the next prompt
 			if isRealPrompt(data, prompt) {
+				// Output read in the same chunk as the next prompt precedes it:
+				// it belongs to the command that just ended, and only the
+				// prompt itself to the next one (again, a partition of the
+				// frame's bytes).
+				if cut := promptStartIndex(data); cut > 0 && currentCommand != nil {
+					out := frame
+					out.Data = data[:cut]
+					currentCommand.OutputFrames = append(currentCommand.OutputFrames, out)
+					frame.Data = data[cut:]
+				}
 				// Save current command
 				if currentCommand != nil && len(currentCommand.InputFrames) > 0 {
 					currentCommand.OutputText = stripEscapeSequences(reconstructOutput(currentCommand.OutputFrames))
@@ -313,6 +349,19 @@ func isUserInput(data string) bool {
 }
 
 // isRealPrompt detects the actual shell prompt
+// promptStartIndex is where the prompt itself begins in a frame: its
+// bracketed-paste switch or its window-title sequence, whichever comes first
+// (-1 if neither).
+func promptStartIndex(data string) int {
+	at := -1
+	for _, marker := range []string{"\x1b[?2004h", "\x1b]0;"} {
+		if i := strings.Index(data, marker); i >= 0 && (at < 0 || i < at) {
+			at = i
+		}
+	}
+	return at
+}
+
 func isRealPrompt(data string, prompt string) bool {
 	// Real prompt must have:
 	// 1. The actual prompt character

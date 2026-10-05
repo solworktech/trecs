@@ -1,0 +1,161 @@
+{"type":"meta","width":150,"height":40}
+{"timestamp":4,"data":"\u001b[?2004h\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# ","width":0,"height":0}
+{"timestamp":1205,"data":"l","width":0,"height":0}
+{"timestamp":1263,"data":"s","width":0,"height":0}
+{"timestamp":1317,"data":" ","width":0,"height":0}
+{"timestamp":1372,"data":"-","width":0,"height":0}
+{"timestamp":1426,"data":"l","width":0,"height":0}
+{"timestamp":1481,"data":" ","width":0,"height":0}
+{"timestamp":1537,"data":"/","width":0,"height":0}
+{"timestamp":1592,"data":"e","width":0,"height":0}
+{"timestamp":1646,"data":"t","width":0,"height":0}
+{"timestamp":1701,"data":"c","width":0,"height":0}
+{"timestamp":1755,"data":"/","width":0,"height":0}
+{"timestamp":1810,"data":"h","width":0,"height":0}
+{"timestamp":1864,"data":"o","width":0,"height":0}
+{"timestamp":1919,"data":"s","width":0,"height":0}
+{"timestamp":1973,"data":"t","width":0,"height":0}
+{"timestamp":2027,"data":"n","width":0,"height":0}
+{"timestamp":2083,"data":"a","width":0,"height":0}
+{"timestamp":2139,"data":"m","width":0,"height":0}
+{"timestamp":2194,"data":"e","width":0,"height":0}
+{"timestamp":2249,"data":" ","width":0,"height":0}
+{"timestamp":2303,"data":"/","width":0,"height":0}
+{"timestamp":2357,"data":"e","width":0,"height":0}
+{"timestamp":2412,"data":"t","width":0,"height":0}
+{"timestamp":2466,"data":"c","width":0,"height":0}
+{"timestamp":2521,"data":"/","width":0,"height":0}
+{"timestamp":2575,"data":"o","width":0,"height":0}
+{"timestamp":2629,"data":"s","width":0,"height":0}
+{"timestamp":2684,"data":"-","width":0,"height":0}
+{"timestamp":2738,"data":"r","width":0,"height":0}
+{"timestamp":2793,"data":"e","width":0,"height":0}
+{"timestamp":2846,"data":"l","width":0,"height":0}
+{"timestamp":2901,"data":"e","width":0,"height":0}
+{"timestamp":2955,"data":"a","width":0,"height":0}
+{"timestamp":3009,"data":"s","width":0,"height":0}
+{"timestamp":3064,"data":"e","width":0,"height":0}
+{"timestamp":3420,"data":"\r\n","width":0,"height":0}
+{"timestamp":3420,"data":"\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":3423,"data":"-rw-r--r-- 1 root root  3 Oct  4 18:38 /etc/hostname\r\n","width":0,"height":0}
+{"timestamp":3423,"data":"lrwxrwxrwx 1 root root 21 Feb  6  2026 \u001b[0m\u001b[01;36m/etc/os-release\u001b[0m -\u003e ../usr/lib/os-release\r\n","width":0,"height":0}
+{"timestamp":3423,"data":"\u001b[?2004h","width":0,"height":0}
+{"timestamp":3423,"data":"\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# \u001b[K","width":0,"height":0}
+{"timestamp":4426,"data":"u","width":0,"height":0}
+{"timestamp":4479,"data":"n","width":0,"height":0}
+{"timestamp":4533,"data":"a","width":0,"height":0}
+{"timestamp":4588,"data":"m","width":0,"height":0}
+{"timestamp":4642,"data":"e","width":0,"height":0}
+{"timestamp":4697,"data":" ","width":0,"height":0}
+{"timestamp":4751,"data":"-","width":0,"height":0}
+{"timestamp":4805,"data":"a","width":0,"height":0}
+{"timestamp":5163,"data":"\r\n\u001b[?2004l\rLinux vm 6.18.44-fc-v64 #1 SMP PREEMPT_DYNAMIC @0 x86_64 x86_64 x86_64 GNU/Linux\r\n","width":0,"height":0}
+{"timestamp":5164,"data":"\u001b[?2004h\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# ","width":0,"height":0}
+{"timestamp":6168,"data":"e","width":0,"height":0}
+{"timestamp":6222,"data":"c","width":0,"height":0}
+{"timestamp":6277,"data":"h","width":0,"height":0}
+{"timestamp":6332,"data":"o","width":0,"height":0}
+{"timestamp":6387,"data":" ","width":0,"height":0}
+{"timestamp":6441,"data":"'","width":0,"height":0}
+{"timestamp":6496,"data":"a","width":0,"height":0}
+{"timestamp":6550,"data":" ","width":0,"height":0}
+{"timestamp":6605,"data":"`","width":0,"height":0}
+{"timestamp":6660,"data":"q","width":0,"height":0}
+{"timestamp":6714,"data":"u","width":0,"height":0}
+{"timestamp":6768,"data":"o","width":0,"height":0}
+{"timestamp":6822,"data":"t","width":0,"height":0}
+{"timestamp":6877,"data":"e","width":0,"height":0}
+{"timestamp":6932,"data":"d","width":0,"height":0}
+{"timestamp":6986,"data":"`","width":0,"height":0}
+{"timestamp":7041,"data":" ","width":0,"height":0}
+{"timestamp":7096,"data":"w","width":0,"height":0}
+{"timestamp":7150,"data":"o","width":0,"height":0}
+{"timestamp":7205,"data":"r","width":0,"height":0}
+{"timestamp":7259,"data":"d","width":0,"height":0}
+{"timestamp":7313,"data":"'","width":0,"height":0}
+{"timestamp":7670,"data":"\r\n\u001b[?2004l\ra `quoted` word\r\n\u001b[?2004h\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# \u001b[K","width":0,"height":0}
+{"timestamp":8676,"data":"t","width":0,"height":0}
+{"timestamp":8731,"data":"r","width":0,"height":0}
+{"timestamp":8786,"data":"u","width":0,"height":0}
+{"timestamp":8841,"data":"e","width":0,"height":0}
+{"timestamp":9197,"data":"\r\n\u001b[?2004l\r\u001b[?2004h\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# ","width":0,"height":0}
+{"timestamp":10202,"data":"l","width":0,"height":0}
+{"timestamp":10257,"data":"s","width":0,"height":0}
+{"timestamp":10311,"data":" ","width":0,"height":0}
+{"timestamp":10365,"data":"-","width":0,"height":0}
+{"timestamp":10420,"data":"l","width":0,"height":0}
+{"timestamp":10474,"data":" ","width":0,"height":0}
+{"timestamp":10529,"data":"/","width":0,"height":0}
+{"timestamp":10583,"data":"e","width":0,"height":0}
+{"timestamp":10637,"data":"t","width":0,"height":0}
+{"timestamp":10692,"data":"c","width":0,"height":0}
+{"timestamp":10747,"data":"/","width":0,"height":0}
+{"timestamp":10801,"data":"h","width":0,"height":0}
+{"timestamp":10856,"data":"o","width":0,"height":0}
+{"timestamp":10911,"data":"s","width":0,"height":0}
+{"timestamp":10966,"data":"t","width":0,"height":0}
+{"timestamp":11020,"data":"n","width":0,"height":0}
+{"timestamp":11074,"data":"a","width":0,"height":0}
+{"timestamp":11129,"data":"m","width":0,"height":0}
+{"timestamp":11184,"data":"e","width":0,"height":0}
+{"timestamp":11238,"data":" ","width":0,"height":0}
+{"timestamp":11292,"data":"/","width":0,"height":0}
+{"timestamp":11347,"data":"e","width":0,"height":0}
+{"timestamp":11402,"data":"t","width":0,"height":0}
+{"timestamp":11457,"data":"c","width":0,"height":0}
+{"timestamp":11511,"data":"/","width":0,"height":0}
+{"timestamp":11566,"data":"o","width":0,"height":0}
+{"timestamp":11621,"data":"s","width":0,"height":0}
+{"timestamp":11676,"data":"-","width":0,"height":0}
+{"timestamp":11734,"data":"r","width":0,"height":0}
+{"timestamp":11788,"data":"e","width":0,"height":0}
+{"timestamp":11843,"data":"l","width":0,"height":0}
+{"timestamp":11898,"data":"e","width":0,"height":0}
+{"timestamp":11952,"data":"a","width":0,"height":0}
+{"timestamp":12008,"data":"s","width":0,"height":0}
+{"timestamp":12064,"data":"e","width":0,"height":0}
+{"timestamp":12420,"data":"\r\n\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":12422,"data":"-rw-r--r-- 1 root root  3 Oct  4 18:38 /etc/hostname\r\n","width":0,"height":0}
+{"timestamp":12423,"data":"lrwxrwxrwx 1 root root 21 Feb  6  2026 \u001b[0m\u001b[01;36m/etc/os-release\u001b[0m -\u003e ../usr/lib/os-release\r\n","width":0,"height":0}
+{"timestamp":12423,"data":"\u001b[?2004h","width":0,"height":0}
+{"timestamp":12423,"data":"\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# \u001b[K","width":0,"height":0}
+{"timestamp":13427,"data":"d","width":0,"height":0}
+{"timestamp":13482,"data":"f","width":0,"height":0}
+{"timestamp":13536,"data":" ","width":0,"height":0}
+{"timestamp":13590,"data":"-","width":0,"height":0}
+{"timestamp":13645,"data":"h","width":0,"height":0}
+{"timestamp":13699,"data":" ","width":0,"height":0}
+{"timestamp":13754,"data":"/","width":0,"height":0}
+{"timestamp":14110,"data":"\r\n\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":14112,"data":"Filesystem      Size  Used Avail Use% Mounted on\r\n/dev/vda        252G   11G  7.8G  59% /\r\n","width":0,"height":0}
+{"timestamp":14113,"data":"\u001b[?2004h\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# ","width":0,"height":0}
+{"timestamp":15116,"data":"p","width":0,"height":0}
+{"timestamp":15170,"data":"r","width":0,"height":0}
+{"timestamp":15225,"data":"i","width":0,"height":0}
+{"timestamp":15279,"data":"n","width":0,"height":0}
+{"timestamp":15334,"data":"t","width":0,"height":0}
+{"timestamp":15389,"data":"f","width":0,"height":0}
+{"timestamp":15444,"data":" ","width":0,"height":0}
+{"timestamp":15499,"data":"'","width":0,"height":0}
+{"timestamp":15555,"data":"o","width":0,"height":0}
+{"timestamp":15610,"data":"n","width":0,"height":0}
+{"timestamp":15666,"data":"e","width":0,"height":0}
+{"timestamp":15721,"data":"\\","width":0,"height":0}
+{"timestamp":15775,"data":"n","width":0,"height":0}
+{"timestamp":15830,"data":"t","width":0,"height":0}
+{"timestamp":15885,"data":"w","width":0,"height":0}
+{"timestamp":15939,"data":"o","width":0,"height":0}
+{"timestamp":15994,"data":"\\","width":0,"height":0}
+{"timestamp":16050,"data":"n","width":0,"height":0}
+{"timestamp":16104,"data":"'","width":0,"height":0}
+{"timestamp":16461,"data":"\r\n","width":0,"height":0}
+{"timestamp":16462,"data":"\u001b[?2004l\rone\r\ntwo\r\n\u001b[?2004h\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# \u001b[K","width":0,"height":0}
+{"timestamp":17467,"data":"e","width":0,"height":0}
+{"timestamp":17521,"data":"x","width":0,"height":0}
+{"timestamp":17576,"data":"i","width":0,"height":0}
+{"timestamp":17629,"data":"t","width":0,"height":0}
+{"timestamp":17986,"data":"\r\n\u001b[?2004l\rexit\r\n","width":0,"height":0}
+{"type":"annotation","timestamp":4,"id":"ann_test0","text":"List two files in long format.\n\n-l  use a long listing format","createdAt":"2026-10-04T18:45:00Z","durationSeconds":1}
+{"type":"annotation","timestamp":3423,"id":"ann_test1","text":"Show system info: kernel, hostname, arch","createdAt":"2026-10-04T18:45:00Z","durationSeconds":1}
+{"type":"annotation","timestamp":9197,"id":"ann_test2","text":"Same command again: the output is unchanged.","createdAt":"2026-10-04T18:45:00Z","durationSeconds":1}
+{"type":"annotation","timestamp":14113,"id":"ann_test3","text":"printf interprets the \\n escapes,\nso this prints two lines.","createdAt":"2026-10-04T18:45:00Z","durationSeconds":1}

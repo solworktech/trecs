@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"trecs/cloud"
 
 	libtrecs "trecs/lib"
 )
@@ -28,6 +29,8 @@ func main() {
 	cameraSize := recordCmd.String("camera-size", "640x480", "Camera resolution")
 	screenDisplay := recordCmd.String("screen-display", ":0", "Screen display (X11 or macOS)")
 	screenSize := recordCmd.String("screen-size", "1920x1080", "Screen resolution")
+	uploadAfter := recordCmd.Bool("upload", false, "Upload the recording when it ends (log in first with `recorder login`)")
+	uploadVisibility := recordCmd.String("visibility", "", "Visibility for -upload: private (default), unlisted or public")
 
 	// Play flags
 	playFile := playCmd.String("file", "", "Terminal recording file to play")
@@ -46,7 +49,16 @@ func main() {
 		}
 		runRecord(recordTerminal, recordAudio, recordCamera, recordScreen,
 			outputDir, sessionName, terminalCmd, audioDevice, audioCodec,
-			cameraDevice, cameraSize, screenDisplay, screenSize)
+			cameraDevice, cameraSize, screenDisplay, screenSize, uploadAfter, uploadVisibility)
+
+	case "login":
+		runLogin(os.Args[2:])
+
+	case "logout":
+		runLogout()
+
+	case "upload":
+		runUpload(os.Args[2:])
 
 	case "play":
 		if err := playCmd.Parse(os.Args[2:]); err != nil {
@@ -67,7 +79,8 @@ func main() {
 
 func runRecord(terminal, audio, camera, screen *bool,
 	outputDir, sessionName, terminalCmd, audioDevice, audioCodec,
-	cameraDevice, cameraSize, screenDisplay, screenSize *string) {
+	cameraDevice, cameraSize, screenDisplay, screenSize *string,
+	uploadAfter *bool, uploadVisibility *string) {
 
 	config := &libtrecs.RecordingConfig{
 		TerminalEnabled: *terminal,
@@ -138,6 +151,14 @@ func runRecord(terminal, audio, camera, screen *bool,
 	if metadata.ScreenFile != "" {
 		fmt.Printf("Screen: %s\n", metadata.ScreenFile)
 	}
+
+	if *uploadAfter && metadata.TerminalFile != "" {
+		fmt.Println()
+		uploadFiles(cloud.Upload{
+			Name: *sessionName, Visibility: *uploadVisibility,
+			TerminalPath: metadata.TerminalFile, AudioPath: metadata.AudioFile,
+		})
+	}
 }
 
 func runPlay(playFile *string, playSpeed *float64) {
@@ -165,6 +186,9 @@ func printUsage() {
 Usage:
   recorder record [options]       Record terminal and media streams
   recorder play [options]         Play back terminal recording
+  recorder login [options]        Log in to a trecs server (saves the session)
+  recorder logout                 Log out and forget the saved session
+  recorder upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
   recorder help                   Show this help message
 
 Record Options:
@@ -181,6 +205,20 @@ Record Options:
   -camera-size string             Camera resolution (default: "640x480")
   -screen-display string          Screen display (default: ":0")
   -screen-size string             Screen resolution (default: "1920x1080")
+
+  -upload                         Upload the recording when it ends (needs a login)
+  -visibility string              Visibility for -upload: private (default), unlisted, public
+
+Login Options:
+  -server string                  Server address (default: $TRECS_SERVER, else the last login's)
+  -email string                   Account email (asked for if omitted)
+  -password-stdin                 Read the password from standard input
+
+Upload Options (before the path):
+  -name string                    Recording title
+  -description string             Description (default: the commands typed)
+  -visibility string              private (default), unlisted or public
+  -audio string                   Audio file (default: audio.mp3 beside the recording)
 
 Play Options:
   -file string                    Terminal recording file to play (required)
