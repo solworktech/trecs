@@ -115,6 +115,11 @@ type TerminalPlayer interface {
 	// recording (milliseconds since recording start), i.e. its total
 	// duration. Returns 0 if no frames are loaded.
 	GetTotalDurationMs() int64
+
+	// Position is where playback is now, in milliseconds. Unlike the timestamp
+	// of the last frame delivered it keeps advancing through a quiet stretch
+	// of the recording, so a progress bar built on it never looks stuck.
+	Position() int64
 }
 
 type PlaybackState string

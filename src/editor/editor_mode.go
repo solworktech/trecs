@@ -173,6 +173,10 @@ func (em *EditorMode) Run() error {
 	em.totalDurationMs = em.player.GetTotalDurationMs()
 	em.progressBar.SetProgress(0, em.totalDurationMs)
 
+	clockDone := make(chan struct{})
+	defer close(clockDone)
+	go em.runProgressClock(clockDone)
+
 	defer func() {
 		em.player.Stop()
 		time.Sleep(200 * time.Millisecond)
@@ -322,6 +326,17 @@ func (em *EditorMode) makeFrameCallback() func(libtrecs.TerminalFrame) {
 			}
 		})
 	}
+}
+
+// shouldAutoShowAnnotation reports whether the command at idx has an
+// annotation configured to preview automatically (a positive
+// DurationSeconds).
+func (em *EditorMode) shouldAutoShowAnnotation(idx int) bool {
+	if idx < 0 || idx >= len(em.commands) {
+		return false
+	}
+	cmd := em.commands[idx]
+	return cmd.HasAnnotation && cmd.Annotation.DurationSeconds > 0
 }
 
 // annotationLingerDelay is how long the previous command's final output
@@ -1312,4 +1327,32 @@ func formatDuration(ms int64) string {
 	m := totalSeconds / 60
 	s := totalSeconds % 60
 	return fmt.Sprintf("%02d:%02d", m, s)
+}
+
+// runProgressClock keeps the progress bar moving between frames. The frame
+// callback only moves it when a frame is delivered, so a long silence in the
+// recording - a command waiting on the network, say - left the bar standing
+// still as if playback had hung. The update runs on the UI goroutine (so it
+// reads em.player where it is also replaced, with no race), and only while
+// playing: paused, the bar must hold still.
+func (em *EditorMode) runProgressClock(done <-chan struct{}) {
+	t := time.NewTicker(100 * time.Millisecond)
+	defer t.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-t.C:
+		}
+		select {
+		case <-done:
+			return
+		default:
+		}
+		em.app.QueueUpdateDraw(func() {
+			if p := em.player; p != nil && p.GetPlaybackState() == libtrecs.PlaybackPlaying {
+				em.progressBar.SetProgress(p.Position(), em.totalDurationMs)
+			}
+		})
+	}
 }

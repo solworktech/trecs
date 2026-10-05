@@ -1,0 +1,318 @@
+{"type":"meta","width":172,"height":38}
+{"timestamp":44,"data":"\u001b[?2004h\u001b]0;jesse@port: ~/projects/trecs/src\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src\u001b[00m$ ","width":0,"height":0}
+{"timestamp":1293,"data":"l","width":0,"height":0}
+{"timestamp":1378,"data":"s","width":0,"height":0}
+{"timestamp":1472,"data":" ","width":0,"height":0}
+{"timestamp":1550,"data":"-","width":0,"height":0}
+{"timestamp":1609,"data":"a","width":0,"height":0}
+{"timestamp":1760,"data":"l","width":0,"height":0}
+{"timestamp":2012,"data":"\r\n","width":0,"height":0}
+{"timestamp":2012,"data":"\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":2119,"data":"total 36\r\n","width":0,"height":0}
+{"timestamp":2119,"data":"drwxr-xr-x 6 jesse jesse 4096 Oct  5 13:00 \u001b[0m\u001b[01;34m.\u001b[0m\r\ndrwxrwxr-x 5 jesse jesse 4096 Oct  5 13:05 \u001b[01;34m..\u001b[0m\r\ndrwxr-xr-x 2 jesse jesse 4096 Oct  5 13:00 \u001b[01;34mcloud\u001b[0m\r\ndrwxr-xr-x 2 jesse jesse 4096 Oct  5 13:05 \u001b[01;34meditor\u001b[0m\r\n-rw-r--r-- 1 jesse jesse  496 Oct  1 23:51 go.mod\r\n-rw-rw-r-- 1 jesse jesse 7464 Oct  1 23:51 go.sum\r\ndrwxr-xr-x 3 jesse jesse 4096 Oct  5 13:00 \u001b[01;34mlib\u001b[0m\r\ndrwxr-xr-x 2 jesse jesse 4096 Oct  5 13:05 \u001b[01;34mrecorder\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":2120,"data":"\u001b[?2004h\u001b]0;jesse@port: ~/projects/trecs/src\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src\u001b[00m$ ","width":0,"height":0}
+{"timestamp":3689,"data":"u","width":0,"height":0}
+{"timestamp":3730,"data":"n","width":0,"height":0}
+{"timestamp":3815,"data":"a","width":0,"height":0}
+{"timestamp":3953,"data":"m","width":0,"height":0}
+{"timestamp":4117,"data":"e ","width":0,"height":0}
+{"timestamp":4411,"data":"-","width":0,"height":0}
+{"timestamp":4549,"data":"a","width":0,"height":0}
+{"timestamp":4706,"data":"\r\n\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":4710,"data":"Linux port 6.12.100+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.100-1 (2026-07-30) x86_64 GNU/Linux\r\n","width":0,"height":0}
+{"timestamp":4710,"data":"\u001b[?2004h","width":0,"height":0}
+{"timestamp":4710,"data":"\u001b]0;jesse@port: ~/projects/trecs/src\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src\u001b[00m$ ","width":0,"height":0}
+{"timestamp":5293,"data":"l","width":0,"height":0}
+{"timestamp":5447,"data":"s","width":0,"height":0}
+{"timestamp":5577,"data":"b","width":0,"height":0}
+{"timestamp":5705,"data":"\u0007","width":0,"height":0}
+{"timestamp":6046,"data":"_","width":0,"height":0}
+{"timestamp":6185,"data":"release ","width":0,"height":0}
+{"timestamp":6559,"data":"\r\n","width":0,"height":0}
+{"timestamp":6559,"data":"\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":6576,"data":"No LSB modules are available.\r\n","width":0,"height":0}
+{"timestamp":6576,"data":"\u001b[?2004h\u001b]0;jesse@port: ~/projects/trecs/src\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src\u001b[00m$ ","width":0,"height":0}
+{"timestamp":7037,"data":"o","width":0,"height":0}
+{"timestamp":7246,"data":"n","width":0,"height":0}
+{"timestamp":7440,"data":"s","width":0,"height":0}
+{"timestamp":7645,"data":"\u0007","width":0,"height":0}
+{"timestamp":8482,"data":"\b\u001b[K","width":0,"height":0}
+{"timestamp":8779,"data":"e","width":0,"height":0}
+{"timestamp":9420,"data":"f","width":0,"height":0}
+{"timestamp":9624,"data":"etch ","width":0,"height":0}
+{"timestamp":10017,"data":"\r\n\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":10233,"data":"\u001b[?7l\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m           --==============--\u001b[0m              \u001b[38;2;116;205;221;1mJesse Portnoy\u001b[0m \u001b[39;1m~\u001b[0m \u001b[38;2;116;205;221;1mgit version 2.47.3\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m  .-==-.===oooo=oooooo=ooooo===--===-\u001b[0m      \u001b[39m----------------------------------\u001b[39m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m .==  =o=\u001b[0m\u001b[38;2;255;255;255;1moGGGGGG\u001b[0m\u001b[38;2;116;205;221;1mo=oo=o\u001b[0m\u001b[38;2;255;255;255;1mGGGGGGG\u001b[0m\u001b[38;2;116;205;221;1mG=o=  oo-\u001b[0m     \u001b[38;2;116;205;221;1mProject\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39mtrecs (1 branch)\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m -o= oo=\u001b[0m\u001b[38;2;255;255;255;1mG .=GGGGG\u001b[0m\u001b[38;2;116;205;221;1mo=o=\u001b[0m\u001b[38;2;255;255;255;1m= .=GGGGG\u001b[0m\u001b[38;2;116;205;221;1m=ooo o=-\u001b[0m     \u001b[38;2;116;205;221;1mHEAD\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39mc128d78 (main, origin/main)\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m  .-=oo=\u001b[0m\u001b[38;2;255;255;255;1mo==oGGGGG\u001b[0m\u001b[38;2;116;205;221;1m=oo=\u001b[0m\u001b[38;2;255;255;255;1moooGGGGGo\u001b[0m\u001b[38;2;116;205;221;1m=oooo.\u001b[0m       \u001b[38;2;116;205;221;1mPending\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m2+- 24+\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -ooooo\u001b[0m\u001b[38;2;255;255;255;1m=oooooo\u001b[0m\u001b[38;2;116;205;221;1m=\u001b[0m\u001b[38;2;246;210;162;1m.   .\u001b[0m\u001b[38;2;116;205;221;1m=\u001b[0m\u001b[38;2;255;255;255;1m=ooo==\u001b[0m\u001b[38;2;116;205;221;1moooooo-\u001b[0m       \u001b[38;2;116;205;221;1mCreated\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m3 weeks ago\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -ooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m====_====\u001b[0m\u001b[38;2;116;205;221;1mooooooooooo=\u001b[0m       \u001b[38;2;116;205;221;1mLanguage\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m\u001b[48;2;0;173;216m                          \u001b[49m\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -oooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m==\u001b[0m\u001b[38;2;255;255;255;1m#\u001b[0m\u001b[38;2;116;205;221;1m.\u001b[0m\u001b[38;2;255;255;255;1m#\u001b[0m\u001b[38;2;246;210;162;1m==\u001b[0m\u001b[38;2;116;205;221;1mooooooooooooo\u001b[0m       \u001b[39m          \u001b[38;2;0;173;216m●\u001b[39m \u001b[39mGo (100.0 %)\u001b[39m \u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -ooooooooooooo=\u001b[0m\u001b[38;2;255;255;255;1m#\u001b[0m\u001b[38;2;116;205;221;1m.\u001b[0m\u001b[38;2;255;255;255;1m#\u001b[0m\u001b[38;2;116;205;221;1m=oooooooooooooo\u001b[0m       \u001b[38;2;116;205;221;1mAuthor\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m100% Jesse Portnoy 14\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   .oooooooooooooooooooooooooooooooo.\u001b[0m      \u001b[38;2;116;205;221;1mLast change\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m24 minutes ago\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m    oooooooooooooooooooooooooooooooo.\u001b[0m      \u001b[38;2;116;205;221;1mURL\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39mgit@github.com:solworktech/trecs.git\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m  ..\u001b[0m\u001b[38;2;116;205;221;1moooooooooooooooooooooooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m..\u001b[0m     \u001b[38;2;116;205;221;1mCommits\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m14\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m-=o-\u001b[0m\u001b[38;2;116;205;221;1m=ooooooooooooooooooooooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m-oo.\u001b[0m   \u001b[38;2;116;205;221;1mChurn (4)\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m…/lib/terminal_player.go 2\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m.=- \u001b[0m\u001b[38;2;116;205;221;1moooooooooooooooooooooooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m-.-\u001b[0m    \u001b[39m           …/editor/editor_mode.go 2\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   .oooooooooooooooooooooooooooooooo-\u001b[0m      \u001b[39m           …/lib/types.go 2\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -oooooooooooooooooooooooooooooooo-\u001b[0m      \u001b[38;2;116;205;221;1mLines of code\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m4938\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -oooooooooooooooooooooooooooooooo-\u001b[0m      \u001b[38;2;116;205;221;1mSize\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m237.35 KiB (21 files)\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -oooooooooooooooooooooooooooooooo-\u001b[0m      \u001b[38;2;116;205;221;1mLicense\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39mAGPL-3.0-only\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   .oooooooooooooooooooooooooooooooo\u001b[0m       \r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m    =oooooooooooooooooooooooooooooo-\u001b[0m       \u001b[40m   \u001b[49m\u001b[41m   \u001b[49m\u001b[42m   \u001b[49m\u001b[43m   \u001b[49m\u001b[44m   \u001b[49m\u001b[45m   \u001b[49m\u001b[46m   \u001b[49m\u001b[47m   \u001b[49m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m    .=oooooooooooooooooooooooooooo-\u001b[0m     \r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m      -=oooooooooooooooooooooooo=.\u001b[0m      \r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m     =oo\u001b[0m\u001b[38;2;116;205;221;1m=","width":0,"height":0}
+{"timestamp":10233,"data":"===oooooooooooooooo==-\u001b[0m\u001b[38;2;246;210;162;1moo=-\u001b[0m     \r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m    .-==-    \u001b[0m\u001b[38;2;116;205;221;1m.--=======---     \u001b[0m\u001b[38;2;246;210;162;1m.==-\u001b[0m     \r\n\u001b[?7h","width":0,"height":0}
+{"timestamp":10236,"data":"\u001b[?2004h\u001b]0;jesse@port: ~/projects/trecs/src\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src\u001b[00m$ ","width":0,"height":0}
+{"timestamp":11866,"data":"d","width":0,"height":0}
+{"timestamp":12032,"data":"f","width":0,"height":0}
+{"timestamp":12214,"data":" ","width":0,"height":0}
+{"timestamp":12409,"data":"-","width":0,"height":0}
+{"timestamp":12542,"data":"h","width":0,"height":0}
+{"timestamp":12811,"data":"\r\n\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":12815,"data":"Filesystem      Size  Used Avail Use% Mounted on\r\nudev             16G     0   16G   0% /dev\r\ntmpfs           3.1G  1.8M  3.1G   1% /run\r\nefivarfs        384K   58K  322K  16% /sys/firmware/efi/efivars\r\n/dev/sda2        55G   14G   39G  26% /\r\n","width":0,"height":0}
+{"timestamp":12815,"data":"tmpfs            16G   60M   16G   1% /dev/shm\r\ntmpfs           5.0M  8.0K  5.0M   1% /run/lock\r\ntmpfs           1.0M     0  1.0M   0% /run/credentials/systemd-journald.service\r\n/dev/sda5       2.7G  321M  2.3G  13% /tmp\r\n/dev/sda1       975M  9.1M  966M   1% /boot/efi\r\n/dev/sda3        22G  4.4G   16G  22% /var\r\n/dev/sda6       805G   52G  713G   7% /home\r\ntmpfs           1.0M     0  1.0M   0% /run/credentials/getty@tty1.service\r\ntmpfs           3.1G   14M  3.1G   1% /run/user/1000\r\ntmpfs           1.0M     0  1.0M   0% /run/credentials/getty@tty4.service\r\ntmpfs           1.0M     0  1.0M   0% /run/credentials/getty@tty6.service\r\ntmpfs           1.0M     0  1.0M   0% /run/credentials/getty@tty3.service\r\n","width":0,"height":0}
+{"timestamp":12816,"data":"\u001b[?2004h","width":0,"height":0}
+{"timestamp":12816,"data":"\u001b]0;jesse@port: ~/projects/trecs/src\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src\u001b[00m$ ","width":0,"height":0}
+{"timestamp":14515,"data":"\r(reverse-i-search)`': \u001b[K","width":0,"height":0}
+{"timestamp":14777,"data":"\b\b\b.': nslookup debian\u001b[7m.\u001b[27morg\b\b\b\b","width":0,"height":0}
+{"timestamp":15088,"data":"\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b ': \u001b[7m. \u001b[27m/etc/profile.d/zaje.sh \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b","width":0,"height":0}
+{"timestamp":15884,"data":"\r\u001b]0;jesse@port: ~/projects/trecs/src\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src\u001b[00m$ . /etc/profile.d/zaje.sh \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b","width":0,"height":0}
+{"timestamp":15884,"data":"\r\n\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":15885,"data":"\u001b[?2004h","width":0,"height":0}
+{"timestamp":15885,"data":"\u001b]0;jesse@port: ~/projects/trecs/src\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src\u001b[00m$ ","width":0,"height":0}
+{"timestamp":16468,"data":". /etc/profile.d/zaje.sh ","width":0,"height":0}
+{"timestamp":16611,"data":"\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bdf -h\u001b[K","width":0,"height":0}
+{"timestamp":17030,"data":"\r\n\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":17109,"data":"\u001b[36mFil","width":0,"height":0}
+{"timestamp":17109,"data":"esystem\u001b[0m      \u001b[36mSize\u001b[0m  \u001b[36mUsed\u001b[0m \u001b[36mA","width":0,"height":0}
+{"timestamp":17109,"data":"vail\u001b[0m \u001b[36mUse%\u001b[0m \u001b[36mM","width":0,"height":0}
+{"timestamp":17109,"data":"ounted","width":0,"height":0}
+{"timestamp":17109,"data":" on\u001b[0m","width":0,"height":0}
+{"timestamp":17109,"data":"\r\n\u001b[33mude","width":0,"height":0}
+{"timestamp":17109,"data":"v\u001b[0m ","width":0,"height":0}
+{"timestamp":17109,"data":"      ","width":0,"height":0}
+{"timestamp":17109,"data":"    ","width":0,"height":0}
+{"timestamp":17109,"data":" \u001b[36m 16G","width":0,"height":0}
+{"timestamp":17109,"data":"\u001b[36m  ","width":0,"height":0}
+{"timestamp":17109,"data":"   0  ","width":0,"height":0}
+{"timestamp":17109,"data":" \u001b[36m1","width":0,"height":0}
+{"timestamp":17109,"data":"6G \u001b[0m \u001b[92m 0% ","width":0,"height":0}
+{"timestamp":17109,"data":"\u001b[33m/dev\u001b[0m","width":0,"height":0}
+{"timestamp":17109,"data":"\r\n\u001b[33mtmpf","width":0,"height":0}
+{"timestamp":17109,"data":"s\u001b[0m   ","width":0,"height":0}
+{"timestamp":17109,"data":"     ","width":0,"height":0}
+{"timestamp":17109,"data":"  \u001b[36m 3","width":0,"height":0}
+{"timestamp":17109,"data":".1G \u001b[95m 1.","width":0,"height":0}
+{"timestamp":17109,"data":"8M ","width":0,"height":0}
+{"timestamp":17109,"data":"\u001b[36m 3.1G \u001b[0m \u001b[92m ","width":0,"height":0}
+{"timestamp":17109,"data":"1% \u001b[33m/","width":0,"height":0}
+{"timestamp":17109,"data":"run\u001b[0m\r\n\u001b[0me","width":0,"height":0}
+{"timestamp":17109,"data":"fiva","width":0,"height":0}
+{"timestamp":17109,"data":"rfs   ","width":0,"height":0}
+{"timestamp":17109,"data":"    \u001b[32m","width":0,"height":0}
+{"timestamp":17109,"data":" 384K \u001b[0m ","width":0,"height":0}
+{"timestamp":17109,"data":"\u001b[32m 58K ","width":0,"height":0}
+{"timestamp":17109,"data":" 322K ","width":0,"height":0}
+{"timestamp":17109,"data":"\u001b[92m 16","width":0,"height":0}
+{"timestamp":17109,"data":"% \u001b[32m","width":0,"height":0}
+{"timestamp":17109,"data":"/sys/fir","width":0,"height":0}
+{"timestamp":17109,"data":"mware/","width":0,"height":0}
+{"timestamp":17109,"data":"efi/e","width":0,"height":0}
+{"timestamp":17109,"data":"fiv","width":0,"height":0}
+{"timestamp":17109,"data":"ars\u001b[0m","width":0,"height":0}
+{"timestamp":17109,"data":"\r\n\u001b[33m/","width":0,"height":0}
+{"timestamp":17109,"data":"dev","width":0,"height":0}
+{"timestamp":17109,"data":"\u001b[94m/sda","width":0,"height":0}
+{"timestamp":17109,"data":"2 \u001b[0m  ","width":0,"height":0}
+{"timestamp":17110,"data":"    ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[36m 55G \u001b[0m ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[36m 14G \u001b[0m ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[36m 39G ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[92m 26%","width":0,"height":0}
+{"timestamp":17110,"data":" \u001b[32m/\u001b[0m","width":0,"height":0}
+{"timestamp":17110,"data":"\r\n\u001b[33mt","width":0,"height":0}
+{"timestamp":17110,"data":"mpfs\u001b[0m","width":0,"height":0}
+{"timestamp":17110,"data":"    ","width":0,"height":0}
+{"timestamp":17110,"data":"      ","width":0,"height":0}
+{"timestamp":17110,"data":" \u001b[36m","width":0,"height":0}
+{"timestamp":17110,"data":" 16G ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[0m \u001b[95m ","width":0,"height":0}
+{"timestamp":17110,"data":"60M ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[0m \u001b[36m 1","width":0,"height":0}
+{"timestamp":17110,"data":"6G \u001b[0m \u001b[92m ","width":0,"height":0}
+{"timestamp":17110,"data":"1% ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[33m/dev","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[32m/\u001b[33ms","width":0,"height":0}
+{"timestamp":17110,"data":"hm\u001b[0m\r\n\u001b[33mt","width":0,"height":0}
+{"timestamp":17110,"data":"mpfs\u001b[0m ","width":0,"height":0}
+{"timestamp":17110,"data":"   ","width":0,"height":0}
+{"timestamp":17110,"data":"      ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[95m 5","width":0,"height":0}
+{"timestamp":17110,"data":".0M ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[32m 8.0","width":0,"height":0}
+{"timestamp":17110,"data":"K \u001b[95m ","width":0,"height":0}
+{"timestamp":17110,"data":"5.0M \u001b[0m ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[92m 1% \u001b[33m","width":0,"height":0}
+{"timestamp":17110,"data":"/run\u001b[32m/lock\u001b[0m\r\n\u001b[33mtmp","width":0,"height":0}
+{"timestamp":17110,"data":"fs\u001b[0m ","width":0,"height":0}
+{"timestamp":17110,"data":"       ","width":0,"height":0}
+{"timestamp":17110,"data":"  \u001b[95m ","width":0,"height":0}
+{"timestamp":17110,"data":"1.0M","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[36m  ","width":0,"height":0}
+{"timestamp":17110,"data":"   0  ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[95m1.0M","width":0,"height":0}
+{"timestamp":17110,"data":" \u001b[0m \u001b[92m 0%","width":0,"height":0}
+{"timestamp":17110,"data":" \u001b[33m/ru","width":0,"height":0}
+{"timestamp":17110,"data":"n\u001b[32m/cr","width":0,"height":0}
+{"timestamp":17110,"data":"eden","width":0,"height":0}
+{"timestamp":17110,"data":"tials","width":0,"height":0}
+{"timestamp":17110,"data":"/sys","width":0,"height":0}
+{"timestamp":17110,"data":"temd-","width":0,"height":0}
+{"timestamp":17110,"data":"journald","width":0,"height":0}
+{"timestamp":17110,"data":".serv","width":0,"height":0}
+{"timestamp":17110,"data":"ice","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[0m\r\n\u001b[33m/","width":0,"height":0}
+{"timestamp":17110,"data":"dev\u001b[94m/","width":0,"height":0}
+{"timestamp":17110,"data":"sda5 ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[0m    ","width":0,"height":0}
+{"timestamp":17110,"data":" \u001b[36m ","width":0,"height":0}
+{"timestamp":17110,"data":"2.7G \u001b[95m","width":0,"height":0}
+{"timestamp":17110,"data":" 321M \u001b[36m","width":0,"height":0}
+{"timestamp":17110,"data":" 2.3G \u001b[92m 13% ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[33m/t","width":0,"height":0}
+{"timestamp":17110,"data":"mp\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[33m/dev","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[94m/sda1 \u001b[0m","width":0,"height":0}
+{"timestamp":17110,"data":"     \u001b[95m ","width":0,"height":0}
+{"timestamp":17110,"data":"975M","width":0,"height":0}
+{"timestamp":17110,"data":"  9","width":0,"height":0}
+{"timestamp":17110,"data":".1M  ","width":0,"height":0}
+{"timestamp":17110,"data":"966M","width":0,"height":0}
+{"timestamp":17110,"data":" \u001b[0m \u001b[92m ","width":0,"height":0}
+{"timestamp":17110,"data":"1% ","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[33m/boo","width":0,"height":0}
+{"timestamp":17110,"data":"t\u001b[32m/","width":0,"height":0}
+{"timestamp":17110,"data":"efi\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":17110,"data":"\u001b[33m/","width":0,"height":0}
+{"timestamp":17111,"data":"dev\u001b[94m/","width":0,"height":0}
+{"timestamp":17111,"data":"sda3 \u001b[0m","width":0,"height":0}
+{"timestamp":17111,"data":"   ","width":0,"height":0}
+{"timestamp":17111,"data":"   \u001b[36m 22G","width":0,"height":0}
+{"timestamp":17111,"data":"  4.4G","width":0,"height":0}
+{"timestamp":17111,"data":" \u001b[0m ","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[36m 16","width":0,"height":0}
+{"timestamp":17111,"data":"G \u001b[92m 22% ","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[33m/var\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[33m/dev","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[94m/sd","width":0,"height":0}
+{"timestamp":17111,"data":"a6 \u001b[0m","width":0,"height":0}
+{"timestamp":17111,"data":"    ","width":0,"height":0}
+{"timestamp":17111,"data":" \u001b[36m","width":0,"height":0}
+{"timestamp":17111,"data":" 805G ","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[0m \u001b[36m 52","width":0,"height":0}
+{"timestamp":17111,"data":"G  71","width":0,"height":0}
+{"timestamp":17111,"data":"3G \u001b[0m \u001b[92m","width":0,"height":0}
+{"timestamp":17111,"data":" 7% \u001b[33m/","width":0,"height":0}
+{"timestamp":17111,"data":"home\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[33mtm","width":0,"height":0}
+{"timestamp":17111,"data":"pfs\u001b[0m ","width":0,"height":0}
+{"timestamp":17111,"data":"      ","width":0,"height":0}
+{"timestamp":17111,"data":"   \u001b[95m ","width":0,"height":0}
+{"timestamp":17111,"data":"1.0M","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[36m     ","width":0,"height":0}
+{"timestamp":17111,"data":"0  \u001b[95m1.0","width":0,"height":0}
+{"timestamp":17111,"data":"M \u001b[0m \u001b[92m","width":0,"height":0}
+{"timestamp":17111,"data":" 0% ","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[33m/run","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[0m/cre","width":0,"height":0}
+{"timestamp":17111,"data":"dential","width":0,"height":0}
+{"timestamp":17111,"data":"s/getty@t","width":0,"height":0}
+{"timestamp":17111,"data":"ty1.servic","width":0,"height":0}
+{"timestamp":17111,"data":"e\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[33mtmpfs","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[0m    ","width":0,"height":0}
+{"timestamp":17111,"data":"      ","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[36m 3","width":0,"height":0}
+{"timestamp":17111,"data":".1G \u001b[0m","width":0,"height":0}
+{"timestamp":17111,"data":" \u001b[95m 14","width":0,"height":0}
+{"timestamp":17111,"data":"M ","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[36m 3.1","width":0,"height":0}
+{"timestamp":17111,"data":"G \u001b[0m \u001b[92m 1","width":0,"height":0}
+{"timestamp":17111,"data":"% \u001b[33m/r","width":0,"height":0}
+{"timestamp":17111,"data":"un\u001b[32m/","width":0,"height":0}
+{"timestamp":17111,"data":"user/100","width":0,"height":0}
+{"timestamp":17111,"data":"0\u001b[0m\r\n\u001b[33mtmp","width":0,"height":0}
+{"timestamp":17111,"data":"fs\u001b[0m     ","width":0,"height":0}
+{"timestamp":17111,"data":"     ","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[95m 1.0M\u001b[36m","width":0,"height":0}
+{"timestamp":17111,"data":"     ","width":0,"height":0}
+{"timestamp":17111,"data":"0  ","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[95m1.0","width":0,"height":0}
+{"timestamp":17111,"data":"M \u001b[0m ","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[92m 0% ","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[33m/r","width":0,"height":0}
+{"timestamp":17111,"data":"un\u001b[0m/crede","width":0,"height":0}
+{"timestamp":17111,"data":"ntials/getty","width":0,"height":0}
+{"timestamp":17111,"data":"@tty4.se","width":0,"height":0}
+{"timestamp":17111,"data":"rvice\u001b[0m\r\n\u001b[33mtmpfs\u001b[0m          \u001b[95m ","width":0,"height":0}
+{"timestamp":17111,"data":"1.0M\u001b[36m ","width":0,"height":0}
+{"timestamp":17111,"data":"    ","width":0,"height":0}
+{"timestamp":17111,"data":"0  \u001b[95m1","width":0,"height":0}
+{"timestamp":17111,"data":".0M ","width":0,"height":0}
+{"timestamp":17111,"data":"\u001b[0m \u001b[92m","width":0,"height":0}
+{"timestamp":17112,"data":" 0% ","width":0,"height":0}
+{"timestamp":17112,"data":"\u001b[33m/run","width":0,"height":0}
+{"timestamp":17112,"data":"\u001b[0m/crede","width":0,"height":0}
+{"timestamp":17112,"data":"ntials","width":0,"height":0}
+{"timestamp":17112,"data":"/get","width":0,"height":0}
+{"timestamp":17112,"data":"ty@t","width":0,"height":0}
+{"timestamp":17112,"data":"ty6.se","width":0,"height":0}
+{"timestamp":17112,"data":"rvi","width":0,"height":0}
+{"timestamp":17112,"data":"ce\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":17112,"data":"\u001b[33mtmpfs\u001b[0m","width":0,"height":0}
+{"timestamp":17112,"data":"     ","width":0,"height":0}
+{"timestamp":17112,"data":"     ","width":0,"height":0}
+{"timestamp":17112,"data":"\u001b[95m 1.0M\u001b[36m    ","width":0,"height":0}
+{"timestamp":17112,"data":" 0  ","width":0,"height":0}
+{"timestamp":17112,"data":"\u001b[95m","width":0,"height":0}
+{"timestamp":17112,"data":"1.0M \u001b[0m ","width":0,"height":0}
+{"timestamp":17112,"data":"\u001b[92m 0% \u001b[33m/","width":0,"height":0}
+{"timestamp":17112,"data":"run\u001b[0m/cred","width":0,"height":0}
+{"timestamp":17112,"data":"enti","width":0,"height":0}
+{"timestamp":17112,"data":"als/g","width":0,"height":0}
+{"timestamp":17112,"data":"etty@t","width":0,"height":0}
+{"timestamp":17112,"data":"ty3.","width":0,"height":0}
+{"timestamp":17112,"data":"serv","width":0,"height":0}
+{"timestamp":17112,"data":"ice\u001b[0m\r\n\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":17114,"data":"\u001b[?2004h","width":0,"height":0}
+{"timestamp":17114,"data":"\u001b]0;jesse@port: ~/projects/trecs/src\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src\u001b[00m$ ","width":0,"height":0}
+{"timestamp":18309,"data":"\r(reverse-i-search)`': \u001b[K","width":0,"height":0}
+{"timestamp":18502,"data":"\b\b\b\u001b[26@p': . /etc/\u001b[7mp\u001b[27mrofile.d/zaje.sh\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b","width":0,"height":0}
+{"timestamp":18714,"data":"\b\b\b\b\b\b\b\b\b\b\u001b[6Pi': \u001b[7mpi\u001b[27mng -4 debian.org\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b","width":0,"height":0}
+{"timestamp":18765,"data":"\b\b\b\u001b[1@n': \u001b[7mpin\u001b[27m\b\b\b","width":0,"height":0}
+{"timestamp":18898,"data":"\b\b\b\u001b[1@g': \u001b[7mping\u001b[27m\b\b\b\b","width":0,"height":0}
+{"timestamp":19252,"data":"\r\u001b]0;jesse@port: ~/projects/trecs/src\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src\u001b[00m$ ping -4 debian.org\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\r\n\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":32586,"data":"\u001b[33mPING debian.org ","width":0,"height":0}
+{"timestamp":32586,"data":"\u001b[0m(\u001b[94m151.101.130.132\u001b[0m) 56(84) byte","width":0,"height":0}
+{"timestamp":32586,"data":"s of ","width":0,"height":0}
+{"timestamp":32587,"data":"data","width":0,"height":0}
+{"timestamp":32587,"data":".\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":32645,"data":"\u001b[0m64 ","width":0,"height":0}
+{"timestamp":32646,"data":"bytes \u001b[33mfrom 151.10","width":0,"height":0}
+{"timestamp":32646,"data":"1.130.13","width":0,"height":0}
+{"timestamp":32646,"data":"2: ","width":0,"height":0}
+{"timestamp":32646,"data":"\u001b[32micmp_se","width":0,"height":0}
+{"timestamp":32646,"data":"q=1\u001b[0m","width":0,"height":0}
+{"timestamp":32646,"data":" \u001b[36mt","width":0,"height":0}
+{"timestamp":32646,"data":"tl=5","width":0,"height":0}
+{"timestamp":32646,"data":"6\u001b[0m \u001b[31m","width":0,"height":0}
+{"timestamp":32646,"data":"tim","width":0,"height":0}
+{"timestamp":32646,"data":"e=20.","width":0,"height":0}
+{"timestamp":32646,"data":"6 ms","width":0,"height":0}
+{"timestamp":32646,"data":"\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":32692,"data":"\u001b[0m64 bytes \u001b[33mfrom 151.101.130.132: \u001b[32micmp_seq=2\u001b[0m \u001b[36mttl=56\u001b[0m \u001b[31mtime=","width":0,"height":0}
+{"timestamp":32692,"data":"49.1 ms\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":33634,"data":"\u001b[0m64 ","width":0,"height":0}
+{"timestamp":33634,"data":"bytes \u001b[33mfrom 151.101.130.132: \u001b[32mi","width":0,"height":0}
+{"timestamp":33635,"data":"cmp_seq=3","width":0,"height":0}
+{"timestamp":33635,"data":"\u001b[0m \u001b[36mttl=56\u001b[0m \u001b[31mtime=47.","width":0,"height":0}
+{"timestamp":33635,"data":"5 ms\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":35648,"data":"\u001b[0m64 bytes \u001b[33mfrom 151.10","width":0,"height":0}
+{"timestamp":35648,"data":"1.130.132: \u001b[32micmp_seq=5\u001b[0m \u001b[36mttl=56\u001b[0m \u001b[31mtime=51.5","width":0,"height":0}
+{"timestamp":35648,"data":" ms\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":36663,"data":"\u001b[0m64 bytes \u001b[33mfrom 151.101","width":0,"height":0}
+{"timestamp":36663,"data":".130.132: \u001b[32micmp_seq=6\u001b[0m ","width":0,"height":0}
+{"timestamp":36663,"data":"\u001b[36mttl=56\u001b[0m \u001b[31mt","width":0,"height":0}
+{"timestamp":36663,"data":"ime=54.5 ms","width":0,"height":0}
+{"timestamp":36663,"data":"\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":37832,"data":"\u001b[0m64 bytes \u001b[33mfrom 151.101.130.13","width":0,"height":0}
+{"timestamp":37832,"data":"2: \u001b[32micmp_seq=7\u001b[0m \u001b[36mttl=56\u001b[0m ","width":0,"height":0}
+{"timestamp":37832,"data":"\u001b[31mtime=","width":0,"height":0}
+{"timestamp":37832,"data":"218 m","width":0,"height":0}
+{"timestamp":37832,"data":"s\u001b[0m\r\n","width":0,"height":0}
+{"timestamp":38590,"data":"^C","width":0,"height":0}
+{"timestamp":38593,"data":"\r\n","width":0,"height":0}
+{"timestamp":38593,"data":"\u001b[?2004h\u001b]0;jesse@port: ~/projects/trecs/src\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src\u001b[00m$ ","width":0,"height":0}
+{"timestamp":39182,"data":"\u001b[?2004l\r\r\n","width":0,"height":0}
+{"timestamp":39182,"data":"exit\r\n","width":0,"height":0}

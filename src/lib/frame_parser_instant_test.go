@@ -97,3 +97,49 @@ func TestSavingAfterTheSplitKeepsEveryByteOnce(t *testing.T) {
 		}
 	}
 }
+
+// reverse-search.jsonl has two Ctrl-R sessions. Each redraws the line with a
+// leading CR (which is not Enter) and ends with a redraw of the accepted line
+// plus Enter in one write. Before, the commands came out as
+// "(reverse-i-search)`':", an empty one, and "PING debian.org s of data.".
+func TestReverseISearchYieldsTheCommandThatRan(t *testing.T) {
+	cmds, err := ParseRecording("testdata/reverse-search.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"ls -al", "uname -a", "lsb_release", "onefetch", "df -h", ". /etc/profile.d/zaje.sh", "df -h", "ping -4 debian.org",
+	}
+	if got := inputTexts(cmds); !reflect.DeepEqual(got, want) {
+		t.Errorf("commands:\n got  %q\n want %q", got, want)
+	}
+	// the output went to the right command: ping's header is ping's, df's table is df's
+	if !strings.Contains(cmds[7].OutputText, "PING debian.org") || strings.Contains(cmds[6].OutputText, "PING") {
+		t.Errorf("output misattributed: ping=%q", cmds[7].OutputText)
+	}
+}
+
+func TestReconstructInputFollowsTheLineNotTheKeystrokes(t *testing.T) {
+	prompt := TerminalFrame{Data: "\x1b]0;t\x07\x1b[01;32mu@h\x1b[00m:~$ "}
+	fr := func(chunks ...string) []TerminalFrame {
+		var out []TerminalFrame
+		for i, c := range chunks {
+			out = append(out, TerminalFrame{Timestamp: int64(i), Data: c})
+		}
+		return out
+	}
+	for name, c := range map[string]struct {
+		in   []TerminalFrame
+		want string
+	}{
+		"plain typing with backspaces":     {fr("l", "s", "x", "\b\x1b[K", " ", "-", "a", "\r\n"), "ls -a"},
+		"echoed backspace-space-backspace": {fr("abc", "\b \b", "d", "\r\n"), "abd"},
+		"history recall rewrites the line": {fr(". /etc/profile.d/zaje.sh ", strings.Repeat("\b", 25)+"df -h\x1b[K", "\r\n"), "df -h"},
+		"a CR redraw after i-search":       {fr("\r(reverse-i-search)`': \x1b[K", "\r\x1b]0;t\x07\x1b[01;32mu@h\x1b[00m:~$ ls -al\x1b[K\b\b\b\b\b\b\r\n"), "ls -al"},
+		"delete a character mid-line":      {fr("ls  -l", "\b\b\b\b", "\x1b[1P", "\r\n"), "ls -l"},
+	} {
+		if got := reconstructInput(c.in, prompt); got != c.want {
+			t.Errorf("%s: got %q, want %q", name, got, c.want)
+		}
+	}
+}

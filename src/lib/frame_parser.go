@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -192,10 +193,17 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 		// "input", so the input phase never ended and the following commands
 		// were merged into this one. The CRLF ends the input; whatever follows
 		// it is handled below as ordinary output (or the next prompt).
-		enterEcho := inputPhase && strings.HasPrefix(data, "\r\n")
+		// A readline redraw starts with CR - which is not Enter: only a newline
+		// is. Enter can also end a redraw (accepting a Ctrl-R match redraws the
+		// line and presses Enter in one write).
+		enterAt := -1
+		if inputPhase {
+			enterAt = enterIndex(data)
+		}
+		enterEcho := enterAt >= 0
 
 		// Check if this is actual input (single char or short string without heavy escaping)
-		if inputPhase && (isUserInput(data) || enterEcho) {
+		if inputPhase && (isUserInput(data) || enterEcho || strings.HasPrefix(data, "\r")) {
 			if currentCommand == nil {
 				// This is the very first command in the recording; its
 				// prompt is the file's initial frame (frames[0]), which
@@ -214,11 +222,11 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 				// RebuildRecording writes prompt + input + output frames back
 				// out, so the pieces must add up to exactly the original.
 				enter := frame
-				enter.Data = "\r\n"
+				enter.Data = data[:enterAt+2]
 				currentCommand.InputFrames = append(currentCommand.InputFrames, enter)
-				currentCommand.InputText = reconstructInput(currentCommand.InputFrames)
+				currentCommand.InputText = reconstructInput(currentCommand.InputFrames, currentCommand.PromptFrame)
 				inputPhase = false
-				data = data[2:]
+				data = data[enterAt+2:]
 				frame.Data = data
 				if data == "" {
 					continue
@@ -228,8 +236,8 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 				currentCommand.InputFrames = append(currentCommand.InputFrames, frame)
 
 				// Check if input ends (newline)
-				if containsReturnOrNewline(data) {
-					currentCommand.InputText = reconstructInput(currentCommand.InputFrames)
+				if strings.Contains(data, "\n") {
+					currentCommand.InputText = reconstructInput(currentCommand.InputFrames, currentCommand.PromptFrame)
 					inputPhase = false
 				}
 				continue
@@ -281,7 +289,7 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 
 	// Save last command
 	if currentCommand != nil && len(currentCommand.InputFrames) > 0 {
-		currentCommand.InputText = reconstructInput(currentCommand.InputFrames)
+		currentCommand.InputText = reconstructInput(currentCommand.InputFrames, currentCommand.PromptFrame)
 		currentCommand.OutputText = stripEscapeSequences(reconstructOutput(currentCommand.OutputFrames))
 		currentCommand.OutputTextRaw = reconstructOutput(currentCommand.OutputFrames)
 		if len(frames) > 0 {
@@ -377,9 +385,172 @@ func containsReturnOrNewline(data string) bool {
 	return strings.Contains(data, "\r") || strings.Contains(data, "\n")
 }
 
+// reconstructInput is the command that was typed: what the line says after the
+// prompt when Enter was pressed, read off a model of the terminal (see
+// lineEditor). promptFrame is the frame that drew the prompt.
+func reconstructInput(frames []TerminalFrame, promptFrame TerminalFrame) string {
+	var e lineEditor
+	promptData := promptFrame.Data
+	e.write(promptData[strings.LastIndex(promptData, "\n")+1:])
+	prompt := e.text()
+	for _, f := range frames {
+		e.write(f.Data)
+	}
+	line := e.text()
+	if prompt == "" || strings.HasPrefix(line, prompt) {
+		return strings.TrimSpace(line[len(prompt):])
+	}
+	// The line no longer starts with the prompt (one that changes between
+	// draws, say): fall back to following the keystrokes.
+	return reconstructInputByKeystrokes(frames)
+}
+
+// lineEditor is a one-line terminal: just enough of one to follow what readline
+// does to the line being edited - which is far more than typing and backspace.
+// Ctrl-R (reverse-i-search) redraws the whole line, led by a CR, and rewrites it
+// as you type; history recall erases and rewrites; Ctrl-A/E and the arrow keys
+// move the cursor so later keystrokes land mid-line. Only a terminal model gets
+// all of these right, so the command is read off the line the way the screen
+// showed it.
+type lineEditor struct {
+	row []rune
+	col int
+}
+
+func (e *lineEditor) text() string { return string(e.row) }
+
+func (e *lineEditor) write(data string) {
+	rs := []rune(data)
+	for i := 0; i < len(rs); {
+		ch := rs[i]
+		switch {
+		case ch == 0x1b:
+			i = e.escape(rs, i)
+			continue
+		case ch == '\r':
+			e.col = 0
+		case ch == '\b':
+			e.col = max(0, e.col-1)
+		case ch >= 32 && ch != 0x7f:
+			e.put(ch)
+		}
+		// anything else (LF, BEL, tab...) doesn't change the line
+		i++
+	}
+}
+
+func (e *lineEditor) put(ch rune) {
+	for len(e.row) < e.col {
+		e.row = append(e.row, ' ')
+	}
+	if e.col < len(e.row) {
+		e.row[e.col] = ch
+	} else {
+		e.row = append(e.row, ch)
+	}
+	e.col++
+}
+
+// escape returns the index just past the escape sequence starting at rs[i].
+func (e *lineEditor) escape(rs []rune, i int) int {
+	if i+1 >= len(rs) {
+		return i + 1
+	}
+	switch rs[i+1] {
+	case '[':
+		j := i + 2
+		for j < len(rs) && (rs[j] < '@' || rs[j] > '~') {
+			j++
+		}
+		if j < len(rs) {
+			e.csi(string(rs[i+2:j]), rs[j])
+		}
+		return j + 1
+	case ']', 'P', '_', '^', 'X': // a string sequence (title, ...): up to BEL or ESC \
+		j := i + 2
+		for j < len(rs) && rs[j] != 0x07 && !(rs[j] == 0x1b && j+1 < len(rs) && rs[j+1] == '\\') {
+			j++
+		}
+		if j < len(rs) && rs[j] == 0x1b {
+			return j + 2
+		}
+		return j + 1
+	}
+	j := i + 1 // ESC, intermediates (charset selection), final byte
+	for j < len(rs) && rs[j] >= 0x20 && rs[j] <= 0x2f {
+		j++
+	}
+	return j + 1
+}
+
+func (e *lineEditor) csi(params string, final rune) {
+	p := strings.TrimLeft(params, "?>=!")
+	if k := strings.IndexByte(p, ';'); k >= 0 {
+		p = p[:k]
+	}
+	n, err := strconv.Atoi(p)
+	has := err == nil
+	k := 1
+	if has && n > 0 {
+		k = n
+	}
+	switch final {
+	case 'K': // erase in line
+		mode := 0
+		if has {
+			mode = n
+		}
+		switch mode {
+		case 0:
+			if e.col < len(e.row) {
+				e.row = e.row[:e.col]
+			}
+		case 1:
+			for c := 0; c <= e.col && c < len(e.row); c++ {
+				e.row[c] = ' '
+			}
+		default:
+			e.row = nil
+		}
+	case 'P': // delete characters
+		if e.col < len(e.row) {
+			end := min(e.col+k, len(e.row))
+			e.row = append(e.row[:e.col], e.row[end:]...)
+		}
+	case '@': // insert blanks
+		at := min(e.col, len(e.row))
+		out := make([]rune, 0, len(e.row)+k)
+		out = append(out, e.row[:at]...)
+		for range k {
+			out = append(out, ' ')
+		}
+		e.row = append(out, e.row[at:]...)
+	case 'X': // erase characters
+		for c := e.col; c < e.col+k && c < len(e.row); c++ {
+			e.row[c] = ' '
+		}
+	case 'C':
+		e.col += k
+	case 'D':
+		e.col = max(0, e.col-k)
+	case 'G':
+		e.col = max(0, k-1)
+	}
+}
+
+// enterIndex is where Enter - the CRLF the shell echoes - is in a frame, or -1.
+// Either the frame starts with it, or it is the CRLF that bash follows with its
+// switch of bracketed paste off (a readline redraw and Enter in one write).
+func enterIndex(data string) int {
+	if strings.HasPrefix(data, "\r\n") {
+		return 0
+	}
+	return strings.Index(data, "\r\n\x1b[?2004l")
+}
+
 // reconstructInput builds the actual command typed by handling backspaces
 // reconstructInput builds the actual command typed by handling backspaces and escape sequences
-func reconstructInput(frames []TerminalFrame) string {
+func reconstructInputByKeystrokes(frames []TerminalFrame) string {
 	var result []rune
 
 	// Concatenate all frame data
@@ -507,7 +678,7 @@ func stripEscapeSequences(data string) string {
 // synthetic frame carrying the new text, since the original per-keystroke
 // timing no longer corresponds to anything meaningful.
 func syncCommandFrames(cmd *Command) {
-	if reconstructInput(cmd.InputFrames) != cmd.InputText {
+	if reconstructInput(cmd.InputFrames, cmd.PromptFrame) != cmd.InputText {
 		ts := cmd.StartTime
 		if len(cmd.InputFrames) > 0 {
 			ts = cmd.InputFrames[0].Timestamp

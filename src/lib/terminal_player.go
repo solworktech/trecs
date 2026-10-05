@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -39,6 +40,19 @@ type TerminalPlayerImpl struct {
 	rawModeEnabled bool
 	outputFrames   bool
 	frameCallback  func(frame TerminalFrame)
+
+	// Where playback is between frames. The loop only reports a frame when it
+	// is delivered, so a long silence in the recording (a command waiting on
+	// the network, say) would leave the position standing still for as long as
+	// it lasts, and a progress bar that looks hung. While the loop waits for
+	// the next frame these describe that wait, and Position() interpolates
+	// across it. All protected by mutex.
+	waiting      bool
+	waitFrom     int64         // timestamp the wait started from (ms)
+	waitTo       int64         // timestamp of the frame being waited for (ms)
+	waitDeadline time.Time     // when that frame is due
+	waitFull     time.Duration // the whole wait, as scheduled (speed applied)
+	lastPos      int64         // position when not mid-wait: last frame / seek / pause point
 }
 
 // SetFrameCallback registers a function called on every frame during playback
@@ -171,7 +185,7 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 	// When a pause interrupts a frame's wait, how much of it was left, so
 	// resuming continues from there instead of restarting the full delay.
 	interruptedIdx := -1
-	var interruptedRemaining time.Duration
+	var interruptedRemaining, interruptedFull time.Duration
 
 	// finished is true once playback has reached the end of the frames and
 	// been reported as PlaybackStopped, until a seek (replay, or jumping
@@ -227,6 +241,12 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 				}
 			}
 			tp.seeking = false
+			tp.waiting = false
+			if ci := min(tp.currentIndex, len(tp.frames)-1); tp.targetIndex >= 0 {
+				tp.lastPos = tp.frames[ci].Timestamp
+			} else {
+				tp.lastPos = min(tp.targetTimestamp, tp.frames[len(tp.frames)-1].Timestamp)
+			}
 			skipDelay = true
 			// A seek always leaves "finished" behind, even one that lands
 			// exactly back at the end again - that will be re-detected at
@@ -288,6 +308,7 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 			// Apply speed multiplier
 			delay = time.Duration(float64(delay) / tp.speed)
 		}
+		resumed := interruptedIdx == idx
 		skipDelay = false
 		interruptedIdx = -1
 		if delay < 0 {
@@ -296,6 +317,18 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 
 		// Wait for the delay, a seek/pause request, or the stop signal
 		deadline := time.Now().Add(delay)
+		full := delay
+		if resumed {
+			full = interruptedFull // the wait as first scheduled, not what is left of it
+		}
+		var from int64
+		if idx > 0 {
+			from = tp.frames[idx-1].Timestamp
+		}
+		tp.mutex.Lock()
+		tp.waiting, tp.waitFrom, tp.waitTo, tp.waitDeadline, tp.waitFull = true, from, currentFrame.Timestamp, deadline, full
+		tp.mutex.Unlock()
+
 		timer := time.NewTimer(delay)
 		select {
 		case <-timer.C:
@@ -303,6 +336,10 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 			timer.Stop()
 			interruptedIdx = idx
 			interruptedRemaining = time.Until(deadline)
+			interruptedFull = full
+			tp.mutex.Lock()
+			tp.freezePositionLocked() // hold where it had got to
+			tp.mutex.Unlock()
 			continue
 		case <-tp.done:
 			timer.Stop()
@@ -314,11 +351,16 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 		// not be emitted after it - a seek would otherwise deliver one
 		// stale frame from the old position first.
 		tp.mutex.Lock()
+		tp.waiting = false
 		stale := tp.seeking || tp.paused
+		if stale {
+			tp.lastPos = tp.waitTo // the wait had run out
+		}
 		tp.mutex.Unlock()
 		if stale {
 			interruptedIdx = idx
 			interruptedRemaining = 0
+			interruptedFull = full
 			continue
 		}
 
@@ -333,6 +375,7 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 
 		tp.mutex.Lock()
 		tp.currentIndex++
+		tp.lastPos = currentFrame.Timestamp
 		tp.mutex.Unlock()
 	}
 }
@@ -378,6 +421,7 @@ func flushTerminalInput() error {
 func (tp *TerminalPlayerImpl) Pause() {
 	tp.mutex.Lock()
 	defer tp.mutex.Unlock()
+	tp.freezePositionLocked() // before the loop notices, so Position() can't show a stale value meanwhile
 	tp.paused = true
 	tp.playbackState = PlaybackPaused
 	tp.wakeLoop()
@@ -543,4 +587,43 @@ func (tp *TerminalPlayerImpl) RestoreTerminal() error {
 	}
 
 	return nil
+}
+
+// Position is where playback is now, in milliseconds into the recording. Unlike
+// the timestamp of the last frame delivered, it keeps advancing through a quiet
+// stretch of the recording, so a progress bar built on it never looks stuck.
+// It never runs ahead of the frame being waited for, and holds still while
+// paused.
+func (tp *TerminalPlayerImpl) Position() int64 {
+	tp.mutex.Lock()
+	defer tp.mutex.Unlock()
+	return tp.positionLocked()
+}
+
+func (tp *TerminalPlayerImpl) positionLocked() int64 {
+	if !tp.waiting {
+		return tp.lastPos
+	}
+	return tp.interpolatedLocked()
+}
+
+// interpolatedLocked is how far through the current wait the clock says we are.
+func (tp *TerminalPlayerImpl) interpolatedLocked() int64 {
+	if tp.waitFull <= 0 {
+		return tp.waitTo
+	}
+	frac := 1 - float64(time.Until(tp.waitDeadline))/float64(tp.waitFull)
+	frac = math.Max(0, math.Min(1, frac))
+	return tp.waitFrom + int64(frac*float64(tp.waitTo-tp.waitFrom))
+}
+
+// freezePositionLocked stops the clock where it is: the position becomes a fixed
+// value (Position() reports it until playback moves again) instead of following
+// the wait. Pause and the loop's own interruption both use it, so the position
+// never jumps back to the last frame in between.
+func (tp *TerminalPlayerImpl) freezePositionLocked() {
+	if tp.waiting {
+		tp.lastPos = tp.interpolatedLocked()
+		tp.waiting = false
+	}
 }
