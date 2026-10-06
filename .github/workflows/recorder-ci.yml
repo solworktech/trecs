@@ -125,6 +125,7 @@ jobs:
       - name: Log in
         shell: bash
         env:
+          TRECS_SERVER: ${{ secrets.TRECS_SERVER }}
           TRECS_PASSWORD: ${{ secrets.TRECS_PASSWORD }}
           TRECS_EMAIL: ${{ secrets.TRECS_EMAIL }}
         run: |
