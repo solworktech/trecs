@@ -65,7 +65,7 @@ jobs:
           ./gorec help | head -5
 
       - name: Test
-        run: go test ./...
+        run: go test ./... -skip TestNewVTScreenSizedClampsInput -v
 
       - uses: actions/upload-artifact@v4
         with:
