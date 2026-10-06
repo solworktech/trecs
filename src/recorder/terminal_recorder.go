@@ -35,12 +35,13 @@ type TerminalRecorderImpl struct {
 	oldState    *term.State    // Original terminal state (for restoration)
 	sigWinch    chan os.Signal // Window resize signal handler
 
-	interactive bool          // a person at a terminal, as opposed to a scripted session
-	marks       bool          // the shell was started with prompt marks (see shellint.go)
-	cleanup     func()        // removes the shell integration's temporary files
-	promptCh    chan struct{} // signalled when a prompt ends (mark B): the shell is ready
-	lastOutput  int64         // unix nanos of the shell's last output
-	markTail    string        // the end of the last read, for a mark cut between two
+	interactive     bool          // a person at a terminal, as opposed to a scripted session
+	marks           bool          // the shell was started with prompt marks (see shellint.go)
+	cleanup         func()        // removes the shell integration's temporary files
+	promptCh        chan struct{} // signalled when a prompt ends (mark B): the shell is ready
+	lastOutput      int64         // unix nanos of the shell's last output
+	commandsStarted int64         // how many command-start marks (C) the shell has written
+	markTail        string        // the end of the last read, for a mark cut between two
 }
 
 // NewTerminalRecorder creates a new terminal recorder
@@ -96,8 +97,9 @@ func (tr *TerminalRecorderImpl) Start() error {
 	// Parse shell command
 	shell := tr.config.TerminalCommand
 	if shell == "" {
-		shell = "bash"
+		shell = detectShell()
 	}
+	fmt.Fprintf(os.Stderr, "recorder: recording %s\n", describeShell(shell))
 
 	// Start the shell so that it marks where prompts and commands begin and end.
 	var shellArgs, shellEnv []string
@@ -216,7 +218,7 @@ func (tr *TerminalRecorderImpl) setWindowSize() (width, height int, err error) {
 			return 0, 0, err
 		}
 	} else {
-		width, height = cmpOr(tr.config.Cols, 100), cmpOr(tr.config.Rows, 30)
+		width, height = scriptedSize(tr.config.Cols, tr.config.Rows)
 	}
 
 	// Set the PTY window size
@@ -279,7 +281,11 @@ func (tr *TerminalRecorderImpl) captureAndEchoOutput() {
 			}
 
 			// Echo original (unfiltered) to stdout so user sees everything
-			_, _ = os.Stdout.Write(buffer[:n]) // Ignore error - stdout may be broken
+			echo := buffer[:n]
+			if !tr.interactive { // see terminalQueryRe
+				echo = terminalQueryRe.ReplaceAll(echo, nil)
+			}
+			_, _ = os.Stdout.Write(echo) // Ignore error - stdout may be broken
 		}
 	}
 }
@@ -354,12 +360,4 @@ func filterDCSSequences(data string) string {
 	// Remove DCS sequences: ESC P ... ESC backslash
 	re := regexp.MustCompile(`\x1bP[^\x1b]*\x1b\\`)
 	return re.ReplaceAllString(data, "")
-}
-
-// cmpOr returns v, or fallback if v is zero.
-func cmpOr(v, fallback int) int {
-	if v != 0 {
-		return v
-	}
-	return fallback
 }

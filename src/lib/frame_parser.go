@@ -318,7 +318,7 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 				}
 				// Save current command
 				if currentCommand != nil && len(currentCommand.InputFrames) > 0 {
-					currentCommand.OutputText = stripEscapeSequences(reconstructOutput(currentCommand.OutputFrames))
+					currentCommand.OutputText = deriveOutputText(currentCommand.OutputFrames)
 					currentCommand.OutputTextRaw = reconstructOutput(currentCommand.OutputFrames)
 					currentCommand.EndTime = frames[i-1].Timestamp
 					currentCommand.LastRawFrameIndex = i - 1
@@ -352,7 +352,7 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 	// Save last command
 	if currentCommand != nil && len(currentCommand.InputFrames) > 0 {
 		currentCommand.InputText = reconstructInput(currentCommand.InputFrames, currentCommand.PromptFrame, currentCommand.ContinuationPrompt)
-		currentCommand.OutputText = stripEscapeSequences(reconstructOutput(currentCommand.OutputFrames))
+		currentCommand.OutputText = deriveOutputText(currentCommand.OutputFrames)
 		currentCommand.OutputTextRaw = reconstructOutput(currentCommand.OutputFrames)
 		if len(frames) > 0 {
 			currentCommand.EndTime = frames[len(frames)-1].Timestamp
@@ -650,13 +650,10 @@ func reconstructInput(frames []TerminalFrame, promptFrame TerminalFrame, ps2 str
 	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
-var (
-	reCSI = regexp.MustCompile("\x1b\\[[0-9;?]*[ -/]*[@-~]")
-	reOSC = regexp.MustCompile("\x1b\\][^\x07]*\x07")
-)
+var reEscape = regexp.MustCompile("\x1b(?:\\[[0-?]*[ -/]*[@-~]|[\\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\\\)|[ -/]*[0-~])")
 
 func visibleText(d string) string {
-	d = reOSC.ReplaceAllString(reCSI.ReplaceAllString(d, ""), "")
+	d = reEscape.ReplaceAllString(d, "")
 	return strings.NewReplacer("\r", "", "\n", "").Replace(d)
 }
 
@@ -670,13 +667,18 @@ func continuationPrompt(afterEnter string) (string, bool) {
 	if strings.Contains(afterEnter, "\x1b]0;") {
 		return "", false // a real prompt: it ran (and printed nothing)
 	}
+	// A full-screen program (vim, htop) also switches bracketed paste back on, and
+	// then paints a screen: that is not a prompt asking for more of the command.
+	if altScreenRe.MatchString(afterEnter) {
+		return "", false
+	}
 	const on = "\x1b[?2004h"
 	at := strings.LastIndex(afterEnter, on)
 	if at < 0 {
 		return "", false
 	}
 	ps2 := visibleText(afterEnter[at+len(on):])
-	return ps2, ps2 != ""
+	return ps2, ps2 != "" && len([]rune(ps2)) <= 24 // a PS2 is a few characters: "> ", "dquote> "
 }
 
 // CollapseCommand puts a command on one line, for the places that have room for just
@@ -796,45 +798,70 @@ func reconstructOutput(frames []TerminalFrame) string {
 // stripEscapeSequences strips ANSI escape codes for readable display
 func stripEscapeSequences(data string) string {
 	var result strings.Builder
-	i := 0
-	for i < len(data) {
-		// Skip CSI sequences (ESC [ ... letter)
-		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == '[' {
-			i += 2
-			for i < len(data) && (data[i] < 'A' || data[i] > 'Z') && (data[i] < 'a' || data[i] > 'z') {
-				i++
-			}
-			if i < len(data) {
-				i++
-			}
+	for i := 0; i < len(data); {
+		if data[i] == 0x1b && i+1 < len(data) {
+			i = skipEscape(data, i)
 			continue
 		}
-
-		// Skip OSC sequences (ESC ] ... BEL or ST)
-		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == ']' {
-			i += 2
-			for i < len(data) && data[i] != '\x07' && data[i] != '\x1b' {
-				i++
-			}
-			if i < len(data) {
-				i++
-			}
-			if i < len(data) && data[i] == '\\' {
-				i++
-			}
-			continue
-		}
-
 		// Skip control characters except newline/carriage return
 		if data[i] < 32 && data[i] != '\n' && data[i] != '\r' {
 			i++
 			continue
 		}
-
 		result.WriteByte(data[i])
 		i++
 	}
 	return result.String()
+}
+
+// skipEscape returns the index just past the escape sequence that starts at
+// data[i] (an ESC). Every form is skipped whole, not just the common ones:
+//
+//	ESC [ ...    CSI: parameter bytes 0x30-0x3F (which include < = > ?), intermediates
+//	             0x20-0x2F, and ONE final byte 0x40-0x7E - not only a letter: "~", "@"
+//	             and "`" end sequences too (ESC[200~, ESC[3~)
+//	ESC ] ...    OSC, and likewise DCS/SOS/PM/APC (ESC P, X, ^, _): up to BEL or ST (ESC \)
+//	ESC =  ESC > ESC 7  ESC 8  ESC M  ESC ( B ...   two-byte forms, with any intermediates
+//
+// A shell like fish sends ESC = and ESC > around every prompt; skipping only
+// CSI and OSC left a stray "=" or ">" in the text.
+func skipEscape(data string, i int) int {
+	switch data[i+1] {
+	case '[':
+		j := i + 2
+		for j < len(data) && data[j] >= 0x30 && data[j] <= 0x3f {
+			j++
+		}
+		for j < len(data) && data[j] >= 0x20 && data[j] <= 0x2f {
+			j++
+		}
+		if j < len(data) && data[j] >= 0x40 && data[j] <= 0x7e {
+			j++
+		}
+		return j
+	case ']', 'P', 'X', '^', '_':
+		j := i + 2
+		for j < len(data) && data[j] != 0x07 && data[j] != 0x1b {
+			j++
+		}
+		switch {
+		case j >= len(data):
+			return j
+		case data[j] == 0x07:
+			return j + 1
+		case j+1 < len(data) && data[j+1] == '\\':
+			return j + 2
+		}
+		return j // a bare ESC: the next sequence starts there
+	}
+	j := i + 1
+	for j < len(data) && data[j] >= 0x20 && data[j] <= 0x2f {
+		j++
+	}
+	if j < len(data) {
+		j++
+	}
+	return j
 }
 
 // syncCommandFrames ensures a command's InputFrames/OutputFrames reflect
@@ -845,7 +872,8 @@ func stripEscapeSequences(data string) string {
 // synthetic frame carrying the new text, since the original per-keystroke
 // timing no longer corresponds to anything meaningful.
 func syncCommandFrames(cmd *Command) {
-	if reconstructInput(cmd.InputFrames, cmd.PromptFrame, cmd.ContinuationPrompt) != cmd.InputText {
+	if commandInputText(cmd) != cmd.InputText {
+		setMarkedCommandLine(cmd.OutputFrames, cmd.InputText)
 		ts := cmd.StartTime
 		if len(cmd.InputFrames) > 0 {
 			ts = cmd.InputFrames[0].Timestamp
@@ -855,7 +883,7 @@ func syncCommandFrames(cmd *Command) {
 		}
 	}
 
-	if stripEscapeSequences(reconstructOutput(cmd.OutputFrames)) != cmd.OutputText {
+	if deriveOutputText(cmd.OutputFrames) != cmd.OutputText {
 		ts := cmd.EndTime
 		if len(cmd.OutputFrames) > 0 {
 			ts = cmd.OutputFrames[0].Timestamp
@@ -1771,4 +1799,14 @@ func dropSessionEnd(commands []Command) []Command {
 	}
 
 	return commands
+}
+
+// deriveOutputText is the text of what a command printed, as the editor shows
+// and edits it: escape sequences gone, tabs expanded, CRLF a newline, and a
+// carriage return overwriting the line so far - so a progress bar reads as its
+// final state, and the "fresh line" padding a shell like fish prints after every
+// command (a marker, a screenful of spaces, a CR) is not there. parse and
+// syncCommandFrames both use it: sync tells an edit from no edit by re-deriving.
+func deriveOutputText(frames []TerminalFrame) string {
+	return CleanOutput(reconstructOutput(frames))
 }
