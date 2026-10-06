@@ -39,7 +39,8 @@ var (
 	procParent = osProcParent
 )
 
-// detectShell returns the shell the recorder was run from, else $SHELL, else bash.
+// detectShell returns the shell the recorder was run from, else $SHELL, else sh (the one
+// shell that is certain to be there).
 func detectShell() string {
 	pid := os.Getppid()
 	for depth := 0; pid > 1 && depth < 10; depth++ {

@@ -238,8 +238,8 @@ func TestDetectShellWalksUpToTheShellYouAreIn(t *testing.T) {
 		t.Errorf("without a shell above, detectShell = %q, want $SHELL", got)
 	}
 	t.Setenv("SHELL", "")
-	if got := detectShell(); got != "bash" {
-		t.Errorf("without anything, detectShell = %q, want bash", got)
+	if got := detectShell(); got != "sh" {
+		t.Errorf("without anything, detectShell = %q, want sh", got)
 	}
 	for in, want := range map[string]string{"-zsh": "zsh", "/usr/bin/fish": "fish", "/usr/bin/bash (deleted)": "bash", "dash": "dash"} {
 		if got := shellName(in); got != want {

@@ -1,0 +1,4 @@
+ls -al
+uname -a
+curl -4 ifconfig.me
+git status

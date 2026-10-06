@@ -1,0 +1,169 @@
+# Builds the recorder and the editor on Linux and macOS, then makes a real
+# recording on each:
+# logs in to a trecs server, has the recorder type a file of commands
+# into a shell
+# (-commands-file: no terminal needed) and uploads the result (-upload).
+# Every shell is tried
+# on every OS, so this is also where zsh (the macOS default) and fish get
+# exercised.
+#
+# One-time setup, in the repository's
+# Settings > Secrets and variables > Actions:
+#   secret    TRECS_PASSWORD   the account's password
+#   variable  TRECS_EMAIL      the account's email
+#   variable  TRECS_SERVER     
+#
+---
+name: recorder
+
+"on":
+  workflow_dispatch:
+    inputs:
+      commands_file:
+        description: "File of commands to record, relative to the Go module"
+        default: lib/testdata/ci-session.txt
+      human_like:
+        description: "Type with human pauses (slower; also exercises that path)"
+        type: boolean
+        default: true
+      visibility:
+        description: "Visibility of the uploaded recordings"
+        type: choice
+        options: [unlisted, private, public]
+        default: unlisted
+
+permissions:
+  contents: read
+
+env:
+  TRECS_SERVER: ${{ secrets.TRECS_SERVER }}
+
+defaults:
+  run:
+    working-directory: src
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]  # macos-latest is Apple Silicon;
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/go.mod
+          cache-dependency-path: src/go.sum
+
+      - name: Build the recorder and the editor
+        run: |
+          go build -o gorec ./recorder
+          go build -o goedit ./editor
+          ./gorec help | head -5
+
+      - name: Test
+        run: go test ./...
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ runner.os }}
+          path: |
+            src/gorec
+            src/goedit
+          if-no-files-found: error
+
+  record:
+    name: record (${{ matrix.os }}, ${{ matrix.shell }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        # auto: no -cmd, so the recorder works out the shell it was started from
+        shell: [auto, bash, zsh, fish]
+    env:
+      SHELL_UNDER_TEST: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Names for this run
+        shell: bash
+        run: |
+          # keeps the login out of ~/.config on the runner
+          echo "TRECS_SESSION_FILE=$RUNNER_TEMP/trecs-session" >> "$GITHUB_ENV"
+          echo "RECORDING_NAME=ci-$RUNNER_OS-$SHELL_UNDER_TEST-${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bin-${{ runner.os }}
+          path: src
+
+      - name: Make the binaries executable (artifacts do not keep the mode)
+        run: chmod +x gorec goedit
+
+      - name: Install the shell
+        shell: bash
+        run: |
+          case "$RUNNER_OS/$SHELL_UNDER_TEST" in
+            Linux/zsh)  sudo apt-get update && sudo apt-get install -y zsh ;;
+            Linux/fish) sudo apt-get update && sudo apt-get install -y fish ;;
+            macOS/fish) brew install fish ;;
+          esac
+
+      - name: Which shells these are
+        shell: bash
+        run: |
+          echo "runner shell: $(command -v bash) - $(bash --version | head -1)"
+          for s in zsh fish; do
+            if command -v "$s" >/dev/null; then echo "$s: $(command -v "$s") - $("$s" --version | head -1)"; fi
+          done
+
+      - name: Log in
+        shell: bash
+        env:
+          TRECS_PASSWORD: ${{ secrets.TRECS_PASSWORD }}
+          TRECS_EMAIL: ${{ secrets.TRECS_EMAIL }}
+        run: |
+          printf '%s\n' "$TRECS_PASSWORD" | ./gorec login -server "$TRECS_SERVER" -email "$TRECS_EMAIL" -password-stdin
+
+      - name: Record and upload
+        shell: bash
+        env:
+          COMMANDS_FILE: ${{ inputs.commands_file }}
+          HUMAN_LIKE: ${{ inputs.human_like && '-human-like' || '' }}
+          VISIBILITY: ${{ inputs.visibility || 'unlisted' }}
+        run: |
+          args=(record -output "$RUNNER_TEMP/recordings" -name "$RECORDING_NAME"
+                -commands-file "${COMMANDS_FILE:-lib/testdata/ci-session.txt}"
+                -upload -visibility "$VISIBILITY")
+          [ -n "$HUMAN_LIKE" ] && args+=("$HUMAN_LIKE")
+          [ "$SHELL_UNDER_TEST" != auto ] && args+=(-cmd "$SHELL_UNDER_TEST")
+          ./gorec "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/record.log"
+          { echo "### $RUNNER_OS / $SHELL_UNDER_TEST"; grep -E '^(Uploaded|Watch):' "$RUNNER_TEMP/record.log"; } >> "$GITHUB_STEP_SUMMARY"
+
+      # Reads the recording back with the editor's parser and puts the Markdown it makes in the
+      # job summary: if the commands or outputs are wrong for a shell, it shows up here.
+      - name: Export Markdown with the editor
+        shell: bash
+        run: |
+          f=$(find "$RUNNER_TEMP/recordings" -name terminal.jsonl | head -1)
+          echo "recording: $f"
+          ./goedit export "$f" -title "$RECORDING_NAME"
+          { echo; echo '<details><summary>Markdown export</summary>'; echo; echo '````markdown'; cat "$f.md"; echo '````'; echo; echo '</details>'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the recording
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recording-${{ runner.os }}-${{ matrix.shell }}
+          path: ${{ runner.temp }}/recordings
+          if-no-files-found: warn
+
+      - name: Log out
+        if: always()
+        shell: bash
+        run: ./gorec logout || true
