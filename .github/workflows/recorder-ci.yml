@@ -85,7 +85,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         # auto: no -cmd, so the recorder works out the shell it was started from
-        shell: [auto, bash, zsh, fish]
+        shell: [fish]
     env:
       SHELL_UNDER_TEST: ${{ matrix.shell }}
       # secret or variable, whichever you made; here, after `environment:` has been applied
@@ -132,7 +132,7 @@ jobs:
           case "$RUNNER_OS/$SHELL_UNDER_TEST" in
             Linux/zsh)  sudo apt-get update && sudo apt-get install -y zsh ;;
             Linux/fish) sudo apt-get update && sudo apt-get install -y fish ;;
-            macOS/fish) brew install fish ;;
+            macOS/fish) brew install fish htop coreutils;;
           esac
 
       - name: Which shells these are

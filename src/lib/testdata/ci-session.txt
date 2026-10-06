@@ -1,4 +1,5 @@
 ls -al
 uname -a
 curl -4 ifconfig.me
+timeout 10 htop
 git status
