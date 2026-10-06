@@ -1,0 +1,138 @@
+{"type":"meta","width":172,"height":38}
+{"timestamp":21,"data":"Welcome to fish, the friendly interactive shell\r\nType \u001b[32mhelp\u001b(B\u001b[m for instructions on how to use fish\r\n","width":0,"height":0}
+{"timestamp":25,"data":"\u001b]7;file://port/home/jesse/projects/trecs/src/recorder\u0007","width":0,"height":0}
+{"timestamp":46,"data":"\u001b]0;~/p/t/s/recorder\u0007","width":0,"height":0}
+{"timestamp":46,"data":"\u001b[30m\u001b(B\u001b[m\r","width":0,"height":0}
+{"timestamp":46,"data":"\u001b]133;A;special_key=1\u0007\u001b[92mjesse\u001b(B\u001b[m@\u001b(B\u001b[mport\u001b(B\u001b[m \u001b[32m~/p/t/s/recorder\u001b(B\u001b[m (main)\u001b(B\u001b[m\u003e \u001b[K\r\u001b[36C\u001b[?2004h\u001b[=5u\u001b=","width":0,"height":0}
+{"timestamp":1759,"data":"l\r\u001b[37C","width":0,"height":0}
+{"timestamp":1759,"data":"\b\u001b[91ml\u001b[30m\u001b(B\u001b[m\r\u001b[37C\u001b[90msb_release\u001b[30m\u001b(B\u001b[m\r\u001b[37C","width":0,"height":0}
+{"timestamp":1808,"data":"\u001b[91ms\u001b[90mb_release\u001b[30m\u001b(B\u001b[m\r\u001b[38C","width":0,"height":0}
+{"timestamp":1808,"data":"\b\bls\u001b[90mb_release\u001b[30m\u001b(B\u001b[m\r\u001b[38C","width":0,"height":0}
+{"timestamp":1910,"data":" \u001b[K\r\u001b[39C","width":0,"height":0}
+{"timestamp":1910,"data":"\u001b[90m-al\u001b[30m\u001b(B\u001b[m\r\u001b[39C","width":0,"height":0}
+{"timestamp":2005,"data":"-\u001b[90mal\u001b[30m\u001b(B\u001b[m\r\u001b[40C","width":0,"height":0}
+{"timestamp":2005,"data":"\b\u001b[36m-\u001b[90mal\u001b[30m\u001b(B\u001b[m\r\u001b[40C","width":0,"height":0}
+{"timestamp":2057,"data":"\u001b[36ma\u001b[90ml\u001b[30m\u001b(B\u001b[m\r\u001b[41C","width":0,"height":0}
+{"timestamp":2111,"data":"\u001b[36ml\u001b[30m\u001b(B\u001b[m\r\u001b[42C\r\u001b[42C","width":0,"height":0}
+{"timestamp":2615,"data":"\r\u001b[42C\r\n\u001b[30m\u001b(B\u001b[m\u001b]133;C;cmdline_url=ls%20-al\u0007","width":0,"height":0}
+{"timestamp":2615,"data":"\u001b[?2004l\u001b[=0u\u001b\u003e","width":0,"height":0}
+{"timestamp":2616,"data":"\u001b]0;ls -al ~/p/t/s/recorder\u0007\u001b[30m\u001b(B\u001b[m\r","width":0,"height":0}
+{"timestamp":2623,"data":"total 9596\r\ndrwxr-xr-x 2 jesse jesse    4096 Oct  6 14:01 \u001b[0m\u001b[01;34m.\u001b[0m/\r\ndrwxr-xr-x 6 jesse jesse    4096 Oct  6 13:19 \u001b[01;34m..\u001b[0m/\r\n-rw-r--r-- 1 jesse jesse   12726 Sep 13 23:44 ARCHITECTURE.md\r\n-rw-r--r-- 1 jesse jesse    5368 Oct  5 13:00 cloud_cmds.go\r\n-rwxrwxr-x 1 jesse jesse 9676181 Oct  6 14:01 \u001b[01;32mgorec\u001b[0m*\r\n-rw-r--r-- 1 jesse jesse   11005 Oct  6 13:19 main.go\r\n-rw-rw-r-- 1 jesse jesse   36025 Oct  5 22:25 md2pdf.pdf\r\n","width":0,"height":0}
+{"timestamp":2623,"data":"-rw-r--r-- 1 jesse jesse    5572 Sep 14 02:09 media_recorder.go\r\n-rw-r--r-- 1 jesse jesse    6224 Oct  6 13:19 script.go\r\n-rw-r--r-- 1 jesse jesse    6259 Sep 25 22:56 session_recorder.go\r\n-rw-r--r-- 1 jesse jesse    3568 Oct  6 13:19 shelldetect.go\r\n-rw-r--r-- 1 jesse jesse    6666 Oct  6 13:19 shellint.go\r\n-rw-r--r-- 1 jesse jesse    8704 Oct  6 13:19 shellint_test.go\r\n-rw-r--r-- 1 jesse jesse   10939 Oct  6 13:19 terminal_recorder.go\r\n-rw-rw-r-- 1 jesse jesse     234 Oct  5 11:52 .trecs-cookies\r\n","width":0,"height":0}
+{"timestamp":2624,"data":"\u001b]133;D;0\u0007\u001b[?25h","width":0,"height":0}
+{"timestamp":2624,"data":"\u001b[2m⏎\u001b(B\u001b[m                                                                                                                                                                           \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":2633,"data":"\u001b]0;~/p/t/s/recorder\u0007\u001b[30m\u001b(B\u001b[m\u001b]133;A;special_key=1\u0007\u001b[92mjesse\u001b(B\u001b[m@\u001b(B\u001b[mport\u001b(B\u001b[m \u001b[32m~/p/t/s/recorder\u001b(B\u001b[m (main)\u001b(B\u001b[m\u003e \u001b[K\r\u001b[36C\u001b[?2004h\u001b[=5u\u001b=","width":0,"height":0}
+{"timestamp":4132,"data":"u\r\u001b[37C","width":0,"height":0}
+{"timestamp":4132,"data":"\b\u001b[91mu\u001b[30m\u001b(B\u001b[m\r\u001b[37C","width":0,"height":0}
+{"timestamp":4132,"data":"\u001b[90mname -a\u001b[30m\u001b(B\u001b[m\r\u001b[37C","width":0,"height":0}
+{"timestamp":4229,"data":"\u001b[91mn\u001b[90mame -a\u001b[30m\u001b(B\u001b[m\r\u001b[38C","width":0,"height":0}
+{"timestamp":4289,"data":"\u001b[91ma\u001b[90mme -a\u001b[30m\u001b(B\u001b[m\r\u001b[39C","width":0,"height":0}
+{"timestamp":4361,"data":"\u001b[91mm\u001b[90me -a\u001b[30m\u001b(B\u001b[m\r\u001b[40C","width":0,"height":0}
+{"timestamp":4410,"data":"\u001b[91me\u001b[90m -a\u001b[30m\u001b(B\u001b[m\r\u001b[41C","width":0,"height":0}
+{"timestamp":4411,"data":"\b\b\b\b\buname\u001b[90m -a\u001b[30m\u001b(B\u001b[m\r\u001b[41C","width":0,"height":0}
+{"timestamp":4501,"data":" \u001b[90m-a\u001b[30m\u001b(B\u001b[m\r\u001b[42C","width":0,"height":0}
+{"timestamp":4610,"data":"-\u001b[90ma\u001b[30m\u001b(B\u001b[m\r\u001b[43C","width":0,"height":0}
+{"timestamp":4610,"data":"\b\u001b[36m-\u001b[90ma\u001b[30m\u001b(B\u001b[m\r\u001b[43C","width":0,"height":0}
+{"timestamp":4675,"data":"\u001b[36ma\u001b[30m\u001b(B\u001b[m\r\u001b[44C","width":0,"height":0}
+{"timestamp":4675,"data":"\r\u001b[44C","width":0,"height":0}
+{"timestamp":5237,"data":"\r\u001b[44C\r\n","width":0,"height":0}
+{"timestamp":5237,"data":"\u001b[30m\u001b(B\u001b[m\u001b]133;C;cmdline_url=uname%20-a\u0007\u001b[?2004l\u001b[=0u\u001b\u003e","width":0,"height":0}
+{"timestamp":5238,"data":"\u001b]0;uname -a ~/p/t/s/recorder\u0007","width":0,"height":0}
+{"timestamp":5238,"data":"\u001b[30m\u001b(B\u001b[m\r","width":0,"height":0}
+{"timestamp":5239,"data":"Linux port 6.12.100+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.100-1 (2026-07-30) x86_64 GNU/Linux\r\n","width":0,"height":0}
+{"timestamp":5239,"data":"\u001b]133;D;0\u0007","width":0,"height":0}
+{"timestamp":5239,"data":"\u001b[?25h","width":0,"height":0}
+{"timestamp":5240,"data":"\u001b[2m⏎\u001b(B\u001b[m                                                                                                                                                                           \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":5250,"data":"\u001b]0;~/p/t/s/recorder\u0007","width":0,"height":0}
+{"timestamp":5251,"data":"\u001b[30m\u001b(B\u001b[m\u001b]133;A;special_key=1\u0007\u001b[92mjesse\u001b(B\u001b[m@\u001b(B\u001b[mport\u001b(B\u001b[m \u001b[32m~/p/t/s/recorder\u001b(B\u001b[m (main)\u001b(B\u001b[m\u003e \u001b[K\r\u001b[36C\u001b[?2004h\u001b[=5u\u001b=","width":0,"height":0}
+{"timestamp":6754,"data":"l\r\u001b[37C\u001b[90ms -al\u001b[30m\u001b(B\u001b[m\r\u001b[37C\b\u001b[91ml\u001b[90ms -al\u001b[30m\u001b(B\u001b[m\r\u001b[37C","width":0,"height":0}
+{"timestamp":6821,"data":"\u001b[91ms\u001b[90m -al\u001b[30m\u001b(B\u001b[m\r\u001b[38C\b\bls\u001b[90m -al\u001b[30m\u001b(B\u001b[m\r\u001b[38C","width":0,"height":0}
+{"timestamp":6891,"data":"b\u001b[K\r\u001b[39C","width":0,"height":0}
+{"timestamp":6891,"data":"\u001b[90m_release\u001b[30m\u001b(B\u001b[m\r\u001b[39C","width":0,"height":0}
+{"timestamp":6891,"data":"\b\b\b\u001b[91mlsb\u001b[90m_release\u001b[30m\u001b(B\u001b[m\r\u001b[39C","width":0,"height":0}
+{"timestamp":6966,"data":"\u001b[91m_\u001b[90mrelease\u001b[30m\u001b(B\u001b[m\r\u001b[40C","width":0,"height":0}
+{"timestamp":7031,"data":"\u001b[91mr\u001b[90melease\u001b[30m\u001b(B\u001b[m\r\u001b[41C","width":0,"height":0}
+{"timestamp":7130,"data":"\u001b[91me\u001b[90mlease\u001b[30m\u001b(B\u001b[m\r\u001b[42C","width":0,"height":0}
+{"timestamp":7199,"data":"\u001b[91ml\u001b[90mease\u001b[30m\u001b(B\u001b[m\r\u001b[43C","width":0,"height":0}
+{"timestamp":7300,"data":"\u001b[91me\u001b[90mase\u001b[30m\u001b(B\u001b[m\r\u001b[44C","width":0,"height":0}
+{"timestamp":7383,"data":"\u001b[91ma\u001b[90mse\u001b[30m\u001b(B\u001b[m\r\u001b[45C","width":0,"height":0}
+{"timestamp":7486,"data":"\u001b[91ms\u001b[90me\u001b[30m\u001b(B\u001b[m\r\u001b[46C","width":0,"height":0}
+{"timestamp":7533,"data":"\u001b[91me\u001b[30m\u001b(B\u001b[m\r\u001b[47C","width":0,"height":0}
+{"timestamp":7534,"data":"\r\u001b[47C\u001b[11Dlsb_release\r\u001b[47C","width":0,"height":0}
+{"timestamp":7894,"data":"\r\u001b[47C\r\n","width":0,"height":0}
+{"timestamp":7894,"data":"\u001b[30m\u001b(B\u001b[m\u001b]133;C;cmdline_url=lsb_release\u0007","width":0,"height":0}
+{"timestamp":7894,"data":"\u001b[?2004l\u001b[=0u\u001b\u003e","width":0,"height":0}
+{"timestamp":7895,"data":"\u001b]0;lsb_release ~/p/t/s/recorder\u0007","width":0,"height":0}
+{"timestamp":7895,"data":"\u001b[30m\u001b(B\u001b[m\r","width":0,"height":0}
+{"timestamp":7905,"data":"No LSB modules are available.\r\n","width":0,"height":0}
+{"timestamp":7905,"data":"\u001b]133;D;0\u0007","width":0,"height":0}
+{"timestamp":7905,"data":"\u001b[?25h","width":0,"height":0}
+{"timestamp":7905,"data":"\u001b[2m⏎\u001b(B\u001b[m                                                                                                                                                                           \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":7916,"data":"\u001b]0;~/p/t/s/recorder\u0007\u001b[30m\u001b(B\u001b[m","width":0,"height":0}
+{"timestamp":7917,"data":"\u001b]133;A;special_key=1\u0007\u001b[92mjesse\u001b(B\u001b[m@\u001b(B\u001b[mport\u001b(B\u001b[m \u001b[32m~/p/t/s/recorder\u001b(B\u001b[m (main)\u001b(B\u001b[m\u003e \u001b[K\r\u001b[36C\u001b[?2004h\u001b[=5u\u001b=","width":0,"height":0}
+{"timestamp":9481,"data":"c\r\u001b[37C","width":0,"height":0}
+{"timestamp":9481,"data":"\b\u001b[91mc\u001b[30m\u001b(B\u001b[m\r\u001b[37C","width":0,"height":0}
+{"timestamp":9481,"data":"\u001b[90murl -4 ifconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[37C","width":0,"height":0}
+{"timestamp":9547,"data":"\u001b[91mu\u001b[90mrl -4 ifconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[38C","width":0,"height":0}
+{"timestamp":9630,"data":"\u001b[91mr\u001b[90ml -4 ifconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[39C","width":0,"height":0}
+{"timestamp":9699,"data":"\u001b[91ml\u001b[90m -4 ifconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[40C","width":0,"height":0}
+{"timestamp":9699,"data":"\b\b\b\bcurl\u001b[90m -4 ifconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[40C","width":0,"height":0}
+{"timestamp":9747,"data":" \u001b[90m-4 ifconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[41C","width":0,"height":0}
+{"timestamp":10005,"data":"-\u001b[90m4 ifconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[42C","width":0,"height":0}
+{"timestamp":10006,"data":"\b\u001b[36m-\u001b[90m4 ifconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[42C","width":0,"height":0}
+{"timestamp":10052,"data":"\u001b[36m4\u001b[90m ifconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[43C","width":0,"height":0}
+{"timestamp":10120,"data":"\u001b[36m \u001b[90mifconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[44C","width":0,"height":0}
+{"timestamp":10195,"data":"\u001b[36mi\u001b[90mfconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[45C","width":0,"height":0}
+{"timestamp":10196,"data":"\b\u001b[36mi\u001b[90mfconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[45C","width":0,"height":0}
+{"timestamp":10274,"data":"\u001b[36mf\u001b[90mconfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[46C","width":0,"height":0}
+{"timestamp":10349,"data":"\u001b[36mc\u001b[90monfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[47C","width":0,"height":0}
+{"timestamp":10416,"data":"\u001b[36mo\u001b[90mnfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[48C","width":0,"height":0}
+{"timestamp":10512,"data":"\u001b[36mn\u001b[90mfig.me\u001b[30m\u001b(B\u001b[m\r\u001b[49C","width":0,"height":0}
+{"timestamp":10616,"data":"\u001b[36mf\u001b[90mig.me\u001b[30m\u001b(B\u001b[m\r\u001b[50C","width":0,"height":0}
+{"timestamp":10671,"data":"\u001b[36mi\u001b[90mg.me\u001b[30m\u001b(B\u001b[m\r\u001b[51C","width":0,"height":0}
+{"timestamp":10781,"data":"\u001b[36mg\u001b[90m.me\u001b[30m\u001b(B\u001b[m\r\u001b[52C","width":0,"height":0}
+{"timestamp":10830,"data":"\u001b[36m.\u001b[90mme\u001b[30m\u001b(B\u001b[m\r\u001b[53C","width":0,"height":0}
+{"timestamp":10918,"data":"\u001b[36mm\u001b[90me\u001b[30m\u001b(B\u001b[m\r\u001b[54C","width":0,"height":0}
+{"timestamp":10991,"data":"\u001b[36me\u001b[30m\u001b(B\u001b[m\r\u001b[55C","width":0,"height":0}
+{"timestamp":10991,"data":"\r\u001b[55C","width":0,"height":0}
+{"timestamp":11354,"data":"\r\u001b[55C","width":0,"height":0}
+{"timestamp":11354,"data":"\r\n\u001b[30m\u001b(B\u001b[m\u001b]133;C;cmdline_url=curl%20-4%20ifconfig.me\u0007","width":0,"height":0}
+{"timestamp":11354,"data":"\u001b[?2004l\u001b[=0u\u001b\u003e","width":0,"height":0}
+{"timestamp":11355,"data":"\u001b]0;curl -4 ifconfig.me ~/p/t/s/recorder\u0007","width":0,"height":0}
+{"timestamp":11355,"data":"\u001b[30m\u001b(B\u001b[m\r","width":0,"height":0}
+{"timestamp":13076,"data":"o","width":0,"height":0}
+{"timestamp":13163,"data":"n","width":0,"height":0}
+{"timestamp":13217,"data":"e","width":0,"height":0}
+{"timestamp":13279,"data":"f","width":0,"height":0}
+{"timestamp":13359,"data":"e","width":0,"height":0}
+{"timestamp":13431,"data":"t","width":0,"height":0}
+{"timestamp":13539,"data":"c","width":0,"height":0}
+{"timestamp":13610,"data":"h","width":0,"height":0}
+{"timestamp":13661,"data":"188.30.133.136","width":0,"height":0}
+{"timestamp":13662,"data":"\u001b]133;D;0\u0007\u001b[?25h","width":0,"height":0}
+{"timestamp":13662,"data":"\u001b[2m⏎\u001b(B\u001b[m                                                                                                                                                                           \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":13670,"data":"\u001b]0;~/p/t/s/recorder\u0007\u001b[30m\u001b(B\u001b[m","width":0,"height":0}
+{"timestamp":13671,"data":"\u001b]133;A;special_key=1\u0007\u001b[92mjesse\u001b(B\u001b[m@\u001b(B\u001b[mport\u001b(B\u001b[m \u001b[32m~/p/t/s/recorder\u001b(B\u001b[m (main)\u001b(B\u001b[m\u003e \u001b[K\r\u001b[36C\u001b[?2004h\u001b[=5u\u001b=","width":0,"height":0}
+{"timestamp":13671,"data":"onefetch\r\u001b[44C","width":0,"height":0}
+{"timestamp":13671,"data":"\r\u001b[44C","width":0,"height":0}
+{"timestamp":13671,"data":"\b\b\b\b\b\b\b\bonefetch\r\u001b[44C","width":0,"height":0}
+{"timestamp":13977,"data":"\r\u001b[44C\r\n\u001b[30m\u001b(B\u001b[m\u001b]133;C;cmdline_url=onefetch\u0007","width":0,"height":0}
+{"timestamp":13977,"data":"\u001b[?2004l\u001b[=0u\u001b\u003e","width":0,"height":0}
+{"timestamp":13978,"data":"\u001b]0;onefetch ~/p/t/s/recorder\u0007\u001b[30m\u001b(B\u001b[m\r","width":0,"height":0}
+{"timestamp":14124,"data":"\u001b[?7l\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m           --==============--\u001b[0m              \u001b[38;2;116;205;221;1mJesse Portnoy\u001b[0m \u001b[39;1m~\u001b[0m \u001b[38;2;116;205;221;1mgit version 2.47.3\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m  .-==-.===oooo=oooooo=ooooo===--===-\u001b[0m      \u001b[39m----------------------------------\u001b[39m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m .==  =o=\u001b[0m\u001b[38;2;255;255;255;1moGGGGGG\u001b[0m\u001b[38;2;116;205;221;1mo=oo=o\u001b[0m\u001b[38;2;255;255;255;1mGGGGGGG\u001b[0m\u001b[38;2;116;205;221;1mG=o=  oo-\u001b[0m     \u001b[38;2;116;205;221;1mProject\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39mtrecs (1 branch)\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m -o= oo=\u001b[0m\u001b[38;2;255;255;255;1mG .=GGGGG\u001b[0m\u001b[38;2;116;205;221;1mo=o=\u001b[0m\u001b[38;2;255;255;255;1m= .=GGGGG\u001b[0m\u001b[38;2;116;205;221;1m=ooo o=-\u001b[0m     \u001b[38;2;116;205;221;1mHEAD\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39me90e506 (main, origin/main)\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m  .-=oo=\u001b[0m\u001b[38;2;255;255;255;1mo==oGGGGG\u001b[0m\u001b[38;2;116;205;221;1m=oo=\u001b[0m\u001b[38;2;255;255;255;1moooGGGGGo\u001b[0m\u001b[38;2;116;205;221;1m=oooo.\u001b[0m       \u001b[38;2;116;205;221;1mPending\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m3+- 36+\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -ooooo\u001b[0m\u001b[38;2;255;255;255;1m=oooooo\u001b[0m\u001b[38;2;116;205;221;1m=\u001b[0m\u001b[38;2;246;210;162;1m.   .\u001b[0m\u001b[38;2;116;205;221;1m=\u001b[0m\u001b[38;2;255;255;255;1m=ooo==\u001b[0m\u001b[38;2;116;205;221;1moooooo-\u001b[0m       \u001b[38;2;116;205;221;1mCreated\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m3 weeks ago\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -ooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m====_====\u001b[0m\u001b[38;2;116;205;221;1mooooooooooo=\u001b[0m       \u001b[38;2;116;205;221;1mLanguage\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m\u001b[48;2;0;173;216m                          \u001b[49m\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -oooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m==\u001b[0m\u001b[38;2;255;255;255;1m#\u001b[0m\u001b[38;2;116;205;221;1m.\u001b[0m\u001b[38;2;255;255;255;1m#\u001b[0m\u001b[38;2;246;210;162;1m==\u001b[0m\u001b[38;2;116;205;221;1mooooooooooooo\u001b[0m       \u001b[39m          \u001b[38;2;0;173;216m●\u001b[39m \u001b[39mGo (100.0 %)\u001b[39m \u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -ooooooooooooo=\u001b[0m\u001b[38;2;255;255;255;1m#\u001b[0m\u001b[38;2;116;205;221;1m.\u001b[0m\u001b[38;2;255;255;255;1m#\u001b[0m\u001b[38;2;116;205;221;1m=oooooooooooooo\u001b[0m       \u001b[38;2;116;205;221;1mAuthor\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m100% Jesse Portnoy 19\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   .oooooooooooooooooooooooooooooooo.\u001b[0m      \u001b[38;2;116;205;221;1mLast change\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m19 minutes ago\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m    oooooooooooooooooooooooooooooooo.\u001b[0m      \u001b[38;2;116;205;221;1mURL\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39mgit@github.com:solworktech/trecs.git\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m  ..\u001b[0m\u001b[38;2;116;205;221;1moooooooooooooooooooooooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m..\u001b[0m     \u001b[38;2;116;205;221;1mCommits\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m19\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m-=o-\u001b[0m\u001b[38;2;116;205;221;1m=ooooooooooooooooooooooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m-oo.\u001b[0m   \u001b[38;2;116;205;221;1mChurn (4)\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m…/lib/frame_parser.go 3\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m.=- \u001b[0m\u001b[38;2;116;205;221;1moooooooooooooooooooooooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m-.-\u001b[0m    \u001b[39m           …/lib/types.go 3\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   .oooooooooooooooooooooooooooooooo-\u001b[0m      \u001b[39m           …/lib/frame_parser_instant_test.go 2\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -oooooooooooooooooooooooooooooooo-\u001b[0m      \u001b[38;2;116;205;221;1mLines of code\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m6860\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -oooooooooooooooooooooooooooooooo-\u001b[0m      \u001b[38;2;116;205;221;1mSize\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m339.87 KiB (28 files)\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -oooooooooooooooooooooooooooooooo-\u001b[0m      \u001b[38;2;116;205;221;1mLicense\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39mAGPL-3.0-only\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   .oooooooooooooooooooooooooooooooo\u001b[0m       \r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m    =oooooooooooooooooooooooooooooo-\u001b[0m       \u001b[40m   \u001b[49m\u001b[41m   \u001b[49m\u001b[42m   \u001b[49m\u001b[43m   \u001b[49m\u001b[44m   \u001b[49m\u001b[45m   \u001b[49m\u001b[46m   \u001b[49m\u001b[47m   \u001b[49m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m    .=oooooooooooooooooooooooooooo-\u001b[0m     \r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m      -=oooooooooooooooooooooooo=.\u001b[0m      \r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m     =oo\u001b[0m\u001b[38;2;116;205","width":0,"height":0}
+{"timestamp":14124,"data":";221;1m====oooooooooooooooo==-\u001b[0m\u001b[38;2;246;210;162;1moo=-\u001b[0m     \r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m    .-==-    \u001b[0m\u001b[38;2;116;205;221;1m.--=======---     \u001b[0m\u001b[38;2;246;210;162;1m.==-\u001b[0m     \r\n\u001b[?7h","width":0,"height":0}
+{"timestamp":14127,"data":"\u001b]133;D;0\u0007\u001b[?25h","width":0,"height":0}
+{"timestamp":14127,"data":"\u001b[2m⏎\u001b(B\u001b[m                                                                                                                                                                           \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":14134,"data":"\u001b]0;~/p/t/s/recorder\u0007\u001b[30m\u001b(B\u001b[m\u001b]133;A;special_key=1\u0007\u001b[92mjesse\u001b(B\u001b[m@\u001b(B\u001b[mport\u001b(B\u001b[m \u001b[32m~/p/t/s/recorder\u001b(B\u001b[m (main)\u001b(B\u001b[m\u003e \u001b[K\r\u001b[36C\u001b[?2004h\u001b[=5u\u001b=","width":0,"height":0}
+{"timestamp":15480,"data":"e\r\u001b[37C","width":0,"height":0}
+{"timestamp":15480,"data":"\u001b[90mxit\u001b[30m\u001b(B\u001b[m\r\u001b[37C\b\u001b[91me\u001b[90mxit\u001b[30m\u001b(B\u001b[m\r\u001b[37C","width":0,"height":0}
+{"timestamp":15576,"data":"\u001b[91mx\u001b[90mit\u001b[30m\u001b(B\u001b[m\r\u001b[38C","width":0,"height":0}
+{"timestamp":15576,"data":"\b\bex\u001b[90mit\u001b[30m\u001b(B\u001b[m\r\u001b[38C","width":0,"height":0}
+{"timestamp":15652,"data":"i\u001b[90mt\u001b[30m\u001b(B\u001b[m\r\u001b[39C","width":0,"height":0}
+{"timestamp":15652,"data":"\b\b\b\u001b[91mexi\u001b[90mt\u001b[30m\u001b(B\u001b[m\r\u001b[39C","width":0,"height":0}
+{"timestamp":15704,"data":"\u001b[91mt\u001b[30m\u001b(B\u001b[m\r\u001b[40C\r\u001b[40C\b\b\b\bexit\r\u001b[40C","width":0,"height":0}
+{"timestamp":16260,"data":"\r\u001b[40C\r\n\u001b[30m\u001b(B\u001b[m\u001b]133;C;cmdline_url=exit\u0007","width":0,"height":0}
+{"timestamp":16260,"data":"\u001b[?2004l\u001b[=0u\u001b\u003e","width":0,"height":0}
+{"timestamp":16261,"data":"\u001b]0;exit ~/p/t/s/recorder\u0007\u001b[30m\u001b(B\u001b[m\r","width":0,"height":0}
+{"timestamp":16261,"data":"\u001b]133;D;0\u0007\u001b[?25h\u001b[30m","width":0,"height":0}
+{"timestamp":16261,"data":"\u001b(B\u001b[m","width":0,"height":0}

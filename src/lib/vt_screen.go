@@ -72,7 +72,8 @@ const (
 // hand. It implements the same small interface DisplayBuffer does (Feed,
 // Render, IsBlank), so the two are interchangeable at call sites.
 type VTScreen struct {
-	term vt10x.Terminal
+	term  vt10x.Terminal
+	carry string // the start of an escape sequence cut by the end of the last frame (see sanitizeForVT)
 }
 
 // NewVTScreen creates an empty screen at the smallest allowed size.
@@ -159,7 +160,9 @@ func MeasureSize(frames []TerminalFrame) (cols, rows int) {
 
 // Feed processes one more raw frame of terminal data.
 func (s *VTScreen) Feed(data string) {
-	_, _ = s.term.Write([]byte(data))
+	clean, carry := sanitizeForVT(s.carry, data)
+	s.carry = carry
+	_, _ = s.term.Write([]byte(clean))
 }
 
 // IsBlank reports whether nothing visible is on the screen: every cell is an

@@ -230,7 +230,7 @@ Record Options:
   -screen                         Enable screen recording (default: false)
   -output string                  Output directory (default: "./recordings")
   -name string                    Session name (default: timestamp YYYY_MM_DD_HH_MM_SS)
-  -cmd string                     Terminal command to execute (default: your current shell)
+  -cmd string                     Terminal command to execute (default: current shell, or sh if unable to detect)
   -audio-device string            Audio device (default: "default")
   -audio-codec string             Audio codec (default: "libmp3lame")
   -camera-device string           Camera device (default: "/dev/video0")

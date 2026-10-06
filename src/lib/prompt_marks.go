@@ -132,6 +132,7 @@ func groupByMarks(frames []TerminalFrame) []Command {
 		stIdle = iota
 		stPrompt
 		stRedraw // the same prompt drawn again before the command ran (resize, Ctrl-L...)
+		stAfterD // the command is over: what the shell writes now belongs to its next prompt
 		stPS2
 		stInput
 		stOutput
@@ -142,7 +143,8 @@ func groupByMarks(frames []TerminalFrame) []Command {
 		st            = stIdle
 		sawC          bool
 		sawD          bool
-		lead          strings.Builder // bytes before the first prompt
+		lead          strings.Builder // what the shell wrote before a prompt: before the first one, or after the last command ended
+		leadFrames    []TerminalFrame
 		promptB       strings.Builder
 		promptTS      TerminalFrame
 		promptHasText bool
@@ -163,8 +165,6 @@ func groupByMarks(frames []TerminalFrame) []Command {
 		// Kept if it ran, or if something was typed (a Ctrl-D at an empty prompt
 		// leaves just "exit"); an empty Enter or Ctrl-C leaves nothing.
 		if sawC || cur.InputText != "" {
-			cur.OutputText = deriveOutputText(cur.OutputFrames)
-			cur.OutputTextRaw = reconstructOutput(cur.OutputFrames)
 			commands = append(commands, *cur)
 		}
 		cur = nil
@@ -189,6 +189,7 @@ func groupByMarks(frames []TerminalFrame) []Command {
 			promptB.Reset()
 			promptB.WriteString(lead.String())
 			lead.Reset()
+			leadFrames = nil
 			promptB.WriteString(p.data)
 			promptTS = p.frame
 			promptHasText = false
@@ -214,7 +215,13 @@ func groupByMarks(frames []TerminalFrame) []Command {
 				cur.InputFrames = append(cur.InputFrames, fr) // the prompt repainted: fish does it on every keystroke
 			case cur != nil && st == stOutput:
 				cur.OutputFrames = append(cur.OutputFrames, fr)
+			case st == stAfterD:
+				lead.WriteString(p.data)
+				leadFrames = append(leadFrames, fr)
 			}
+		case p.kind == 'C' && st == stAfterD: // a second report of the same thing (a doubled mark)
+			lead.WriteString(p.data)
+			leadFrames = append(leadFrames, fr)
 		case p.kind == 'C':
 			if cur != nil {
 				cur.OutputFrames = append(cur.OutputFrames, fr)
@@ -222,10 +229,13 @@ func groupByMarks(frames []TerminalFrame) []Command {
 			}
 		case p.kind == 'D':
 			sawD = true
-			if cur != nil {
+			switch {
+			case cur != nil && st != stAfterD:
 				cur.OutputFrames = append(cur.OutputFrames, fr)
-			} else {
+				st = stAfterD
+			default:
 				lead.WriteString(p.data)
+				leadFrames = append(leadFrames, fr)
 			}
 		default: // text
 			switch st {
@@ -242,9 +252,69 @@ func groupByMarks(frames []TerminalFrame) []Command {
 				cur.InputFrames = append(cur.InputFrames, fr)
 			case stOutput:
 				cur.OutputFrames = append(cur.OutputFrames, fr)
+			case stAfterD:
+				// fish, after a command, prints a marker where the output did not end in a
+				// newline, pads the line with spaces to the terminal's width and moves on:
+				// the shell's doing, for the prompt that follows - not the command's output.
+				lead.WriteString(p.data)
+				leadFrames = append(leadFrames, fr)
 			}
 		}
 	}
+	if cur != nil && st == stAfterD { // the recording ends here: the shell's last words stay with the last command
+		cur.OutputFrames = append(cur.OutputFrames, leadFrames...)
+	}
 	finish(len(frames))
+	markTypedAhead(commands)
+	for i := range commands {
+		commands[i].OutputTextRaw = commandOutputRaw(&commands[i])
+		commands[i].OutputText = deriveOutputText(&commands[i])
+	}
 	return commands
+}
+
+// markTypedAhead finds what was typed while a command was still running. The
+// terminal echoes those keystrokes as they come, so they land in the middle of the
+// running command's output (one character per frame, at the pace of typing) - and
+// the shell reads them when the command is over and shows them again at its prompt.
+// They are the start of the NEXT command, not output of this one. A run of
+// single-character frames that spells the beginning of the next command's text is
+// such an echo; those frames stay in the recording but are left out of the text
+// taken from the output.
+func markTypedAhead(commands []Command) {
+	for i := 0; i+1 < len(commands); i++ {
+		next := commands[i+1].InputText
+		frames := commands[i].OutputFrames
+		for j := 0; j < len(frames); {
+			k, run := j, ""
+			for k < len(frames) && len(frames[k].Data) == 1 && frames[k].Data[0] >= 0x20 && frames[k].Data[0] < 0x7f {
+				run += frames[k].Data
+				k++
+			}
+			if len(run) >= 2 && strings.HasPrefix(next, run) {
+				for x := j; x < k; x++ {
+					commands[i].TypedAhead = append(commands[i].TypedAhead, x)
+				}
+			}
+			j = max(k, j+1)
+		}
+	}
+}
+
+// commandOutputRaw is what the command wrote, without the keystrokes typed while it ran.
+func commandOutputRaw(cmd *Command) string {
+	if len(cmd.TypedAhead) == 0 {
+		return reconstructOutput(cmd.OutputFrames)
+	}
+	skip := make(map[int]bool, len(cmd.TypedAhead))
+	for _, i := range cmd.TypedAhead {
+		skip[i] = true
+	}
+	var kept []TerminalFrame
+	for i, f := range cmd.OutputFrames {
+		if !skip[i] {
+			kept = append(kept, f)
+		}
+	}
+	return reconstructOutput(kept)
 }

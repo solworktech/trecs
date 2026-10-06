@@ -318,7 +318,7 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 				}
 				// Save current command
 				if currentCommand != nil && len(currentCommand.InputFrames) > 0 {
-					currentCommand.OutputText = deriveOutputText(currentCommand.OutputFrames)
+					currentCommand.OutputText = deriveOutputText(currentCommand)
 					currentCommand.OutputTextRaw = reconstructOutput(currentCommand.OutputFrames)
 					currentCommand.EndTime = frames[i-1].Timestamp
 					currentCommand.LastRawFrameIndex = i - 1
@@ -352,7 +352,7 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 	// Save last command
 	if currentCommand != nil && len(currentCommand.InputFrames) > 0 {
 		currentCommand.InputText = reconstructInput(currentCommand.InputFrames, currentCommand.PromptFrame, currentCommand.ContinuationPrompt)
-		currentCommand.OutputText = deriveOutputText(currentCommand.OutputFrames)
+		currentCommand.OutputText = deriveOutputText(currentCommand)
 		currentCommand.OutputTextRaw = reconstructOutput(currentCommand.OutputFrames)
 		if len(frames) > 0 {
 			currentCommand.EndTime = frames[len(frames)-1].Timestamp
@@ -883,7 +883,8 @@ func syncCommandFrames(cmd *Command) {
 		}
 	}
 
-	if deriveOutputText(cmd.OutputFrames) != cmd.OutputText {
+	if deriveOutputText(cmd) != cmd.OutputText {
+		cmd.TypedAhead = nil // the frames are about to be replaced
 		ts := cmd.EndTime
 		if len(cmd.OutputFrames) > 0 {
 			ts = cmd.OutputFrames[0].Timestamp
@@ -1807,6 +1808,6 @@ func dropSessionEnd(commands []Command) []Command {
 // final state, and the "fresh line" padding a shell like fish prints after every
 // command (a marker, a screenful of spaces, a CR) is not there. parse and
 // syncCommandFrames both use it: sync tells an edit from no edit by re-deriving.
-func deriveOutputText(frames []TerminalFrame) string {
-	return CleanOutput(reconstructOutput(frames))
+func deriveOutputText(cmd *Command) string {
+	return CleanOutput(commandOutputRaw(cmd))
 }

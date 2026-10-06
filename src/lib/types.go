@@ -173,6 +173,11 @@ type Command struct {
 	// otherwise. Needed to read the command back from InputFrames.
 	ContinuationPrompt string
 
+	// TypedAhead lists the OutputFrames that are the echo of keystrokes typed while
+	// the command was still running (the start of the next command), which are in
+	// the recording but not in the command's output. See markTypedAhead.
+	TypedAhead []int
+
 	// FirstRawFrameIndex/LastRawFrameIndex are indices into the original,
 	// unfiltered frame list as loaded from the recording file (the same
 	// list the player counts through during playback). They span every
