@@ -44,6 +44,22 @@ type RecordingConfig struct {
 	// Session naming
 	SessionName string // Custom session name (optional - uses timestamp if empty)
 
+	// NoMarks turns off shell integration. Normally bash, zsh and fish are started
+	// so that they mark where each prompt and each command's input and output
+	// begin and end (OSC 133), which is what lets a recording be taken apart into
+	// commands without guessing from how the prompt looks.
+	NoMarks bool
+
+	// ScriptFile names a file of commands, one per line, that the recorder types
+	// into the shell itself instead of reading a keyboard: no terminal is needed,
+	// so a recording can be made in a CI job. HumanLike types them with the
+	// pauses a person would make (otherwise each command is entered at once).
+	// Cols and Rows are the terminal's size when there is no terminal to ask
+	// (default 100x30).
+	ScriptFile string
+	HumanLike  bool
+	Cols, Rows int
+
 	// FFMpeg-based recordings
 	AudioEnabled bool
 	AudioDevice  string // e.g., "default" or "hw:0,0"

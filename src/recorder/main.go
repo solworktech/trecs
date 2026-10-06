@@ -6,26 +6,31 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"trecs/cloud"
 
 	libtrecs "trecs/lib"
 )
 
+// recordExtras are the record options for scripted sessions and shell integration.
+type recordExtras struct {
+	commandsFile *string
+	humanLike    *bool
+	cols, rows   *int
+	noMarks      *bool
+}
+
 func main() {
 	recordCmd := flag.NewFlagSet("record", flag.ExitOnError)
 	playCmd := flag.NewFlagSet("play", flag.ExitOnError)
-	var defaultOutputDir = cmp.Or(
-		os.Getenv("XDG_CONFIG_HOME"),
-		os.Getenv("HOME"),
-	)
 
 	// Record flags
 	recordTerminal := recordCmd.Bool("terminal", true, "Enable terminal recording")
 	recordAudio := recordCmd.Bool("audio", false, "Enable audio recording")
 	recordCamera := recordCmd.Bool("camera", false, "Enable camera recording")
 	recordScreen := recordCmd.Bool("screen", false, "Enable screen recording")
-	outputDir := recordCmd.String("output", defaultOutputDir+"/trecs/recordings", "Output directory")
+	outputDir := recordCmd.String("output", filepath.Join(cmp.Or(os.Getenv("XDG_CONFIG_HOME"), os.Getenv("HOME")), "trecs", "recordings"), "Output directory")
 	sessionName := recordCmd.String("name", "", "Session name (default: timestamp YYYY_MM_DD_HH_MM_SS)")
 	terminalCmd := recordCmd.String("cmd", "bash", "Terminal command to execute")
 	audioDevice := recordCmd.String("audio-device", "default", "Audio device")
@@ -36,6 +41,13 @@ func main() {
 	screenSize := recordCmd.String("screen-size", "1920x1080", "Screen resolution")
 	uploadAfter := recordCmd.Bool("upload", false, "Upload the recording when it ends (log in first with `recorder login`)")
 	uploadVisibility := recordCmd.String("visibility", "", "Visibility for -upload: private (default), unlisted or public")
+	extras := &recordExtras{
+		commandsFile: recordCmd.String("commands-file", "", "Run the commands in this file (one per line; blank lines and lines starting with # are skipped) instead of reading the keyboard. Needs no terminal, so it works in CI"),
+		humanLike:    recordCmd.Bool("human-like", false, "With -commands-file: type with the pauses a person makes, between characters and between commands (default: each command is entered at once)"),
+		cols:         recordCmd.Int("cols", 100, "Terminal width when there is no terminal to ask (-commands-file)"),
+		rows:         recordCmd.Int("rows", 30, "Terminal height when there is no terminal to ask (-commands-file)"),
+		noMarks:      recordCmd.Bool("no-marks", false, "Don't start the shell with prompt marks (OSC 133); bash, zsh and fish get them by default"),
+	}
 
 	// Play flags
 	playFile := playCmd.String("file", "", "Terminal recording file to play")
@@ -54,7 +66,7 @@ func main() {
 		}
 		runRecord(recordTerminal, recordAudio, recordCamera, recordScreen,
 			outputDir, sessionName, terminalCmd, audioDevice, audioCodec,
-			cameraDevice, cameraSize, screenDisplay, screenSize, uploadAfter, uploadVisibility)
+			cameraDevice, cameraSize, screenDisplay, screenSize, uploadAfter, uploadVisibility, extras)
 
 	case "login":
 		runLogin(os.Args[2:])
@@ -85,7 +97,12 @@ func main() {
 func runRecord(terminal, audio, camera, screen *bool,
 	outputDir, sessionName, terminalCmd, audioDevice, audioCodec,
 	cameraDevice, cameraSize, screenDisplay, screenSize *string,
-	uploadAfter *bool, uploadVisibility *string) {
+	uploadAfter *bool, uploadVisibility *string, extras *recordExtras) {
+
+	if *extras.humanLike && *extras.commandsFile == "" {
+		fmt.Fprintln(os.Stderr, "Error: -human-like only applies with -commands-file")
+		os.Exit(1)
+	}
 
 	config := &libtrecs.RecordingConfig{
 		TerminalEnabled: *terminal,
@@ -104,6 +121,11 @@ func runRecord(terminal, audio, camera, screen *bool,
 		ScreenSize:      *screenSize,
 		ScreenFramerate: "30",
 		OutputDir:       *outputDir,
+		ScriptFile:      *extras.commandsFile,
+		HumanLike:       *extras.humanLike,
+		Cols:            *extras.cols,
+		Rows:            *extras.rows,
+		NoMarks:         *extras.noMarks,
 	}
 
 	// Create and start session recorder
@@ -211,6 +233,10 @@ Record Options:
   -screen-display string          Screen display (default: ":0")
   -screen-size string             Screen resolution (default: "1920x1080")
 
+  -commands-file string           Type the commands in this file instead of reading the keyboard (CI-friendly)
+  -human-like                     With -commands-file: type with human pauses (default: instant)
+  -cols, -rows int                Terminal size for -commands-file (default 100x30)
+  -no-marks                       Don't set up shell integration (prompt marks)
   -upload                         Upload the recording when it ends (needs a login)
   -visibility string              Visibility for -upload: private (default), unlisted, public
 

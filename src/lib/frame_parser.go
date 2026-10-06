@@ -174,6 +174,13 @@ func extractPrompt(firstFrameData string) string {
 
 // groupIntoCommands organises frames into command input + output pairs
 func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error) {
+	// A recording made with shell integration says itself where everything
+	// starts and ends (see prompt_marks.go); the heuristics below are for the
+	// ones that were not.
+	if hasPromptMarks(frames) {
+		return dropSessionEnd(groupByMarks(frames)), nil
+	}
+
 	var commands []Command
 	var currentCommand *Command
 	var inputPhase = true
@@ -354,31 +361,7 @@ func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error)
 		commands = append(commands, *currentCommand)
 	}
 
-	// The last command in a Trecs recording is always "exit" (or Ctrl+D) -
-	// that's simply how the recording session was stopped, not meaningful
-	// recorded content, so it's dropped rather than shown as an editable
-	// command. This has no effect on `recorder -play`, which plays the raw
-	// frame stream directly and never groups it into commands at all; it
-	// only affects the editor's list, and consequently anything saved
-	// through it (rebuilding a recording after an edit naturally excludes
-	// whatever isn't in this list).
-	//
-	// Checked against InputText OR InputText+OutputText together: the
-	// shell's "turn off bracketed paste mode" sequence sometimes arrives
-	// as its own frame right as the final prompt reappears, gets
-	// misclassified as a complete (but empty) input on its own, and pushes
-	// the actual "exit\r\n" keystrokes into that command's output instead
-	// of its input - checking InputText alone misses that case entirely.
-	if len(commands) > 0 {
-		last := commands[len(commands)-1]
-		trimmedInput := strings.TrimSpace(last.InputText)
-		trimmedOutput := strings.TrimSpace(last.OutputText)
-		if trimmedInput == "exit" || (trimmedInput == "" && trimmedOutput == "exit") {
-			commands = commands[:len(commands)-1]
-		}
-	}
-
-	return commands, nil
+	return dropSessionEnd(commands), nil
 }
 
 // isSetupFrame detects frames that are just window title/setup, not actual commands
@@ -1759,4 +1742,33 @@ func splitTag(tag string) (fg, bg, attrs string) {
 		return parts[0], parts[1], parts[2]
 	}
 	return "-", "-", "-"
+}
+
+// dropSessionEnd removes the last command if it is just the session ending.
+func dropSessionEnd(commands []Command) []Command {
+	// The last command in a Trecs recording is always "exit" (or Ctrl+D) -
+	// that's simply how the recording session was stopped, not meaningful
+	// recorded content, so it's dropped rather than shown as an editable
+	// command. This has no effect on `recorder -play`, which plays the raw
+	// frame stream directly and never groups it into commands at all; it
+	// only affects the editor's list, and consequently anything saved
+	// through it (rebuilding a recording after an edit naturally excludes
+	// whatever isn't in this list).
+	//
+	// Checked against InputText OR InputText+OutputText together: the
+	// shell's "turn off bracketed paste mode" sequence sometimes arrives
+	// as its own frame right as the final prompt reappears, gets
+	// misclassified as a complete (but empty) input on its own, and pushes
+	// the actual "exit\r\n" keystrokes into that command's output instead
+	// of its input - checking InputText alone misses that case entirely.
+	if len(commands) > 0 {
+		last := commands[len(commands)-1]
+		trimmedInput := strings.TrimSpace(last.InputText)
+		trimmedOutput := strings.TrimSpace(last.OutputText)
+		if trimmedInput == "exit" || (trimmedInput == "" && trimmedOutput == "exit") {
+			commands = commands[:len(commands)-1]
+		}
+	}
+
+	return commands
 }

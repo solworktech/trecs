@@ -34,6 +34,13 @@ type TerminalRecorderImpl struct {
 	captureDone chan struct{}  // closed when captureAndEchoOutput has read everything the PTY had
 	oldState    *term.State    // Original terminal state (for restoration)
 	sigWinch    chan os.Signal // Window resize signal handler
+
+	interactive bool          // a person at a terminal, as opposed to a scripted session
+	marks       bool          // the shell was started with prompt marks (see shellint.go)
+	cleanup     func()        // removes the shell integration's temporary files
+	promptCh    chan struct{} // signalled when a prompt ends (mark B): the shell is ready
+	lastOutput  int64         // unix nanos of the shell's last output
+	markTail    string        // the end of the last read, for a mark cut between two
 }
 
 // NewTerminalRecorder creates a new terminal recorder
@@ -49,6 +56,7 @@ func NewTerminalRecorder(config *libtrecs.RecordingConfig, outputPath string) (*
 		encoder:    json.NewEncoder(file),
 		frames:     make(chan libtrecs.Frame, 100),
 		done:       make(chan struct{}),
+		promptCh:   make(chan struct{}, 1),
 	}, nil
 }
 
@@ -63,12 +71,27 @@ func (tr *TerminalRecorderImpl) Start() error {
 
 	tr.startTime = time.Now()
 
-	// Set stdin to raw mode so special keys (Tab, Ctrl+R, etc.) are forwarded to PTY
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		return fmt.Errorf("failed to set terminal to raw mode: %w", err)
+	// A scripted session (-commands-file) types the commands itself and needs no
+	// terminal: it can run where there is none, in a CI job.
+	var script []string
+	if tr.config.ScriptFile != "" {
+		var err error
+		if script, err = readScript(tr.config.ScriptFile); err != nil {
+			return fmt.Errorf("commands file: %w", err)
+		}
+	} else if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return fmt.Errorf("standard input is not a terminal: use -commands-file to record without one")
 	}
-	tr.oldState = oldState
+	tr.interactive = tr.config.ScriptFile == ""
+
+	// Set stdin to raw mode so special keys (Tab, Ctrl+R, etc.) are forwarded to PTY
+	if tr.interactive {
+		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+		if err != nil {
+			return fmt.Errorf("failed to set terminal to raw mode: %w", err)
+		}
+		tr.oldState = oldState
+	}
 
 	// Parse shell command
 	shell := tr.config.TerminalCommand
@@ -76,8 +99,19 @@ func (tr *TerminalRecorderImpl) Start() error {
 		shell = "bash"
 	}
 
+	// Start the shell so that it marks where prompts and commands begin and end.
+	var shellArgs, shellEnv []string
+	if !tr.config.NoMarks {
+		switch integ, err := setupShellIntegration(shell); {
+		case err != nil:
+			fmt.Fprintf(os.Stderr, "recorder: shell integration unavailable (%v); recording without prompt marks\n", err)
+		case integ != nil:
+			shellArgs, shellEnv, tr.cleanup, tr.marks = integ.args, integ.env, integ.cleanup, true
+		}
+	}
+
 	// Create command with shell
-	tr.cmd = exec.Command(shell)
+	tr.cmd = exec.Command(shell, shellArgs...)
 
 	// Set environment to prevent excessive terminal capability queries
 	// that get recorded and cause garbage during playback
@@ -98,9 +132,15 @@ func (tr *TerminalRecorderImpl) Start() error {
 	}
 
 	// Use pty.Start which creates PTY and properly sets up process group and TTY control
+	tr.cmd.Env = append(tr.cmd.Env, shellEnv...)
 	ptmx, err := pty.Start(tr.cmd)
 	if err != nil {
-		_ = term.Restore(int(os.Stdin.Fd()), tr.oldState) // Ignore error
+		if tr.oldState != nil {
+			_ = term.Restore(int(os.Stdin.Fd()), tr.oldState) // Ignore error
+		}
+		if tr.cleanup != nil {
+			tr.cleanup()
+		}
 		return fmt.Errorf("failed to start shell: %w", err)
 	}
 	tr.ptmx = ptmx
@@ -132,7 +172,11 @@ func (tr *TerminalRecorderImpl) Start() error {
 	go tr.handleWindowResize()
 
 	// Start goroutine that forwards stdin to PTY (user input)
-	go tr.forwardInput()
+	if tr.interactive {
+		go tr.forwardInput()
+	} else {
+		go tr.feedScript(script)
+	}
 
 	// Start capturing and echoing output
 	tr.captureDone = make(chan struct{})
@@ -163,10 +207,16 @@ func (tr *TerminalRecorderImpl) setWindowSize() (width, height int, err error) {
 		return 0, 0, nil
 	}
 
-	// Get the current window size from stdin
-	width, height, err = term.GetSize(int(os.Stdin.Fd()))
-	if err != nil {
-		return 0, 0, err
+	// Get the current window size from stdin - or, for a scripted session, which
+	// has no terminal to ask, from the configuration (the same every time, so a
+	// recording made in CI looks like the one made on a laptop).
+	if tr.interactive {
+		width, height, err = term.GetSize(int(os.Stdin.Fd()))
+		if err != nil {
+			return 0, 0, err
+		}
+	} else {
+		width, height = cmpOr(tr.config.Cols, 100), cmpOr(tr.config.Rows, 30)
 	}
 
 	// Set the PTY window size
@@ -210,6 +260,7 @@ func (tr *TerminalRecorderImpl) captureAndEchoOutput() {
 		if n > 0 {
 			// Convert bytes to string
 			data := string(buffer[:n])
+			tr.noteOutput(data)
 
 			// Remove DCS (Device Control String) sequences that cause playback issues
 			// Pattern: ESC P ... ESC \
@@ -251,6 +302,10 @@ func (tr *TerminalRecorderImpl) Stop() error {
 	// Restore terminal to original state
 	if tr.oldState != nil {
 		_ = term.Restore(int(os.Stdin.Fd()), tr.oldState) // Ignore error
+	}
+
+	if tr.cleanup != nil {
+		tr.cleanup()
 	}
 
 	// Terminate the shell process
@@ -299,4 +354,12 @@ func filterDCSSequences(data string) string {
 	// Remove DCS sequences: ESC P ... ESC backslash
 	re := regexp.MustCompile(`\x1bP[^\x1b]*\x1b\\`)
 	return re.ReplaceAllString(data, "")
+}
+
+// cmpOr returns v, or fallback if v is zero.
+func cmpOr(v, fallback int) int {
+	if v != 0 {
+		return v
+	}
+	return fallback
 }
