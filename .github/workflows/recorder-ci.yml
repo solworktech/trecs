@@ -79,6 +79,7 @@ jobs:
     name: record (${{ matrix.os }}, ${{ matrix.shell }})
     needs: build
     runs-on: ${{ matrix.os }}
+    environment: Trecs-GH-Actions
     strategy:
       fail-fast: false
       matrix:
@@ -87,7 +88,24 @@ jobs:
         shell: [auto, bash, zsh, fish]
     env:
       SHELL_UNDER_TEST: ${{ matrix.shell }}
+      # secret or variable, whichever you made; here, after `environment:` has been applied
+      TRECS_SERVER: ${{ secrets.TRECS_SERVER || vars.TRECS_SERVER }}
+      TRECS_EMAIL: ${{ secrets.TRECS_EMAIL || vars.TRECS_EMAIL }}
     steps:
+      - name: Check the configuration reached this job
+        shell: bash
+        env:
+          TRECS_PASSWORD: ${{ secrets.TRECS_PASSWORD }}
+        run: |
+          missing=()
+          [ -n "$TRECS_PASSWORD" ] || missing+=(TRECS_PASSWORD)
+          [ -n "$TRECS_EMAIL" ] || missing+=(TRECS_EMAIL)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Empty: ${missing[*]}. They must be in the environment named on this job (Settings > Environments), or at repository level."
+            exit 1
+          fi
+          echo "server: $TRECS_SERVER"
+
       - uses: actions/checkout@v4
 
       - name: Names for this run
