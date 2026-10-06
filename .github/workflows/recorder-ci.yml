@@ -94,8 +94,11 @@ jobs:
     steps:
       - name: Check the configuration reached this job
         shell: bash
+        working-directory: .
         env:
           TRECS_PASSWORD: ${{ secrets.TRECS_PASSWORD }}
+          TRECS_EMAIL: ${{ secrets.TRECS_EMAIL }}
+          TRECS_SERVER: ${{ secrets.TRECS_SERVER }}
         run: |
           missing=()
           [ -n "$TRECS_PASSWORD" ] || missing+=(TRECS_PASSWORD)
