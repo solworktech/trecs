@@ -1,0 +1,52 @@
+{"type":"meta","width":120,"height":30}
+{"timestamp":6,"data":"\u001b[?u\u001b[\u003e0q\u001b[?1049h\u001b[?1049l\u001b[0c","width":0,"height":0}
+{"timestamp":2009,"data":"warning: fish could not read response to primary device attribute query after waiting for 2 seconds. This is often due to a missing feature in your terminal. See 'help terminal-compatibility' or 'man fish-terminal-compatibility'. This fish process will no longer wait for outstanding queries, which disables some optional features.\r\n","width":0,"height":0}
+{"timestamp":2010,"data":"Welcome to fish, the friendly interactive shell\r\nType \u001b[32mhelp\u001b[m for instructions on how to use fish\r\n","width":0,"height":0}
+{"timestamp":2015,"data":"\u001b]7;file://vm/tmp\u0007","width":0,"height":0}
+{"timestamp":2024,"data":"\u001b]0;/tmp\u0007\u001b[m","width":0,"height":0}
+{"timestamp":2024,"data":"\u001b[?2004h\u001b[\u003e4;1m\u001b=","width":0,"height":0}
+{"timestamp":2024,"data":"\u001b]133;A;click_events=1\u0007\u001b]133;A\u0007\u001b[92mroot\u001b[m@\u001b[mvm\u001b[m \u001b[31m/tmp\u001b[m\u001b[m# \u001b]133;B\u0007\r\u001b[14C","width":0,"height":0}
+{"timestamp":2024,"data":"ls \r\u001b[17C","width":0,"height":0}
+{"timestamp":2025,"data":"\u001b[?2004l\u001b[\u003e4;0m\u001b\u003e/etc/hostname\r\u001b[30C\u001b[16Dls \u001b[36m/etc/hostname\u001b[m\r\u001b[30C\r\n\u001b[m\u001b]133;C;cmdline_url=ls%20/etc/hostname\u0007\u001b]133;C\u0007\u001b]0;ls /etc/hostname /tmp\u0007\u001b[m\r","width":0,"height":0}
+{"timestamp":2031,"data":"/etc/hostname\r\n","width":0,"height":0}
+{"timestamp":2031,"data":"\u001b]133;D;0\u0007","width":0,"height":0}
+{"timestamp":2031,"data":"\u001b]133;D;0\u0007","width":0,"height":0}
+{"timestamp":2031,"data":"\u001b[?25h","width":0,"height":0}
+{"timestamp":2031,"data":"\u001b[2m⏎\u001b[m                                                                                                                       \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":2035,"data":"\u001b]0;/tmp\u0007\u001b[m","width":0,"height":0}
+{"timestamp":2035,"data":"\u001b[?2004h\u001b[\u003e4;1m\u001b=","width":0,"height":0}
+{"timestamp":2035,"data":"\u001b]133;A;click_events=1\u0007\u001b]133;A\u0007\u001b[92mroot\u001b[m@\u001b[mvm\u001b[m \u001b[31m/tmp\u001b[m\u001b[m# \u001b]133;B\u0007\u001b[K\r\u001b[14C","width":0,"height":0}
+{"timestamp":2036,"data":"echo \r\u001b[19C","width":0,"height":0}
+{"timestamp":2036,"data":"hello \r\u001b[25C","width":0,"height":0}
+{"timestamp":2037,"data":"\u001b[?2004l\u001b[\u003e4;0m\u001b\u003e","width":0,"height":0}
+{"timestamp":2037,"data":"world\r\u001b[30C","width":0,"height":0}
+{"timestamp":2037,"data":"\u001b[16Decho \u001b[36mhello\u001b[m \u001b[36mworld\u001b[m\r\u001b[30C","width":0,"height":0}
+{"timestamp":2037,"data":"\r\n","width":0,"height":0}
+{"timestamp":2037,"data":"\u001b[m","width":0,"height":0}
+{"timestamp":2037,"data":"\u001b]133;C;cmdline_url=echo%20hello%20world\u0007","width":0,"height":0}
+{"timestamp":2037,"data":"\u001b]133;C\u0007","width":0,"height":0}
+{"timestamp":2038,"data":"\u001b]0;echo hello world /tmp\u0007\u001b[m\r","width":0,"height":0}
+{"timestamp":2038,"data":"hello world\r\n","width":0,"height":0}
+{"timestamp":2038,"data":"\u001b]133;D;0\u0007","width":0,"height":0}
+{"timestamp":2038,"data":"\u001b]133;D;0\u0007\u001b[?25h\u001b[2m⏎\u001b[m                                                                                                                       \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":2041,"data":"\u001b]0;/tmp\u0007\u001b[m","width":0,"height":0}
+{"timestamp":2041,"data":"\u001b[?2004h\u001b[\u003e4;1m\u001b=","width":0,"height":0}
+{"timestamp":2041,"data":"\u001b]133;A;click_events=1\u0007\u001b]133;A\u0007\u001b[92mroot\u001b[m@\u001b[mvm\u001b[m \u001b[31m/tmp\u001b[m\u001b[m# \u001b]133;B\u0007\u001b[K\r\u001b[14C","width":0,"height":0}
+{"timestamp":2042,"data":"printf \r\u001b[21C","width":0,"height":0}
+{"timestamp":2042,"data":"'%s\\n' \r\u001b[28C","width":0,"height":0}
+{"timestamp":2042,"data":"one \r\u001b[32C","width":0,"height":0}
+{"timestamp":2042,"data":"\u001b[?2004l\u001b[\u003e4;0m\u001b\u003e","width":0,"height":0}
+{"timestamp":2043,"data":"two\r\u001b[35C","width":0,"height":0}
+{"timestamp":2043,"data":"\u001b[21Dprintf \u001b[33m'%s\\n'\u001b[m \u001b[36mone\u001b[m \u001b[36mtwo\u001b[m\r\u001b[35C","width":0,"height":0}
+{"timestamp":2043,"data":"\r\n","width":0,"height":0}
+{"timestamp":2043,"data":"\u001b[m","width":0,"height":0}
+{"timestamp":2043,"data":"\u001b]133;C;cmdline_url=printf%20%27%25s%5Cn%27%20one%20two\u0007","width":0,"height":0}
+{"timestamp":2043,"data":"\u001b]133;C\u0007","width":0,"height":0}
+{"timestamp":2044,"data":"\u001b]0;printf '%s\\n' one tw /tmp\u0007\u001b[m\r","width":0,"height":0}
+{"timestamp":2044,"data":"one\r\ntwo\r\n\u001b]133;D;0\u0007\u001b]133;D;0\u0007\u001b[?25h\u001b[2m⏎\u001b[m                                                                                                                       \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":2047,"data":"\u001b]0;/tmp\u0007\u001b[m","width":0,"height":0}
+{"timestamp":2047,"data":"\u001b[?2004h\u001b[\u003e4;1m\u001b=","width":0,"height":0}
+{"timestamp":2047,"data":"\u001b]133;A;click_events=1\u0007\u001b]133;A\u0007\u001b[92mroot\u001b[m@\u001b[mvm\u001b[m \u001b[31m/tmp\u001b[m\u001b[m# \u001b]133;B\u0007\u001b[K\r\u001b[14C","width":0,"height":0}
+{"timestamp":2047,"data":"echo \r\u001b[19C","width":0,"height":0}
+{"timestamp":2048,"data":"\"multi\r\n\u001b[K\u001b[A\r\n\u001b[14C","width":0,"height":0}
+{"timestamp":2048,"data":"\u001b[Aecho \u001b[91m\"\u001b[33mmulti\u001b[m\r\r\n\u001b[14C","width":0,"height":0}

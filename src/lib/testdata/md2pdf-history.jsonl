@@ -1,0 +1,36 @@
+{"type":"meta","width":172,"height":38}
+{"timestamp":17,"data":"\u001b[?2004h\u001b]0;jesse@port: ~/projects/trecs/src/recorder\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src/recorder\u001b[00m$ ","width":0,"height":0}
+{"timestamp":959,"data":"\u001b[7mmd2pdf -author \"Jesse Portnoy\" -i \\\u001b[27m\r\n\r\u001b[7m    https://github.com/solworktech/md2pdf/raw/refs/heads/master/README.md -o md2pdf.pdf \\\u001b[27m\r\n\r\u001b[7m    -theme dark -title \"Deb packages\" -with-footer\u001b[27m","width":0,"height":0}
+{"timestamp":1611,"data":"\u001b[A\u001b[A\b\b\b\b\b\b\b\bmd2pdf -author \"Jesse Portnoy\" -i \\\r\n\r    https://github.com/solworktech/md2pdf/raw/refs/heads/master/README.md -o md2pdf.pdf \\\r\n\r    -theme dark -title \"Deb packages\" -with-footer\r\n","width":0,"height":0}
+{"timestamp":1611,"data":"\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":5780,"data":"Downloaded image to: /tmp/md2pdf/badge.svg\r\n","width":0,"height":0}
+{"timestamp":5832,"data":"\u001b[36mINFO\u001b[0m[0004] Chrome version 151.0.7922.173                \r\n","width":0,"height":0}
+{"timestamp":9153,"data":"Redirected to: https://pkg.go.dev/badge/github.com/solworktech/md2pdf?utm_source=godoc\r\n","width":0,"height":0}
+{"timestamp":11474,"data":"Downloaded image to: /tmp/md2pdf/md2pdf?status.svg\r\n","width":0,"height":0}
+{"timestamp":11517,"data":"\u001b[36mINFO\u001b[0m[0009] Chrome version 151.0.7922.173                \r\n","width":0,"height":0}
+{"timestamp":15176,"data":"Downloaded image to: /tmp/md2pdf/md2pdf.svg\r\n","width":0,"height":0}
+{"timestamp":15250,"data":"\u001b[36mINFO\u001b[0m[0013] Chrome version 151.0.7922.173                \r\n","width":0,"height":0}
+{"timestamp":16062,"data":"\u001b[?2004h\u001b]0;jesse@port: ~/projects/trecs/src/recorder\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src/recorder\u001b[00m$ ","width":0,"height":0}
+{"timestamp":17386,"data":"\u001b[7mwget https://github.com/jessp01/crash-course-in/raw/refs/heads/main/courses/apt_dpkg_deb/apt_dpkg_deb.md -P ~/docs\u001b[27m","width":0,"height":0}
+{"timestamp":17915,"data":"\r\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[Cwget https://github.com/jessp01/crash-course-in/raw/refs/heads/main/courses/apt_dpkg_deb/apt_dpkg_deb.md -P ~/docs\r\n\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":17926,"data":"--2026-10-05 22:25:40--  https://github.com/jessp01/crash-course-in/raw/refs/heads/main/courses/apt_dpkg_deb/apt_dpkg_deb.md\r\n","width":0,"height":0}
+{"timestamp":17944,"data":"Resolving github.com (github.com)... ","width":0,"height":0}
+{"timestamp":17950,"data":"64:ff9b::141a:9cd7, 20.26.156.215\r\nConnecting to github.com (github.com)|64:ff9b::141a:9cd7|:443... ","width":0,"height":0}
+{"timestamp":17969,"data":"connected.\r\n","width":0,"height":0}
+{"timestamp":18098,"data":"HTTP request sent, awaiting response... ","width":0,"height":0}
+{"timestamp":18388,"data":"302 Found\r\n","width":0,"height":0}
+{"timestamp":18388,"data":"Location: https://raw.githubusercontent.com/jessp01/crash-course-in/refs/heads/main/courses/apt_dpkg_deb/apt_dpkg_deb.md [following]\r\n--2026-10-05 22:25:40--  https://raw.githubusercontent.com/jessp01/crash-course-in/refs/heads/main/courses/apt_dpkg_deb/apt_dpkg_deb.md\r\n","width":0,"height":0}
+{"timestamp":18388,"data":"Resolving raw.githubusercontent.com (raw.githubusercontent.com)... ","width":0,"height":0}
+{"timestamp":18395,"data":"2606:50c0:8003::154, 2606:50c0:8000::154, 2606:50c0:8001::154, ...\r\n","width":0,"height":0}
+{"timestamp":18396,"data":"Connecting to raw.githubusercontent.com (raw.githubusercontent.com)|2606:50c0:8003::154|:443... ","width":0,"height":0}
+{"timestamp":18419,"data":"connected.\r\n","width":0,"height":0}
+{"timestamp":18475,"data":"HTTP request sent, awaiting response... ","width":0,"height":0}
+{"timestamp":18789,"data":"200 OK\r\n","width":0,"height":0}
+{"timestamp":18789,"data":"Length: 16604","width":0,"height":0}
+{"timestamp":18789,"data":" (16K) [text/plain]\r\n","width":0,"height":0}
+{"timestamp":18791,"data":"Saving to: ‘/home/jesse/docs/apt_dpkg_deb.md.2’\r\n\r\n\r","width":0,"height":0}
+{"timestamp":18791,"data":"apt_dpkg_deb.md.2                            0%[                                                                                         ]       0  --.-KB/s               ","width":0,"height":0}
+{"timestamp":18838,"data":"\rapt_dpkg_deb.md.2                          100%[========================================================================================\u003e]  16.21K  --.-KB/s    in 0.05s   \r\n\r\n2026-10-05 22:25:40 (344 KB/s) - ‘/home/jesse/docs/apt_dpkg_deb.md.2’ saved [16604/16604]\r\n\r\n","width":0,"height":0}
+{"timestamp":18842,"data":"\u001b[?2004h","width":0,"height":0}
+{"timestamp":18842,"data":"\u001b]0;jesse@port: ~/projects/trecs/src/recorder\u0007\u001b[01;32mjesse@port\u001b[00m:\u001b[01;34m~/projects/trecs/src/recorder\u001b[00m$ ","width":0,"height":0}
+{"timestamp":20016,"data":"\u001b[?2004l\r\r\nexit\r\n","width":0,"height":0}

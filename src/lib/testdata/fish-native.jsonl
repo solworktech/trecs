@@ -1,0 +1,125 @@
+{"type":"meta","width":120,"height":30}
+{"timestamp":6,"data":"\u001b[?u\u001b[\u003e0q\u001b[?1049h\u001b[?1049l\u001b[0c","width":0,"height":0}
+{"timestamp":8413,"data":"warning: fish could not read response to primary device attribute query after waiting for 2 seconds. This is often due to a missing feature in your terminal. See 'help terminal-compatibility' or 'man fish-terminal-compatibility'. This fish process will no longer wait for outstanding queries, which disables some optional features.\r\n","width":0,"height":0}
+{"timestamp":8445,"data":"Welcome to fish, the friendly interactive shell\r\nType \u001b[32mhelp\u001b[m for instructions on how to use fish\r\n","width":0,"height":0}
+{"timestamp":8451,"data":"\u001b]7;file://vm/tmp\u0007","width":0,"height":0}
+{"timestamp":8469,"data":"\u001b]0;/tmp\u0007\u001b[m","width":0,"height":0}
+{"timestamp":8469,"data":"\u001b[?2004h\u001b[\u003e4;1m\u001b=","width":0,"height":0}
+{"timestamp":8469,"data":"\u001b]133;A;click_events=1\u0007\u001b[92mroot\u001b[m@\u001b[mvm\u001b[m \u001b[31m/tmp\u001b[m\u001b[m# \r\u001b[14C","width":0,"height":0}
+{"timestamp":8471,"data":"l\r\u001b[15C","width":0,"height":0}
+{"timestamp":8471,"data":"s\r\u001b[16C \r\u001b[17C/\r\u001b[18Ce\r\u001b[19Ct\r\u001b[20Cc\r\u001b[21C/\r\u001b[22Ch\r\u001b[23Co\r\u001b[24Cs\r\u001b[25Ct\r\u001b[26Cn\r\u001b[27Ca\r\u001b[28Cm\r\u001b[29Ce\r\u001b[30C\u001b[?2004l\u001b[\u003e4;0m\u001b\u003e\r\n\u001b[m\u001b]133;C;cmdline_url=ls%20/etc/hostname\u0007\u001b]0;ls /etc/hostname /tmp\u0007\u001b[m\r","width":0,"height":0}
+{"timestamp":8477,"data":"/etc/hostname\r\n","width":0,"height":0}
+{"timestamp":8477,"data":"\u001b]133;D;0\u0007","width":0,"height":0}
+{"timestamp":8477,"data":"\u001b[?25h","width":0,"height":0}
+{"timestamp":8477,"data":"\u001b[2m⏎\u001b[m                                                                                                                       \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":8481,"data":"\u001b]0;/tmp\u0007\u001b[m","width":0,"height":0}
+{"timestamp":8481,"data":"\u001b[?2004h\u001b[\u003e4;1m\u001b=","width":0,"height":0}
+{"timestamp":8481,"data":"\u001b]133;A;click_events=1\u0007\u001b[92mroot\u001b[m@\u001b[mvm\u001b[m \u001b[31m/tmp\u001b[m\u001b[m# \u001b[K\r\u001b[14C","width":0,"height":0}
+{"timestamp":8482,"data":"e\r\u001b[15C","width":0,"height":0}
+{"timestamp":8482,"data":"c\r\u001b[16C","width":0,"height":0}
+{"timestamp":8482,"data":"h\r\u001b[17C","width":0,"height":0}
+{"timestamp":8482,"data":"o\r\u001b[18C","width":0,"height":0}
+{"timestamp":8482,"data":" \r\u001b[19C","width":0,"height":0}
+{"timestamp":8483,"data":"h\r\u001b[20C","width":0,"height":0}
+{"timestamp":8483,"data":"e\r\u001b[21C","width":0,"height":0}
+{"timestamp":8484,"data":"l\r\u001b[22C","width":0,"height":0}
+{"timestamp":8484,"data":"l\r\u001b[23C","width":0,"height":0}
+{"timestamp":8484,"data":"o\r\u001b[24C","width":0,"height":0}
+{"timestamp":8485,"data":" \r\u001b[25C","width":0,"height":0}
+{"timestamp":8485,"data":"w\r\u001b[26C","width":0,"height":0}
+{"timestamp":8485,"data":"o\r\u001b[27C","width":0,"height":0}
+{"timestamp":8485,"data":"r\r\u001b[28C","width":0,"height":0}
+{"timestamp":8485,"data":"l\r\u001b[29C","width":0,"height":0}
+{"timestamp":8486,"data":"d\r\u001b[30C","width":0,"height":0}
+{"timestamp":8487,"data":"\u001b[?2004l\u001b[\u003e4;0m\u001b\u003e","width":0,"height":0}
+{"timestamp":8487,"data":"\u001b[16Decho \u001b[36mhello\u001b[m \u001b[36mworld\u001b[m\r\u001b[30C","width":0,"height":0}
+{"timestamp":8487,"data":"\r\n","width":0,"height":0}
+{"timestamp":8487,"data":"\u001b[m","width":0,"height":0}
+{"timestamp":8487,"data":"\u001b]133;C;cmdline_url=echo%20hello%20world\u0007","width":0,"height":0}
+{"timestamp":8488,"data":"\u001b]0;echo hello world /tmp\u0007\u001b[m\r","width":0,"height":0}
+{"timestamp":8488,"data":"hello world\r\n","width":0,"height":0}
+{"timestamp":8488,"data":"\u001b]133;D;0\u0007","width":0,"height":0}
+{"timestamp":8488,"data":"\u001b[?25h","width":0,"height":0}
+{"timestamp":8488,"data":"\u001b[2m⏎\u001b[m                                                                                                                       \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":8493,"data":"\u001b]0;/tmp\u0007\u001b[m","width":0,"height":0}
+{"timestamp":8493,"data":"\u001b[?2004h\u001b[\u003e4;1m\u001b=\u001b]133;A;click_events=1\u0007\u001b[92mroot\u001b[m@\u001b[mvm\u001b[m \u001b[31m/tmp\u001b[m\u001b[m# \u001b[K\r\u001b[14Cp\r\u001b[15Cr\r\u001b[16Ci\r\u001b[17Cn\r\u001b[18Ct\r\u001b[19Cf\r\u001b[20C \r\u001b[21C'\r\u001b[22C%\r\u001b[23Cs\r\u001b[24C\\\r\u001b[25Cn\r\u001b[26C'\r\u001b[27C \r\u001b[28Co\r\u001b[29Cn\r\u001b[30Ce\r\u001b[31C \r\u001b[32Ct\r\u001b[33Cw\r\u001b[34Co\r\u001b[35C\u001b[?2004l\u001b[\u003e4;0m\u001b\u003e","width":0,"height":0}
+{"timestamp":8493,"data":"\u001b[21Dprintf \u001b[33m'%s\\n'\u001b[m \u001b[36mone\u001b[m \u001b[36mtwo\u001b[m\r\u001b[35C","width":0,"height":0}
+{"timestamp":8493,"data":"\r\n","width":0,"height":0}
+{"timestamp":8493,"data":"\u001b[m","width":0,"height":0}
+{"timestamp":8493,"data":"\u001b]133;C;cmdline_url=printf%20%27%25s%5Cn%27%20one%20two\u0007","width":0,"height":0}
+{"timestamp":8494,"data":"\u001b]0;printf '%s\\n' one tw /tmp\u0007\u001b[m\r","width":0,"height":0}
+{"timestamp":8494,"data":"one\r\n","width":0,"height":0}
+{"timestamp":8494,"data":"two\r\n","width":0,"height":0}
+{"timestamp":8494,"data":"\u001b]133;D;0\u0007","width":0,"height":0}
+{"timestamp":8494,"data":"\u001b[?25h","width":0,"height":0}
+{"timestamp":8494,"data":"\u001b[2m⏎\u001b[m                                                                                                                       \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":8498,"data":"\u001b]0;/tmp\u0007\u001b[m","width":0,"height":0}
+{"timestamp":8498,"data":"\u001b[?2004h\u001b[\u003e4;1m\u001b=","width":0,"height":0}
+{"timestamp":8498,"data":"\u001b]133;A;click_events=1\u0007\u001b[92mroot\u001b[m@\u001b[mvm\u001b[m \u001b[31m/tmp\u001b[m\u001b[m# \u001b[K\r\u001b[14C","width":0,"height":0}
+{"timestamp":8498,"data":"e\r\u001b[15C","width":0,"height":0}
+{"timestamp":8498,"data":"c\r\u001b[16C","width":0,"height":0}
+{"timestamp":8498,"data":"h\r\u001b[17C","width":0,"height":0}
+{"timestamp":8499,"data":"o\r\u001b[18C","width":0,"height":0}
+{"timestamp":8499,"data":" \r\u001b[19C","width":0,"height":0}
+{"timestamp":8499,"data":"\"\r\u001b[20C","width":0,"height":0}
+{"timestamp":8499,"data":"m\r\u001b[21C","width":0,"height":0}
+{"timestamp":8500,"data":"u\r\u001b[22Cl\r\u001b[23Ct\r\u001b[24Ci\r\u001b[25C\r\n\u001b[K\u001b[A\r\n\u001b[14Cl\u001b[A\r\r\n\u001b[15Ci\u001b[A\r\r\n\u001b[16Cn\u001b[A\r\r\n\u001b[17Ce\u001b[A\r\r\n\u001b[18C\"\u001b[A\r\r\n\u001b[19C","width":0,"height":0}
+{"timestamp":8500,"data":"\u001b[?2004l\u001b[\u003e4;0m\u001b\u003e","width":0,"height":0}
+{"timestamp":8500,"data":"\u001b[A\u001b[5Decho \u001b[33m\"multi\u001b[m\r\n\u001b[14C\u001b[33mline\"\u001b[m\u001b[A\r\r\n\u001b[19C","width":0,"height":0}
+{"timestamp":8500,"data":"\r\n","width":0,"height":0}
+{"timestamp":8500,"data":"\u001b[m","width":0,"height":0}
+{"timestamp":8500,"data":"\u001b]133;C;cmdline_url=echo%20%22multi%0Aline%22\u0007","width":0,"height":0}
+{"timestamp":8501,"data":"\u001b]0;echo \"multi line\" /tmp\u0007\u001b[m\r","width":0,"height":0}
+{"timestamp":8501,"data":"multi\r\nline\r\n","width":0,"height":0}
+{"timestamp":8501,"data":"\u001b]133;D;0\u0007","width":0,"height":0}
+{"timestamp":8501,"data":"\u001b[?25h","width":0,"height":0}
+{"timestamp":8501,"data":"\u001b[2m⏎\u001b[m                                                                                                                       \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":8505,"data":"\u001b]0;/tmp\u0007\u001b[m","width":0,"height":0}
+{"timestamp":8505,"data":"\u001b[?2004h\u001b[\u003e4;1m\u001b=\u001b]133;A;click_events=1\u0007\u001b[92mroot\u001b[m@\u001b[mvm\u001b[m \u001b[31m/tmp\u001b[m\u001b[m# \u001b[K\r\u001b[14Ct\r\u001b[15Cr\r\u001b[16Cu\r\u001b[17C","width":0,"height":0}
+{"timestamp":8505,"data":"e\r\u001b[18C","width":0,"height":0}
+{"timestamp":8505,"data":"\u001b[?2004l\u001b[\u003e4;0m\u001b\u003e","width":0,"height":0}
+{"timestamp":8505,"data":"\u001b[4Dtrue\r\u001b[18C","width":0,"height":0}
+{"timestamp":8506,"data":"\r\n","width":0,"height":0}
+{"timestamp":8506,"data":"\u001b[m","width":0,"height":0}
+{"timestamp":8506,"data":"\u001b]133;C;cmdline_url=true\u0007","width":0,"height":0}
+{"timestamp":8506,"data":"\u001b]0;true /tmp\u0007\u001b[m\r","width":0,"height":0}
+{"timestamp":8506,"data":"\u001b]133;D;0\u0007","width":0,"height":0}
+{"timestamp":8507,"data":"\u001b[?25h","width":0,"height":0}
+{"timestamp":8507,"data":"\u001b[2m⏎\u001b[m                                                                                                                       \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":8510,"data":"\u001b]0;/tmp\u0007\u001b[m","width":0,"height":0}
+{"timestamp":8510,"data":"\u001b[?2004h\u001b[\u003e4;1m\u001b=","width":0,"height":0}
+{"timestamp":8510,"data":"\u001b]133;A;click_events=1\u0007\u001b[92mroot\u001b[m@\u001b[mvm\u001b[m \u001b[31m/tmp\u001b[m\u001b[m# \u001b[K\r\u001b[14C","width":0,"height":0}
+{"timestamp":8510,"data":"e\r\u001b[15C","width":0,"height":0}
+{"timestamp":8510,"data":"c\r\u001b[16C","width":0,"height":0}
+{"timestamp":8510,"data":"h\r\u001b[17C","width":0,"height":0}
+{"timestamp":8511,"data":"o\r\u001b[18C","width":0,"height":0}
+{"timestamp":8511,"data":" \r\u001b[19C","width":0,"height":0}
+{"timestamp":8511,"data":"d\r\u001b[20C","width":0,"height":0}
+{"timestamp":8511,"data":"o\r\u001b[21C","width":0,"height":0}
+{"timestamp":8511,"data":"n\r\u001b[22C","width":0,"height":0}
+{"timestamp":8511,"data":"e\r\u001b[23C","width":0,"height":0}
+{"timestamp":8512,"data":"\u001b[?2004l\u001b[\u003e4;0m\u001b\u003e","width":0,"height":0}
+{"timestamp":8512,"data":"\u001b[9Decho \u001b[36mdone\u001b[m\r\u001b[23C","width":0,"height":0}
+{"timestamp":8512,"data":"\r\n","width":0,"height":0}
+{"timestamp":8512,"data":"\u001b[m","width":0,"height":0}
+{"timestamp":8512,"data":"\u001b]133;C;cmdline_url=echo%20done\u0007","width":0,"height":0}
+{"timestamp":8513,"data":"\u001b]0;echo done /tmp\u0007\u001b[m\r","width":0,"height":0}
+{"timestamp":8513,"data":"done\r\n","width":0,"height":0}
+{"timestamp":8513,"data":"\u001b]133;D;0\u0007","width":0,"height":0}
+{"timestamp":8513,"data":"\u001b[?25h","width":0,"height":0}
+{"timestamp":8513,"data":"\u001b[2m⏎\u001b[m                                                                                                                       \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":8517,"data":"\u001b]0;/tmp\u0007\u001b[m","width":0,"height":0}
+{"timestamp":8517,"data":"\u001b[?2004h\u001b[\u003e4;1m\u001b=","width":0,"height":0}
+{"timestamp":8517,"data":"\u001b]133;A;click_events=1\u0007\u001b[92mroot\u001b[m@\u001b[mvm\u001b[m \u001b[31m/tmp\u001b[m\u001b[m# \u001b[K\r\u001b[14C","width":0,"height":0}
+{"timestamp":8517,"data":"e\r\u001b[15C","width":0,"height":0}
+{"timestamp":8517,"data":"x\r\u001b[16C","width":0,"height":0}
+{"timestamp":8517,"data":"i\r\u001b[17C","width":0,"height":0}
+{"timestamp":8518,"data":"t\r\u001b[18C","width":0,"height":0}
+{"timestamp":8518,"data":"\u001b[?2004l\u001b[\u003e4;0m\u001b\u003e","width":0,"height":0}
+{"timestamp":8518,"data":"\u001b[4Dexit\r\u001b[18C","width":0,"height":0}
+{"timestamp":8518,"data":"\r\n","width":0,"height":0}
+{"timestamp":8518,"data":"\u001b[m","width":0,"height":0}
+{"timestamp":8519,"data":"\u001b]133;C;cmdline_url=exit\u0007","width":0,"height":0}
+{"timestamp":8519,"data":"\u001b]0;exit /tmp\u0007\u001b[m\r","width":0,"height":0}
+{"timestamp":8520,"data":"\u001b]133;D;0\u0007","width":0,"height":0}
+{"timestamp":8520,"data":"\u001b[?25h\u001b[m","width":0,"height":0}

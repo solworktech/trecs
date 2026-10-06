@@ -1,0 +1,185 @@
+{"type":"meta","width":150,"height":40}
+{"timestamp":241,"data":"\u001b[?2004h","width":0,"height":0}
+{"timestamp":241,"data":"\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# ","width":0,"height":0}
+{"timestamp":1182,"data":"p","width":0,"height":0}
+{"timestamp":1226,"data":"r","width":0,"height":0}
+{"timestamp":1271,"data":"i","width":0,"height":0}
+{"timestamp":1315,"data":"n","width":0,"height":0}
+{"timestamp":1360,"data":"t","width":0,"height":0}
+{"timestamp":1404,"data":"f","width":0,"height":0}
+{"timestamp":1450,"data":" ","width":0,"height":0}
+{"timestamp":1492,"data":"\"","width":0,"height":0}
+{"timestamp":1537,"data":"%","width":0,"height":0}
+{"timestamp":1580,"data":"s","width":0,"height":0}
+{"timestamp":1623,"data":"\\","width":0,"height":0}
+{"timestamp":1667,"data":"n","width":0,"height":0}
+{"timestamp":1711,"data":"\"","width":0,"height":0}
+{"timestamp":1754,"data":" ","width":0,"height":0}
+{"timestamp":1798,"data":"-","width":0,"height":0}
+{"timestamp":1842,"data":"a","width":0,"height":0}
+{"timestamp":1885,"data":"u","width":0,"height":0}
+{"timestamp":1929,"data":"t","width":0,"height":0}
+{"timestamp":1973,"data":"h","width":0,"height":0}
+{"timestamp":2017,"data":"o","width":0,"height":0}
+{"timestamp":2061,"data":"r","width":0,"height":0}
+{"timestamp":2105,"data":" ","width":0,"height":0}
+{"timestamp":2149,"data":"\"","width":0,"height":0}
+{"timestamp":2192,"data":"J","width":0,"height":0}
+{"timestamp":2236,"data":"e","width":0,"height":0}
+{"timestamp":2280,"data":"s","width":0,"height":0}
+{"timestamp":2324,"data":"s","width":0,"height":0}
+{"timestamp":2369,"data":"e","width":0,"height":0}
+{"timestamp":2413,"data":"\"","width":0,"height":0}
+{"timestamp":2457,"data":" ","width":0,"height":0}
+{"timestamp":2501,"data":"-","width":0,"height":0}
+{"timestamp":2545,"data":"i","width":0,"height":0}
+{"timestamp":2589,"data":" ","width":0,"height":0}
+{"timestamp":2633,"data":"\\","width":0,"height":0}
+{"timestamp":2928,"data":"\r\n\u001b[?2004l\r\u001b[?2004h\u003e ","width":0,"height":0}
+{"timestamp":3633,"data":" ","width":0,"height":0}
+{"timestamp":3677,"data":" ","width":0,"height":0}
+{"timestamp":3721,"data":" ","width":0,"height":0}
+{"timestamp":3765,"data":" ","width":0,"height":0}
+{"timestamp":3809,"data":"h","width":0,"height":0}
+{"timestamp":3853,"data":"t","width":0,"height":0}
+{"timestamp":3897,"data":"t","width":0,"height":0}
+{"timestamp":3941,"data":"p","width":0,"height":0}
+{"timestamp":3985,"data":"s","width":0,"height":0}
+{"timestamp":4029,"data":":","width":0,"height":0}
+{"timestamp":4073,"data":"/","width":0,"height":0}
+{"timestamp":4118,"data":"/","width":0,"height":0}
+{"timestamp":4162,"data":"e","width":0,"height":0}
+{"timestamp":4206,"data":"x","width":0,"height":0}
+{"timestamp":4250,"data":"a","width":0,"height":0}
+{"timestamp":4294,"data":"m","width":0,"height":0}
+{"timestamp":4338,"data":"p","width":0,"height":0}
+{"timestamp":4382,"data":"l","width":0,"height":0}
+{"timestamp":4425,"data":"e","width":0,"height":0}
+{"timestamp":4470,"data":".","width":0,"height":0}
+{"timestamp":4514,"data":"c","width":0,"height":0}
+{"timestamp":4557,"data":"o","width":0,"height":0}
+{"timestamp":4601,"data":"m","width":0,"height":0}
+{"timestamp":4645,"data":"/","width":0,"height":0}
+{"timestamp":4689,"data":"R","width":0,"height":0}
+{"timestamp":4732,"data":"E","width":0,"height":0}
+{"timestamp":4777,"data":"A","width":0,"height":0}
+{"timestamp":4820,"data":"D","width":0,"height":0}
+{"timestamp":4865,"data":"M","width":0,"height":0}
+{"timestamp":4908,"data":"E","width":0,"height":0}
+{"timestamp":4953,"data":".","width":0,"height":0}
+{"timestamp":4996,"data":"m","width":0,"height":0}
+{"timestamp":5039,"data":"d","width":0,"height":0}
+{"timestamp":5083,"data":" ","width":0,"height":0}
+{"timestamp":5127,"data":"-","width":0,"height":0}
+{"timestamp":5170,"data":"o","width":0,"height":0}
+{"timestamp":5214,"data":" ","width":0,"height":0}
+{"timestamp":5258,"data":"o","width":0,"height":0}
+{"timestamp":5302,"data":"u","width":0,"height":0}
+{"timestamp":5346,"data":"t","width":0,"height":0}
+{"timestamp":5390,"data":".","width":0,"height":0}
+{"timestamp":5434,"data":"p","width":0,"height":0}
+{"timestamp":5477,"data":"d","width":0,"height":0}
+{"timestamp":5521,"data":"f","width":0,"height":0}
+{"timestamp":5565,"data":" ","width":0,"height":0}
+{"timestamp":5609,"data":"\\","width":0,"height":0}
+{"timestamp":5904,"data":"\r\n\u001b[?2004l\r","width":0,"height":0}
+{"timestamp":5904,"data":"\u001b[?2004h\u003e ","width":0,"height":0}
+{"timestamp":6609,"data":" ","width":0,"height":0}
+{"timestamp":6655,"data":" ","width":0,"height":0}
+{"timestamp":6699,"data":" ","width":0,"height":0}
+{"timestamp":6743,"data":" ","width":0,"height":0}
+{"timestamp":6787,"data":"-","width":0,"height":0}
+{"timestamp":6831,"data":"t","width":0,"height":0}
+{"timestamp":6874,"data":"h","width":0,"height":0}
+{"timestamp":6918,"data":"e","width":0,"height":0}
+{"timestamp":6962,"data":"m","width":0,"height":0}
+{"timestamp":7005,"data":"e","width":0,"height":0}
+{"timestamp":7049,"data":" ","width":0,"height":0}
+{"timestamp":7093,"data":"d","width":0,"height":0}
+{"timestamp":7136,"data":"a","width":0,"height":0}
+{"timestamp":7180,"data":"r","width":0,"height":0}
+{"timestamp":7224,"data":"k","width":0,"height":0}
+{"timestamp":7268,"data":" ","width":0,"height":0}
+{"timestamp":7313,"data":"-","width":0,"height":0}
+{"timestamp":7356,"data":"w","width":0,"height":0}
+{"timestamp":7400,"data":"i","width":0,"height":0}
+{"timestamp":7444,"data":"t","width":0,"height":0}
+{"timestamp":7488,"data":"h","width":0,"height":0}
+{"timestamp":7531,"data":"-","width":0,"height":0}
+{"timestamp":7576,"data":"f","width":0,"height":0}
+{"timestamp":7621,"data":"o","width":0,"height":0}
+{"timestamp":7666,"data":"o","width":0,"height":0}
+{"timestamp":7711,"data":"t","width":0,"height":0}
+{"timestamp":7755,"data":"e","width":0,"height":0}
+{"timestamp":7799,"data":"r","width":0,"height":0}
+{"timestamp":8095,"data":"\r\n\u001b[?2004l\r-author\r\nJesse\r\n-i\r\nhttps://example.com/README.md\r\n-o\r\nout.pdf\r\n-theme\r\ndark\r\n-with-footer\r\n\u001b[?2004h\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# ","width":0,"height":0}
+{"timestamp":8800,"data":"e","width":0,"height":0}
+{"timestamp":8845,"data":"c","width":0,"height":0}
+{"timestamp":8890,"data":"h","width":0,"height":0}
+{"timestamp":8934,"data":"o","width":0,"height":0}
+{"timestamp":8978,"data":" ","width":0,"height":0}
+{"timestamp":9022,"data":"\"","width":0,"height":0}
+{"timestamp":9066,"data":"f","width":0,"height":0}
+{"timestamp":9110,"data":"i","width":0,"height":0}
+{"timestamp":9154,"data":"r","width":0,"height":0}
+{"timestamp":9198,"data":"s","width":0,"height":0}
+{"timestamp":9242,"data":"t","width":0,"height":0}
+{"timestamp":9538,"data":"\r\n\u001b[?2004l\r\u001b[?2004h\u003e ","width":0,"height":0}
+{"timestamp":10242,"data":"s","width":0,"height":0}
+{"timestamp":10286,"data":"e","width":0,"height":0}
+{"timestamp":10330,"data":"c","width":0,"height":0}
+{"timestamp":10374,"data":"o","width":0,"height":0}
+{"timestamp":10418,"data":"n","width":0,"height":0}
+{"timestamp":10462,"data":"d","width":0,"height":0}
+{"timestamp":10506,"data":"\"","width":0,"height":0}
+{"timestamp":10802,"data":"\r\n\u001b[?2004l\rfirst\r\nsecond\r\n\u001b[?2004h\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# ","width":0,"height":0}
+{"timestamp":11507,"data":"e","width":0,"height":0}
+{"timestamp":11551,"data":"c","width":0,"height":0}
+{"timestamp":11596,"data":"h","width":0,"height":0}
+{"timestamp":11642,"data":"o","width":0,"height":0}
+{"timestamp":11686,"data":" ","width":0,"height":0}
+{"timestamp":11730,"data":"\"","width":0,"height":0}
+{"timestamp":11774,"data":"\u003e","width":0,"height":0}
+{"timestamp":11817,"data":" ","width":0,"height":0}
+{"timestamp":11862,"data":"n","width":0,"height":0}
+{"timestamp":11907,"data":"o","width":0,"height":0}
+{"timestamp":11951,"data":"t","width":0,"height":0}
+{"timestamp":11997,"data":" ","width":0,"height":0}
+{"timestamp":12041,"data":"a","width":0,"height":0}
+{"timestamp":12085,"data":" ","width":0,"height":0}
+{"timestamp":12129,"data":"c","width":0,"height":0}
+{"timestamp":12173,"data":"o","width":0,"height":0}
+{"timestamp":12216,"data":"n","width":0,"height":0}
+{"timestamp":12260,"data":"t","width":0,"height":0}
+{"timestamp":12304,"data":"i","width":0,"height":0}
+{"timestamp":12348,"data":"n","width":0,"height":0}
+{"timestamp":12392,"data":"u","width":0,"height":0}
+{"timestamp":12436,"data":"a","width":0,"height":0}
+{"timestamp":12480,"data":"t","width":0,"height":0}
+{"timestamp":12524,"data":"i","width":0,"height":0}
+{"timestamp":12568,"data":"o","width":0,"height":0}
+{"timestamp":12613,"data":"n","width":0,"height":0}
+{"timestamp":12657,"data":" ","width":0,"height":0}
+{"timestamp":12701,"data":"p","width":0,"height":0}
+{"timestamp":12746,"data":"r","width":0,"height":0}
+{"timestamp":12790,"data":"o","width":0,"height":0}
+{"timestamp":12834,"data":"m","width":0,"height":0}
+{"timestamp":12879,"data":"p","width":0,"height":0}
+{"timestamp":12922,"data":"t","width":0,"height":0}
+{"timestamp":12966,"data":"\"","width":0,"height":0}
+{"timestamp":13262,"data":"\r\n\u001b[?2004l\r\u003e not a continuation prompt\r\n\u001b[?2004h\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# \u001b[K","width":0,"height":0}
+{"timestamp":13966,"data":"e","width":0,"height":0}
+{"timestamp":14011,"data":"c","width":0,"height":0}
+{"timestamp":14055,"data":"h","width":0,"height":0}
+{"timestamp":14099,"data":"o","width":0,"height":0}
+{"timestamp":14143,"data":" ","width":0,"height":0}
+{"timestamp":14187,"data":"d","width":0,"height":0}
+{"timestamp":14231,"data":"o","width":0,"height":0}
+{"timestamp":14275,"data":"n","width":0,"height":0}
+{"timestamp":14320,"data":"e","width":0,"height":0}
+{"timestamp":14618,"data":"\r\n\u001b[?2004l\rdone\r\n\u001b[?2004h\u001b]0;root@vm: /tmp\u0007root@vm:/tmp# ","width":0,"height":0}
+{"timestamp":15321,"data":"e","width":0,"height":0}
+{"timestamp":15365,"data":"x","width":0,"height":0}
+{"timestamp":15409,"data":"i","width":0,"height":0}
+{"timestamp":15453,"data":"t","width":0,"height":0}
+{"timestamp":15749,"data":"\r\n\u001b[?2004l\rexit\r\n","width":0,"height":0}
