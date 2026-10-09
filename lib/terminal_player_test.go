@@ -19,7 +19,7 @@ func writeRecording(t *testing.T, timestamps ...int64) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	for i, ts := range timestamps {
 		line, err := json.Marshal(recordingLine{Timestamp: ts, Data: string(rune('a' + i))})
 		if err != nil {
@@ -258,7 +258,7 @@ func TestPositionAdvancesThroughAQuietStretch(t *testing.T) {
 	c := p.Position()
 	// the last frame delivered is at 50ms; before this fix that is what a
 	// progress bar would have shown for the whole gap
-	if !(a < b && b < c) || b-a < 200 || c-b < 200 {
+	if (a >= b || b >= c) || b-a < 200 || c-b < 200 {
 		t.Errorf("position stood still or crawled through the gap: %d, %d, %d (want it to follow the clock)", a, b, c)
 	}
 	if c >= quietGapMs {
