@@ -9,7 +9,7 @@ import (
 	libtrecs "trecs/lib"
 )
 
-const usage = `recorder editor - edit terminal recordings
+const usage = `Trecs recording editor - edit terminal recordings
 
 Usage: editor <command> [options]
 

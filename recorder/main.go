@@ -39,7 +39,7 @@ func main() {
 	cameraSize := recordCmd.String("camera-size", "640x480", "Camera resolution")
 	screenDisplay := recordCmd.String("screen-display", ":0", "Screen display (X11 or macOS)")
 	screenSize := recordCmd.String("screen-size", "1920x1080", "Screen resolution")
-	uploadAfter := recordCmd.Bool("upload", false, "Upload the recording when it ends (log in first with `recorder login`)")
+	uploadAfter := recordCmd.Bool("upload", false, "Upload the recording when it ends (log in first with `trecs login`)")
 	uploadVisibility := recordCmd.String("visibility", "", "Visibility for -upload: private (default), unlisted or public")
 	extras := &recordExtras{
 		commandsFile: recordCmd.String("commands-file", "", "Run the commands in this file (one per line; blank lines and lines starting with # are skipped) instead of reading the keyboard. Needs no terminal, so it works in CI"),
@@ -216,12 +216,12 @@ func runPlay(playFile *string, playSpeed *float64) {
 func printUsage() {
 	fmt.Println(`
 Usage:
-  recorder record [options]       Record terminal and media streams
-  recorder play [options]         Play back terminal recording
-  recorder login [options]        Log in to a trecs server (saves the session)
-  recorder logout                 Log out and forget the saved session
-  recorder upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
-  recorder help                   Show this help message
+  trecs record [options]       Record terminal and media streams
+  trecs play [options]         Play back terminal recording
+  trecs login [options]        Log in to a trecs server (saves the session)
+  trecs logout                 Log out and forget the saved session
+  trecs upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
+  trecs help                   Show this help message
 
 Record Options:
   -terminal                       Enable terminal recording (default: true)
@@ -262,19 +262,19 @@ Play Options:
 
 Examples:
   # Record terminal only (uses timestamp as session name)
-  recorder record
+  trecs record
 
   # Record with custom session name
-  recorder record -name my-session
+  trecs record -name my-session
 
   # Record terminal and audio
-  recorder record -audio
+  trecs record -audio
 
   # Record all streams
-  recorder record -audio -camera -screen
+  trecs record -audio -camera -screen
 
   # Play back a recording at 2x speed
-  recorder play -file recordings/2024_01_15_10_30_45/terminal.jsonl -speed 2.0
+  trecs play -file recordings/2024_01_15_10_30_45/terminal.jsonl -speed 2.0
 
 During Recording:
   - Use Ctrl+C to interrupt commands in the shell (works normally)

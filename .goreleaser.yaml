@@ -1,0 +1,121 @@
+---
+# Check the documentation at https://goreleaser.com
+project_name: trecs
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+    - go install github.com/cpuguy83/go-md2man@latest
+    - go-md2man -in trecs.1.md -out trecs.1
+    - go-md2man -in trecs-edit.1.md -out trecs-edit.1
+    - gzip -f trecs.1 trecs-edit.1
+
+builds:
+  - env: [CGO_ENABLED=0]
+    id: trecs
+    main: ./recorder
+    binary: trecs
+    goos:
+      - linux
+      - darwin
+      - freebsd
+      - netbsd
+    goarch:
+      - amd64
+      - arm64
+  - env: [CGO_ENABLED=0]
+    id: trecs-edit
+    main: ./editor
+    binary: trecs-edit
+    goos:
+      - linux
+      - darwin
+      - freebsd
+      - netbsd
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    # this name template makes the OS and Arch compatible with `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  # name_template: "{{ incpatch .Version }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+nfpms:
+  - package_name: mdtopdf
+  - file_name_template: "{{ .ConventionalFileName }}"
+    id: packages
+    homepage: https://github.com/solworktech/trecs
+    description: |-
+      A tool for recording and editing terminal sessions with precise timestamp
+      control.
+
+      - Sharp at any size. A video is a grid of pixels: soft on a phone, blurry
+      at full screen, unreadable once someone zooms in. A recording is text,
+      drawn fresh at whatever size the viewer has.
+
+      - Kilobytes, not megabytes. The same session as a screen video runs to
+      hundreds of megabytes. A recording loads at once, plays on a poor
+      connection and costs next to nothing to host.
+
+      - The real thing, not a polished excerpt. Docs show the snippet someone
+      chose to paste, and drift out of date. A recording shows the actual output
+      , the actual error and the actual fix, right next to your written steps.
+
+      The editor allows you to:
+      - Watch recording playback
+      - Pause at any point
+      - Edit command input and output
+      - Delete commands
+      - Save edited recordings with automatic timestamp compression
+    maintainer: Jesse Portnoy <jesse@solwork.io>
+    license: MIT
+    vendor: Solworktech
+    bindir: /usr/bin
+    section: utils
+    contents:
+      - src: ./LICENSE
+        dst: /usr/share/doc/{{ .PackageName }}/copyright
+        expand: true
+        file_info:
+          mode: 0644
+          # mtime: "{{ .CommitDate }}"
+      - src: ./README.md
+        dst: /usr/share/doc/{{ .PackageName }}/
+        expand: true
+        file_info:
+          mode: 0644
+      - src: ./trecs.1.gz
+        dst: /usr/share/man/man1/
+        expand: true
+        file_info:
+          mode: 0644
+      - src: ./trecs-edit.1.gz
+        dst: /usr/share/man/man1/
+        expand: true
+        file_info:
+          mode: 0644
+    formats:
+      - deb
+      - rpm
+      - archlinux
+# The lines beneath this are called `modelines`. See `:help modeline`
+# Feel free to remove those if you don't want/use them.
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj

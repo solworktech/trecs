@@ -1,0 +1,917 @@
+package lib
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"unicode/utf8"
+)
+
+// ParseRecording reads a terminal.jsonl file and extracts commands
+func ParseRecording(filePath string) ([]Command, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open recording file: %w", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	var frames []TerminalFrame
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		var frame TerminalFrame
+		if err := json.Unmarshal(scanner.Bytes(), &frame); err != nil {
+			return nil, fmt.Errorf("failed to parse frame: %w", err)
+		}
+		frames = append(frames, frame)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(frames) == 0 {
+		return nil, fmt.Errorf("no frames found in recording")
+	}
+
+	// Extract prompt from first frame
+	prompt := extractPrompt(frames[0].Data)
+
+	// Group frames into commands
+	return groupIntoCommands(frames, prompt)
+}
+
+// extractPrompt gets the shell prompt from the first frame
+func extractPrompt(firstFrameData string) string {
+	lines := strings.Split(firstFrameData, "\n")
+	if len(lines) > 0 {
+		lastLine := lines[len(lines)-1]
+		for _, char := range "$#>" {
+			if idx := strings.LastIndex(lastLine, string(char)); idx != -1 {
+				return lastLine[:idx+1]
+			}
+		}
+	}
+	return ""
+}
+
+// groupIntoCommands organises frames into command input + output pairs
+func groupIntoCommands(frames []TerminalFrame, prompt string) ([]Command, error) {
+	var commands []Command
+	var currentCommand *Command
+	var inputPhase = true
+
+	for i := 1; i < len(frames); i++ {
+		frame := frames[i]
+		data := frame.Data
+
+		// Skip title/setup frames that aren't actual commands
+		if isSetupFrame(data) {
+			continue
+		}
+
+		// Check if this is actual input (single char or short string without heavy escaping)
+		if inputPhase && isUserInput(data) {
+			if currentCommand == nil {
+				// This is the very first command in the recording; its
+				// prompt is the file's initial frame (frames[0]), which
+				// the loop above never visits directly.
+				currentCommand = &Command{
+					InputFrames:        []TerminalFrame{},
+					OutputFrames:       []TerminalFrame{},
+					StartTime:          frame.Timestamp,
+					PromptFrame:        frames[0],
+					HasPrompt:          true,
+					FirstRawFrameIndex: 0,
+				}
+			}
+			currentCommand.InputFrames = append(currentCommand.InputFrames, frame)
+
+			// Check if input ends (newline)
+			if containsReturnOrNewline(data) {
+				currentCommand.InputText = reconstructInput(currentCommand.InputFrames)
+				inputPhase = false
+			}
+			continue
+		}
+
+		// We're in output phase - accumulate until we see next prompt
+		if !inputPhase {
+			// Check if we've reached the next prompt
+			if isRealPrompt(data, prompt) {
+				// Save current command
+				if currentCommand != nil && len(currentCommand.InputFrames) > 0 {
+					currentCommand.OutputText = stripEscapeSequences(reconstructOutput(currentCommand.OutputFrames))
+					currentCommand.OutputTextRaw = reconstructOutput(currentCommand.OutputFrames)
+					currentCommand.EndTime = frames[i-1].Timestamp
+					currentCommand.LastRawFrameIndex = i - 1
+					commands = append(commands, *currentCommand)
+				}
+				// Start new command - this prompt frame is what will be
+				// displayed right before whatever the user types next, so
+				// it belongs to the command we're about to open.
+				currentCommand = &Command{
+					InputFrames:        []TerminalFrame{},
+					OutputFrames:       []TerminalFrame{},
+					StartTime:          frame.Timestamp,
+					PromptFrame:        frame,
+					HasPrompt:          true,
+					FirstRawFrameIndex: i,
+				}
+				inputPhase = true
+			} else {
+				// Accumulate output
+				if currentCommand != nil {
+					currentCommand.OutputFrames = append(currentCommand.OutputFrames, frame)
+				}
+			}
+		}
+	}
+
+	// Save last command
+	if currentCommand != nil && len(currentCommand.InputFrames) > 0 {
+		currentCommand.InputText = reconstructInput(currentCommand.InputFrames)
+		currentCommand.OutputText = stripEscapeSequences(reconstructOutput(currentCommand.OutputFrames))
+		currentCommand.OutputTextRaw = reconstructOutput(currentCommand.OutputFrames)
+		if len(frames) > 0 {
+			currentCommand.EndTime = frames[len(frames)-1].Timestamp
+			currentCommand.LastRawFrameIndex = len(frames) - 1
+		}
+		commands = append(commands, *currentCommand)
+	}
+
+	return commands, nil
+}
+
+// isSetupFrame detects frames that are just window title/setup, not actual commands
+func isSetupFrame(data string) bool {
+	// Real prompts contain $ or # or >, setup frames don't
+	if strings.Contains(data, "$") || strings.Contains(data, "#") || strings.Contains(data, ">") {
+		return false
+	}
+	// Frames with just title update and escape codes, no real content
+	return strings.Contains(data, "\x1b]0;") && !containsReturnOrNewline(data) && len(data) < 150
+}
+
+// isUserInput checks if this frame is actual user input (not output, not setup)
+func isUserInput(data string) bool {
+	// If it has window title sequences, it's not input
+	if strings.Contains(data, "\x1b]0;") {
+		return false
+	}
+
+	// If it has too many color/cursor sequences, it's probably output
+	if strings.Count(data, "\x1b[") > 2 {
+		return false
+	}
+
+	// Input is typically short
+	if len(data) > 50 {
+		return false
+	}
+
+	return true
+}
+
+// isRealPrompt detects the actual shell prompt
+func isRealPrompt(data string, prompt string) bool {
+	// Real prompt must have:
+	// 1. The actual prompt character
+	// 2. The title sequence (indicates fresh prompt line)
+
+	hasPromptChar := strings.Contains(data, "$") || strings.Contains(data, "#") || strings.Contains(data, ">")
+	hasTitle := strings.Contains(data, "\x1b]0;")
+
+	return hasPromptChar && hasTitle
+}
+
+func containsReturnOrNewline(data string) bool {
+	return strings.Contains(data, "\r") || strings.Contains(data, "\n")
+}
+
+// reconstructInput builds the actual command typed by handling backspaces
+// reconstructInput builds the actual command typed by handling backspaces and escape sequences
+func reconstructInput(frames []TerminalFrame) string {
+	var result []rune
+
+	// Concatenate all frame data
+	var sb strings.Builder
+	for _, frame := range frames {
+		sb.WriteString(frame.Data)
+	}
+	data := sb.String()
+
+	// Process character by character, skipping escape sequences
+	for i := 0; i < len(data); {
+		ch := rune(data[i])
+
+		// Handle escape sequences
+		if ch == '\x1b' {
+			// Skip entire escape sequence
+			i++
+			if i < len(data) && data[i] == '[' {
+				// CSI sequence: ESC [ ... letter
+				i++
+				for i < len(data) && (data[i] < 'A' || data[i] > 'Z') && (data[i] < 'a' || data[i] > 'z') {
+					i++
+				}
+				if i < len(data) {
+					i++
+				}
+				continue
+			} else if i < len(data) && data[i] == ']' {
+				// OSC sequence: ESC ] ... BEL
+				i++
+				for i < len(data) && data[i] != '\x07' {
+					i++
+				}
+				if i < len(data) {
+					i++
+				}
+				continue
+			}
+			continue
+		}
+
+		// Handle backspace
+		if ch == '\b' || ch == 0x7F {
+			if len(result) > 0 {
+				result = result[:len(result)-1]
+			}
+			i++
+			continue
+		}
+
+		// Skip other control characters except newline/return
+		if ch < 32 && ch != '\n' && ch != '\r' {
+			i++
+			continue
+		}
+
+		result = append(result, ch)
+		i++
+	}
+
+	str := string(result)
+	str = strings.TrimSuffix(str, "\r\n")
+	str = strings.TrimSuffix(str, "\n")
+	return strings.TrimSpace(str)
+}
+
+// reconstructOutput builds output text from frames
+func reconstructOutput(frames []TerminalFrame) string {
+	var result strings.Builder
+	for _, frame := range frames {
+		result.WriteString(frame.Data)
+	}
+	return result.String()
+}
+
+// stripEscapeSequences strips ANSI escape codes for readable display
+func stripEscapeSequences(data string) string {
+	var result strings.Builder
+	i := 0
+	for i < len(data) {
+		// Skip CSI sequences (ESC [ ... letter)
+		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == '[' {
+			i += 2
+			for i < len(data) && (data[i] < 'A' || data[i] > 'Z') && (data[i] < 'a' || data[i] > 'z') {
+				i++
+			}
+			if i < len(data) {
+				i++
+			}
+			continue
+		}
+
+		// Skip OSC sequences (ESC ] ... BEL or ST)
+		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == ']' {
+			i += 2
+			for i < len(data) && data[i] != '\x07' && data[i] != '\x1b' {
+				i++
+			}
+			if i < len(data) {
+				i++
+			}
+			if i < len(data) && data[i] == '\\' {
+				i++
+			}
+			continue
+		}
+
+		// Skip control characters except newline/carriage return
+		if data[i] < 32 && data[i] != '\n' && data[i] != '\r' {
+			i++
+			continue
+		}
+
+		result.WriteByte(data[i])
+		i++
+	}
+	return result.String()
+}
+
+// syncCommandFrames ensures a command's InputFrames/OutputFrames reflect
+// whatever is currently in InputText/OutputText. If the text still matches
+// what the original frames reconstruct to, the original frames (with their
+// real per-keystroke timing) are left untouched. If the text has been
+// edited - i.e. no longer matches - the frames are replaced with a single
+// synthetic frame carrying the new text, since the original per-keystroke
+// timing no longer corresponds to anything meaningful.
+func syncCommandFrames(cmd *Command) {
+	if reconstructInput(cmd.InputFrames) != cmd.InputText {
+		ts := cmd.StartTime
+		if len(cmd.InputFrames) > 0 {
+			ts = cmd.InputFrames[0].Timestamp
+		}
+		cmd.InputFrames = []TerminalFrame{
+			{Timestamp: ts, Data: cmd.InputText + "\r\n"},
+		}
+	}
+
+	if stripEscapeSequences(reconstructOutput(cmd.OutputFrames)) != cmd.OutputText {
+		ts := cmd.EndTime
+		if len(cmd.OutputFrames) > 0 {
+			ts = cmd.OutputFrames[0].Timestamp
+		}
+		cmd.OutputFrames = []TerminalFrame{
+			{Timestamp: ts, Data: strings.ReplaceAll(cmd.OutputText, "\n", "\r\n")},
+		}
+	}
+}
+
+// RebuildRecording takes edited commands and rewrites the JSON file
+func RebuildRecording(originalPath string, backupPath string, commands []Command) error {
+	input, err := os.ReadFile(originalPath)
+	if err != nil {
+		return fmt.Errorf("failed to read original: %w", err)
+	}
+	if err := os.WriteFile(backupPath, input, 0644); err != nil {
+		return fmt.Errorf("failed to create backup: %w", err)
+	}
+
+	var newFrames []TerminalFrame
+
+	for i := range commands {
+		cmd := &commands[i]
+		syncCommandFrames(cmd)
+
+		if cmd.HasPrompt {
+			newFrames = append(newFrames, cmd.PromptFrame)
+		}
+		newFrames = append(newFrames, cmd.InputFrames...)
+		newFrames = append(newFrames, cmd.OutputFrames...)
+	}
+
+	file, err := os.Create(originalPath)
+	if err != nil {
+		return fmt.Errorf("failed to create new recording: %w", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	encoder := json.NewEncoder(file)
+	for _, frame := range newFrames {
+		if err := encoder.Encode(frame); err != nil {
+			return fmt.Errorf("failed to encode frame: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// GetCommandIndexAtFrame returns the index of the command whose raw frame
+// range [FirstRawFrameIndex, LastRawFrameIndex] contains frameIndex.
+// frameIndex must be an index into the original, unfiltered frame list (the
+// same list the player counts through) - not a count over InputFrames and
+// OutputFrames, which omit frames the parser discarded and therefore drift
+// out of sync with the player's real position.
+func GetCommandIndexAtFrame(frameIndex int, commands []Command) int {
+	for i := range commands {
+		if frameIndex >= commands[i].FirstRawFrameIndex && frameIndex <= commands[i].LastRawFrameIndex {
+			return i
+		}
+	}
+	// frameIndex fell in a gap (a discarded setup frame) between two
+	// commands, or past the end of the last one - attribute it to the
+	// nearest command that had already started.
+	best := -1
+	for i := range commands {
+		if commands[i].FirstRawFrameIndex <= frameIndex {
+			best = i
+		}
+	}
+	return best
+}
+
+// GetCommandAtFrameIndex returns the command containing the given raw frame
+// index. See GetCommandIndexAtFrame for what frameIndex must be.
+func GetCommandAtFrameIndex(frameIndex int, commands []Command) *Command {
+	idx := GetCommandIndexAtFrame(frameIndex, commands)
+	if idx < 0 {
+		return nil
+	}
+	return &commands[idx]
+}
+
+// FilterForDisplay strips all escape sequences except SGR (colour) codes.
+// Deprecated: kept for reference/backward compatibility, but no longer used
+// by the editor - it discards backspace bytes rather than executing them,
+// so corrections made while typing never visually disappear in a
+// TextView-based playback pane, unlike DisplayBuffer below. Use
+// DisplayBuffer for anything rendering live playback in a widget.
+func FilterForDisplay(data string) string {
+	var result strings.Builder
+	i := 0
+	for i < len(data) {
+		// CSI sequence: ESC [ ... letter
+		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == '[' {
+			start := i
+			i += 2
+			for i < len(data) && (data[i] < 'A' || data[i] > 'Z') && (data[i] < 'a' || data[i] > 'z') {
+				i++
+			}
+			if i < len(data) {
+				final := data[i]
+				i++
+				if final == 'm' {
+					// Keep SGR (colour) sequences as-is
+					result.WriteString(data[start:i])
+				}
+				// Otherwise discard (cursor movement, erase, etc.)
+			}
+			continue
+		}
+
+		// OSC sequence: ESC ] ... BEL or ST — always discard (window title, etc.)
+		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == ']' {
+			i += 2
+			for i < len(data) && data[i] != '\x07' && data[i] != '\x1b' {
+				i++
+			}
+			if i < len(data) {
+				i++
+			}
+			if i < len(data) && data[i] == '\\' {
+				i++
+			}
+			continue
+		}
+
+		// Discard lone ESC and other control chars except newline/carriage return
+		if data[i] == '\x1b' {
+			i++
+			continue
+		}
+		if data[i] < 32 && data[i] != '\n' && data[i] != '\r' {
+			i++
+			continue
+		}
+
+		result.WriteByte(data[i])
+		i++
+	}
+	return result.String()
+}
+
+// cell is one character position on the emulated screen grid: the rune
+// displayed there and the colour/attribute tag active when it was written.
+type cell struct {
+	ch  rune
+	tag string
+}
+
+// DisplayBuffer is a small terminal emulator: a 2D grid of cells plus a
+// real cursor position, driven by the same escape sequences a real
+// terminal interprets (cursor positioning, erase-display, erase-line,
+// SGR colour), for any display surface that can't run an actual PTY itself
+// (a tview.TextView, or a web <div>).
+//
+// This replaces an earlier, simpler model that only ever appended
+// characters and treated backspace as "delete the previous character".
+// That worked for ordinary shell line-editing (backspace during typing),
+// but full-screen, cursor-addressed programs like htop or onefetch don't
+// use backspace at all - they redraw specific screen regions via absolute
+// cursor positioning (CUP) and erase sequences, which the old model simply
+// discarded, so every redraw just piled up as one long garbled scroll
+// instead of overwriting the same cells in place. A real cursor and grid
+// handles both cases correctly, including the original backspace-editing
+// one: backspace now genuinely moves the cursor left (as it does on a real
+// terminal), and a following erase-in-line clears from there to the end of
+// the row, which is exactly the `\b`+`ESC[K` pattern shells emit.
+//
+// The grid has no fixed size: it grows as content addresses new rows or
+// columns, rather than assuming a terminal size up front. Recordings don't
+// reliably carry accurate width/height per frame, and a program like htop
+// only ever needs as many rows as the real terminal had, so growing
+// on demand converges on the right size without having to guess it.
+//
+// Known limitation: line-wrap at a fixed column width isn't emulated
+// (there being no fixed width to wrap at), and alternate character sets
+// (line-drawing mode) are ignored - like the vim case already noted
+// elsewhere, this is a practical terminal emulator, not a complete one.
+type DisplayBuffer struct {
+	grid [][]cell
+
+	cursorRow int
+	cursorCol int
+
+	fgColor string
+	bold    bool
+}
+
+// NewDisplayBuffer creates an empty display buffer.
+func NewDisplayBuffer() *DisplayBuffer {
+	return &DisplayBuffer{}
+}
+
+// currentTag returns a key identifying the buffer's current colour/attribute
+// state, in "fg:bg:attrs" form as tview expects it.
+func (db *DisplayBuffer) currentTag() string {
+	fg := db.fgColor
+	if fg == "" {
+		fg = "-"
+	}
+	attrs := "-"
+	if db.bold {
+		attrs = "b"
+	}
+	return fg + ":-:" + attrs
+}
+
+// sgrForegroundNames maps standard and bright ANSI foreground codes to
+// tview/tcell colour names. Background colours and less common attributes
+// aren't handled - this is a practical approximation for typical shell
+// prompt/ls-style colouring, not a full terminal emulator.
+var sgrForegroundNames = map[int]string{
+	30: "black", 31: "red", 32: "green", 33: "yellow",
+	34: "blue", 35: "fuchsia", 36: "aqua", 37: "white",
+	90: "gray", 91: "red", 92: "lime", 93: "yellow",
+	94: "blue", 95: "fuchsia", 96: "aqua", 97: "white",
+}
+
+// applySGR updates the buffer's current colour/attribute state from the
+// numeric, semicolon-separated parameters of an SGR (ESC [ ... m) sequence.
+func (db *DisplayBuffer) applySGR(params string) {
+	if params == "" {
+		db.fgColor = ""
+		db.bold = false
+		return
+	}
+	for _, p := range strings.Split(params, ";") {
+		code := 0
+		valid := len(p) > 0
+		for _, c := range p {
+			if c < '0' || c > '9' {
+				valid = false
+				break
+			}
+			code = code*10 + int(c-'0')
+		}
+		if !valid {
+			continue
+		}
+		switch code {
+		case 0:
+			db.fgColor = ""
+			db.bold = false
+		case 1:
+			db.bold = true
+		case 22:
+			db.bold = false
+		case 39:
+			db.fgColor = ""
+		default:
+			if name, ok := sgrForegroundNames[code]; ok {
+				db.fgColor = name
+			}
+		}
+	}
+}
+
+// ensureRow grows the grid, if necessary, so row is a valid index.
+func (db *DisplayBuffer) ensureRow(row int) {
+	for row >= len(db.grid) {
+		db.grid = append(db.grid, nil)
+	}
+}
+
+// ensureCol grows the given row, if necessary, so col is a valid index,
+// filling any newly-created cells with blanks in the default tag.
+func (db *DisplayBuffer) ensureCol(row, col int) {
+	r := db.grid[row]
+	for col >= len(r) {
+		r = append(r, cell{ch: ' ', tag: "-:-:-"})
+	}
+	db.grid[row] = r
+}
+
+// put writes ch at the given position under the buffer's current colour
+// state, growing the grid as needed.
+func (db *DisplayBuffer) put(row, col int, ch rune) {
+	db.ensureRow(row)
+	db.ensureCol(row, col)
+	db.grid[row][col] = cell{ch: ch, tag: db.currentTag()}
+}
+
+// clearRange blanks cells (r0,c0) through (r1,c1) inclusive, in reading
+// order (left-to-right, top-to-bottom) - used by erase-in-display and
+// erase-in-line, both of which erase a contiguous reading-order range
+// rather than a rectangular block.
+func (db *DisplayBuffer) clearRange(r0, c0, r1, c1 int) {
+	if r1 < r0 || (r1 == r0 && c1 < c0) {
+		return
+	}
+	db.ensureRow(r1)
+	for row := r0; row <= r1; row++ {
+		db.ensureRow(row)
+		startCol := 0
+		if row == r0 {
+			startCol = c0
+		}
+		endCol := len(db.grid[row]) - 1
+		if row == r1 {
+			endCol = c1
+			db.ensureCol(row, c1)
+		}
+		for col := startCol; col <= endCol && col < len(db.grid[row]); col++ {
+			db.grid[row][col] = cell{ch: ' ', tag: "-:-:-"}
+		}
+	}
+}
+
+// parseParams splits a CSI sequence's semicolon-separated numeric
+// parameters, defaulting any empty or non-numeric field to 0 (the caller
+// substitutes the sequence-appropriate default, usually 0 or 1).
+func parseParams(params string) []int {
+	if params == "" {
+		return nil
+	}
+	fields := strings.Split(params, ";")
+	nums := make([]int, len(fields))
+	for i, f := range fields {
+		n := 0
+		for _, c := range f {
+			if c < '0' || c > '9' {
+				n = 0
+				break
+			}
+			n = n*10 + int(c-'0')
+		}
+		nums[i] = n
+	}
+	return nums
+}
+
+func paramOr(nums []int, idx, def int) int {
+	if idx >= len(nums) || nums[idx] == 0 {
+		return def
+	}
+	return nums[idx]
+}
+
+// applyCSI handles one CSI sequence's effect on cursor position and screen
+// content. params is everything between "ESC[" and the final byte
+// (including any leading "?" for private-mode sequences); final is that
+// last byte, which selects what the sequence does.
+func (db *DisplayBuffer) applyCSI(params string, final byte) {
+	private := strings.HasPrefix(params, "?")
+	if private {
+		params = params[1:]
+	}
+	nums := parseParams(params)
+
+	switch final {
+	case 'm':
+		db.applySGR(params)
+
+	case 'H', 'f':
+		row := paramOr(nums, 0, 1) - 1
+		col := paramOr(nums, 1, 1) - 1
+		if row < 0 {
+			row = 0
+		}
+		if col < 0 {
+			col = 0
+		}
+		db.cursorRow, db.cursorCol = row, col
+		db.ensureRow(row)
+		db.ensureCol(row, col)
+
+	case 'A': // cursor up
+		db.cursorRow -= paramOr(nums, 0, 1)
+		if db.cursorRow < 0 {
+			db.cursorRow = 0
+		}
+	case 'B': // cursor down
+		db.cursorRow += paramOr(nums, 0, 1)
+		db.ensureRow(db.cursorRow)
+	case 'C': // cursor forward
+		db.cursorCol += paramOr(nums, 0, 1)
+		db.ensureRow(db.cursorRow)
+		db.ensureCol(db.cursorRow, db.cursorCol)
+	case 'D': // cursor back
+		db.cursorCol -= paramOr(nums, 0, 1)
+		if db.cursorCol < 0 {
+			db.cursorCol = 0
+		}
+	case 'E': // cursor next line
+		db.cursorRow += paramOr(nums, 0, 1)
+		db.cursorCol = 0
+		db.ensureRow(db.cursorRow)
+	case 'F': // cursor previous line
+		db.cursorRow -= paramOr(nums, 0, 1)
+		if db.cursorRow < 0 {
+			db.cursorRow = 0
+		}
+		db.cursorCol = 0
+	case 'G': // cursor horizontal absolute
+		db.cursorCol = paramOr(nums, 0, 1) - 1
+		if db.cursorCol < 0 {
+			db.cursorCol = 0
+		}
+		db.ensureRow(db.cursorRow)
+		db.ensureCol(db.cursorRow, db.cursorCol)
+	case 'd': // vertical line position absolute
+		db.cursorRow = paramOr(nums, 0, 1) - 1
+		if db.cursorRow < 0 {
+			db.cursorRow = 0
+		}
+		db.ensureRow(db.cursorRow)
+
+	case 'J': // erase in display
+		n := paramOr(nums, 0, 0)
+		db.ensureRow(db.cursorRow)
+		switch n {
+		case 0:
+			lastRow := len(db.grid) - 1
+			lastCol := 0
+			if lastRow >= 0 {
+				lastCol = len(db.grid[lastRow]) - 1
+			}
+			db.clearRange(db.cursorRow, db.cursorCol, lastRow, lastCol)
+		case 1:
+			db.clearRange(0, 0, db.cursorRow, db.cursorCol)
+		case 2, 3:
+			for r := range db.grid {
+				for c := range db.grid[r] {
+					db.grid[r][c] = cell{ch: ' ', tag: "-:-:-"}
+				}
+			}
+		}
+
+	case 'K': // erase in line
+		n := paramOr(nums, 0, 0)
+		db.ensureRow(db.cursorRow)
+		lastCol := len(db.grid[db.cursorRow]) - 1
+		switch n {
+		case 0:
+			db.clearRange(db.cursorRow, db.cursorCol, db.cursorRow, lastCol)
+		case 1:
+			db.clearRange(db.cursorRow, 0, db.cursorRow, db.cursorCol)
+		case 2:
+			db.clearRange(db.cursorRow, 0, db.cursorRow, lastCol)
+		}
+
+	default:
+		// Scroll-region (r), window manipulation (t), mode set/reset
+		// (h/l, including alternate-screen and bracketed-paste toggles),
+		// and anything else not handled above have no representation in
+		// this model and are safely ignored.
+	}
+}
+
+// Feed processes one more raw frame of terminal data, updating the
+// emulated screen: printable characters are written at the cursor
+// position under the currently active colour/attribute state and advance
+// the cursor; CSI sequences move the cursor, erase screen content, or
+// update colour state as handled by applyCSI; backspace/DEL move the
+// cursor left (real terminal behaviour - erasure happens via a following
+// erase-in-line, exactly the `\b`+`ESC[K` pattern shells emit, not via the
+// backspace itself); carriage return moves the cursor to column 0; and
+// newline moves the cursor down a row, growing the grid if needed.
+func (db *DisplayBuffer) Feed(data string) {
+	i := 0
+	n := len(data)
+	for i < n {
+		ch := data[i]
+
+		if ch == '\x1b' {
+			i++
+			if i >= n {
+				break
+			}
+			switch data[i] {
+			case '[':
+				start := i + 1
+				j := start
+				for j < n && (data[j] < 'A' || data[j] > 'Z') && (data[j] < 'a' || data[j] > 'z') {
+					j++
+				}
+				if j < n {
+					db.applyCSI(data[start:j], data[j])
+					i = j + 1
+				} else {
+					i = j
+				}
+			case ']':
+				j := i + 1
+				for j < n && data[j] != '\x07' {
+					j++
+				}
+				i = j
+				if i < n {
+					i++
+				}
+			case '(', ')':
+				// Character-set designation (e.g. ESC(B for ASCII):
+				// ESC + intermediate + one final byte. Alternate
+				// character sets (line-drawing mode) aren't emulated.
+				i += 2
+			case '=', '>':
+				// Keypad application/normal mode: ESC + one byte.
+				i++
+			default:
+				// Unrecognised single-byte ESC sequence: consume the one
+				// byte so we always make forward progress.
+				i++
+			}
+			continue
+		}
+
+		if ch == '\b' || ch == 0x7F {
+			db.cursorCol--
+			if db.cursorCol < 0 {
+				db.cursorCol = 0
+			}
+			i++
+			continue
+		}
+
+		if ch == '\r' {
+			db.cursorCol = 0
+			i++
+			continue
+		}
+
+		if ch == '\n' {
+			db.cursorRow++
+			db.cursorCol = 0
+			db.ensureRow(db.cursorRow)
+			i++
+			continue
+		}
+
+		if ch < 32 {
+			// Other control characters (bell, etc.) have no visual effect.
+			i++
+			continue
+		}
+
+		r, size := utf8.DecodeRuneInString(data[i:])
+		db.put(db.cursorRow, db.cursorCol, r)
+		db.cursorCol++
+		i += size
+	}
+}
+
+// Render produces the buffer's current content as a tview dynamic-colour
+// markup string, ready to pass to TextView.SetText. Each row is trimmed of
+// trailing blank cells before being joined with the next, so ordinary
+// scrolling shell output doesn't carry a wall of trailing spaces on every
+// line.
+func (db *DisplayBuffer) Render() string {
+	var out strings.Builder
+	lastTag := ""
+	for rowIdx, row := range db.grid {
+		if rowIdx > 0 {
+			out.WriteByte('\n')
+		}
+		end := len(row)
+		for end > 0 && row[end-1].ch == ' ' {
+			end--
+		}
+		for _, c := range row[:end] {
+			if c.tag != lastTag {
+				fg, _, attrs := splitTag(c.tag)
+				out.WriteString("[" + fg + "::" + attrs + "]")
+				lastTag = c.tag
+			}
+			if c.ch == '[' {
+				out.WriteString("[[")
+			} else {
+				out.WriteRune(c.ch)
+			}
+		}
+	}
+	return out.String()
+}
+
+func splitTag(tag string) (fg, bg, attrs string) {
+	parts := strings.SplitN(tag, ":", 3)
+	if len(parts) == 3 {
+		return parts[0], parts[1], parts[2]
+	}
+	return "-", "-", "-"
+}

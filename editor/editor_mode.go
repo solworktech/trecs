@@ -328,17 +328,6 @@ func (em *EditorMode) makeFrameCallback() func(libtrecs.TerminalFrame) {
 	}
 }
 
-// shouldAutoShowAnnotation reports whether the command at idx has an
-// annotation configured to preview automatically (a positive
-// DurationSeconds).
-func (em *EditorMode) shouldAutoShowAnnotation(idx int) bool {
-	if idx < 0 || idx >= len(em.commands) {
-		return false
-	}
-	cmd := em.commands[idx]
-	return cmd.HasAnnotation && cmd.Annotation.DurationSeconds > 0
-}
-
 // annotationLingerDelay is how long the previous command's final output
 // stays on screen, paused, before it's cleared to reveal an auto-previewed
 // annotation - clearing the instant playback transitions into the new
