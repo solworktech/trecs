@@ -441,7 +441,7 @@ func (em *EditorMode) toggleFullScreen() {
 func (em *EditorMode) createPlaybackView() tview.Primitive {
 	em.playbackLegend = tview.NewTextView().
 		SetDynamicColors(true).
-		SetText("[yellow]Space[white]/[yellow]P[white] Pause/Resume    [yellow]E[white] Edit Current Command    " +
+		SetText("[yellow]Space[white]/[yellow]P[white] Pause/Resume    [yellow]^E[white] Edit Current Command    " +
 			"[yellow]^P[white]/[yellow]^N[white] Prev/Next Command    " +
 			"[yellow]^L[white] Browse Commands    [yellow]^F[white] Full Screen    [yellow]Q[white] Quit")
 
@@ -715,6 +715,26 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		em.jumpToCommandForPlayback(cur + 1)
 		return nil
 	}
+	if event.Key() == tcell.KeyCtrlE {
+		em.cancelAnnotation()
+		if em.player.GetPlaybackState() == libtrecs.PlaybackPlaying {
+			em.player.Pause()
+		}
+		em.currentCmdIdx = libtrecs.GetCommandIndexAtFrame(em.player.GetCurrentFrameIndex(), em.commands)
+		if em.currentCmdIdx >= 0 && em.currentCmdIdx < len(em.commands) {
+			em.currentCmd = &em.commands[em.currentCmdIdx]
+			em.inputField.SetText(em.currentCmd.InputText, false)
+			em.outputField.SetText(em.currentCmd.OutputText, false)
+			em.annotationField.SetText(em.currentCmd.Annotation.Text, false)
+			em.annotationDurationField.SetText(strconv.Itoa(em.currentCmd.Annotation.DurationSeconds))
+		}
+
+		em.setStatus(fmt.Sprintf("Editing command %d of %d.", em.currentCmdIdx+1, len(em.commands)))
+		em.outputField.SetSize(30, 0)
+		em.pages.SwitchToPage("edit")
+		em.app.SetFocus(em.inputField)
+		return nil
+	}
 
 	if event.Key() == tcell.KeyRune {
 		switch event.Rune() {
@@ -748,25 +768,6 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 				// a jump to command 0 would.
 				em.jumpToCommandForPlayback(0)
 			}
-			return nil
-		case 'e', 'E':
-			em.cancelAnnotation()
-			if em.player.GetPlaybackState() == libtrecs.PlaybackPlaying {
-				em.player.Pause()
-			}
-			em.currentCmdIdx = libtrecs.GetCommandIndexAtFrame(em.player.GetCurrentFrameIndex(), em.commands)
-			if em.currentCmdIdx >= 0 && em.currentCmdIdx < len(em.commands) {
-				em.currentCmd = &em.commands[em.currentCmdIdx]
-				em.inputField.SetText(em.currentCmd.InputText, false)
-				em.outputField.SetText(em.currentCmd.OutputText, false)
-				em.annotationField.SetText(em.currentCmd.Annotation.Text, false)
-				em.annotationDurationField.SetText(strconv.Itoa(em.currentCmd.Annotation.DurationSeconds))
-			}
-
-			em.setStatus(fmt.Sprintf("Editing command %d of %d.", em.currentCmdIdx+1, len(em.commands)))
-			em.outputField.SetSize(30, 0)
-			em.pages.SwitchToPage("edit")
-			em.app.SetFocus(em.inputField)
 			return nil
 		case 'q', 'Q':
 			em.quit()
