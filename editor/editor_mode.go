@@ -320,6 +320,7 @@ func (em *EditorMode) makeFrameCallback() func(libtrecs.TerminalFrame) {
 				// easily run right after this same closure and
 				// overwrite this message with the ordinary
 				// currentAnnotationHint() the very next moment.
+				em.setFullScreen(false)
 				em.setStatus("Finished. Space/P to replay from the start.")
 			} else {
 				em.statusView.SetText(em.currentAnnotationHint())
