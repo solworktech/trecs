@@ -46,7 +46,7 @@ func NormalizeServer(raw string) (string, error) {
 	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
-		return "", fmt.Errorf("%q is not a server address: use something like https://trecs.example.com", raw)
+		return "", fmt.Errorf("%q does not include a schema: use something like https://trecs.example.com", raw)
 	}
 	return raw, nil
 }

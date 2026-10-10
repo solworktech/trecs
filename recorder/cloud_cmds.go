@@ -49,7 +49,13 @@ func runLogin(args []string) {
 		*server = savedServer()
 	}
 	if *server == "" {
-		fail("which server? Use -server https://trecs.example.com (or set $TRECS_SERVER)")
+		var err error
+		in := bufio.NewReader(os.Stdin)
+		fmt.Fprint(os.Stderr, "API server URL: ")
+		if *server, err = readLine(in); err != nil {
+			fail("reading API server URL: %v", err)
+		}
+		// fail("which server? Use -server https://trecs.example.com (or set $TRECS_SERVER)")
 	}
 	client, err := cloud.New(*server)
 	if err != nil {

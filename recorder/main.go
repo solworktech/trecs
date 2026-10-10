@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -75,6 +76,10 @@ func main() {
 		runLogout()
 
 	case "upload":
+		_, err := cloud.LoadSession()
+		if errors.Is(err, cloud.ErrNotLoggedIn) {
+			runLogin(make([]string, 0))
+		}
 		runUpload(os.Args[2:])
 
 	case "play":

@@ -58,6 +58,7 @@ func sanitizeForVT(carry, data string) (out, newCarry string) {
 		}
 		params, inter, final := data[i+2:paramEnd], data[paramEnd:j], data[j]
 		private := params != "" && strings.ContainsRune("<=>", rune(params[0]))
+		//nolint
 		if !(private || (params != "" && params[0] == '?' && final == 'u') || (strings.Contains(inter, "$") && final == 'p')) {
 			b.WriteString(data[i : j+1])
 		}
