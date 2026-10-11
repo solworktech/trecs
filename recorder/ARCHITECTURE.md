@@ -24,7 +24,7 @@ This system is built as a modular, concurrent recording and playback with clean 
 │     │ - Timestamp sync   │            │  - Screen Recorder   │   │
 │     └─────┬──────────────┘            └───────┬─────────────-┘   │
 │           │                                   │                  │
-│      terminal.jsonl                      *.mp3/*.mp4             │
+│      terminal.jsonl                      *.opus/*.mp4            │
 │     (JSON Lines)                       (FFMpeg output)           │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐  │
@@ -124,7 +124,17 @@ User Shell -> PTY -> Capture Loop (timestamp, raw bytes) -> JSON
 
 - Abstract FFMpeg interaction for different media types
 - Build platform-specific FFMpeg arguments
-- Manage FFMpeg process lifecycle
+- Manage FFMpeg process lifecycle: say when it is capturing (`WaitReady`, from
+  ffmpeg's `-progress` report), and finish its file properly when asked
+  (`Stop`: `q` on its standard input, then an interrupt, and a kill only as a
+  last resort - the index of an MP4 and the header of an MP3 are written when
+  ffmpeg is told to finish, and a kill leaves the file without them). It runs in a
+  process group of its own, so that a Ctrl+C meant for the shell cannot stop it
+  in the middle of its file
+- Take the platform from `runtime.GOOS` (not an environment variable)
+- Record a voice as mono Opus in Ogg by default (`-audio-codec libopus`,
+  `-audio-bitrate 32k`): about a quarter of the size of 128 kbit/s stereo MP3 at
+  the same quality, with timing in every page so that a browser can seek in it
 - Provide unified interface for audio/camera/screen
 
 **Architecture Pattern: Strategy**
@@ -199,7 +209,7 @@ recordings/
 └── [uuid]/
     ├── metadata.json      ← Central metadata
     ├── terminal.jsonl     ← Terminal data
-    ├── audio.mp3          ← Audio stream
+    ├── audio.opus         ← Audio stream (.mp3, .m4a, .ogg: it is named by its codec)
     ├── camera.mp4         ← Camera stream
     └── screen.mp4         ← Screen stream
 ```
@@ -209,21 +219,26 @@ recordings/
 ```
 - NewSessionRecorder()
 - Start()
-   ├─ Initialize all recorders
-   ├─ Start terminal recorder (wait for shell)
-   ├─ Start media recorders (async)
+   ├─ Start the media recorders (ffmpeg processes)
+   ├─ Wait until every one of them is capturing (WaitReady)
+   ├─ Start the terminal recorder - at once, so that the media and the
+   │  terminal begin at the same moment, not some part of a second apart
    └─ Return to caller
 - [Recording active...]
    ├─ Terminal output -> terminal.jsonl
-   ├─ Audio -> audio.mp3
+   ├─ Audio -> audio.opus
    ├─ Camera -> camera.mp4
    ├─ Screen -> screen.mp4
-- Stop()
-   ├─ Signal all recorders
-   ├─ Wait for cleanup
+- The shell exits (Ctrl+D, `exit`) - or Stop() is called (SIGTERM)
+   ├─ Note the end time: the terminal's, not that of the files being finished
+   ├─ Ask every media recorder to finish, together (see below)
+   ├─ Wait until their files are finished
    ├─ Generate metadata.json
    └─ Return
 ```
+
+The end of the terminal ends the media: the session does not wait for ffmpeg, which
+runs until it is asked to stop, to be done before it stops it.
 
 **Metadata Structure:**
 
@@ -233,7 +248,7 @@ recordings/
   "startTime": "2024-01-15T10:30:00Z",
   "endTime": "2024-01-15T10:35:30Z",
   "terminalFile": "./recordings/.../terminal.jsonl",
-  "audioFile": "./recordings/.../audio.mp3",
+  "audioFile": "./recordings/.../audio.opus",
   "cameraFile": "./recordings/.../camera.mp4",
   "screenFile": "./recordings/.../screen.mp4",
   "sourceCommand": "bash"
@@ -335,7 +350,7 @@ tp.pauseResume <- struct{}{}
   "startTime": "RFC3339",
   "endTime": "RFC3339",
   "terminalFile": "path/to/terminal.jsonl",
-  "audioFile": "path/to/audio.mp3",
+  "audioFile": "path/to/audio.opus",
   "cameraFile": "path/to/camera.mp4",
   "screenFile": "path/to/screen.mp4",
   "sourceCommand": "executed command"

@@ -125,7 +125,7 @@ func runUpload(args []string) {
 	name := fs.String("name", "", "Recording title (default: a timestamp)")
 	description := fs.String("description", "", "Description (default: the list of commands typed in the recording)")
 	visibility := fs.String("visibility", "", "private, unlisted or public (default: private - recordings often show secrets)")
-	audio := fs.String("audio", "", "Audio file to attach (default: audio.mp3 beside the recording, if there is one)")
+	audio := fs.String("audio", "", "Audio file to attach (default: audio.opus - or .mp3, .m4a, .ogg - beside the recording, if there is one)")
 	_ = fs.Parse(args)
 	if fs.NArg() != 1 {
 		fail("usage: recorder upload [-name N] [-description D] [-visibility private|unlisted|public] [-audio FILE] <session directory | terminal.jsonl>\n(options go before the path)")

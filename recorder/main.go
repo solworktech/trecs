@@ -35,7 +35,8 @@ func main() {
 	sessionName := recordCmd.String("name", "", "Session name (default: timestamp YYYY_MM_DD_HH_MM_SS)")
 	terminalCmd := recordCmd.String("cmd", "", "Shell to run (default: the shell this was run from)")
 	audioDevice := recordCmd.String("audio-device", "default", "Audio device")
-	audioCodec := recordCmd.String("audio-codec", "libmp3lame", "Audio codec")
+	audioCodec := recordCmd.String("audio-codec", "libopus", "Audio codec")
+	audioBitrate := recordCmd.String("audio-bitrate", "", "Audio bitrate (default: the codec's, for a voice: 32k for opus)")
 	cameraDevice := recordCmd.String("camera-device", "/dev/video0", "Camera device")
 	cameraSize := recordCmd.String("camera-size", "640x480", "Camera resolution")
 	screenDisplay := recordCmd.String("screen-display", ":0", "Screen display (X11 or macOS)")
@@ -66,7 +67,7 @@ func main() {
 			os.Exit(1)
 		}
 		runRecord(recordTerminal, recordAudio, recordCamera, recordScreen,
-			outputDir, sessionName, terminalCmd, audioDevice, audioCodec,
+			outputDir, sessionName, terminalCmd, audioDevice, audioCodec, audioBitrate,
 			cameraDevice, cameraSize, screenDisplay, screenSize, uploadAfter, uploadVisibility, extras)
 
 	case "login":
@@ -100,7 +101,7 @@ func main() {
 }
 
 func runRecord(terminal, audio, camera, screen *bool,
-	outputDir, sessionName, terminalCmd, audioDevice, audioCodec,
+	outputDir, sessionName, terminalCmd, audioDevice, audioCodec, audioBitrate,
 	cameraDevice, cameraSize, screenDisplay, screenSize *string,
 	uploadAfter *bool, uploadVisibility *string, extras *recordExtras) {
 
@@ -121,7 +122,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 		AudioEnabled:    *audio,
 		AudioDevice:     *audioDevice,
 		AudioCodec:      *audioCodec,
-		AudioBitrate:    "128k",
+		AudioBitrate:    *audioBitrate,
 		CameraEnabled:   *camera,
 		CameraDevice:    *cameraDevice,
 		CameraSize:      *cameraSize,
@@ -237,7 +238,8 @@ Record Options:
   -name string                    Session name (default: timestamp YYYY_MM_DD_HH_MM_SS)
   -cmd string                     Terminal command to execute (default: current shell, or sh if unable to detect)
   -audio-device string            Audio device (default: "default")
-  -audio-codec string             Audio codec (default: "libmp3lame")
+  -audio-codec string             Audio codec: libopus (default, Ogg), libmp3lame, aac
+  -audio-bitrate string           Audio bitrate (default: 32k for libopus - a voice, in 1/4 of the size of 128k MP3)
   -camera-device string           Camera device (default: "/dev/video0")
   -camera-size string             Camera resolution (default: "640x480")
   -screen-display string          Screen display (default: ":0")
@@ -259,7 +261,7 @@ Upload Options (before the path):
   -name string                    Recording title
   -description string             Description (default: the commands typed)
   -visibility string              private (default), unlisted or public
-  -audio string                   Audio file (default: audio.mp3 beside the recording)
+  -audio string                   Audio file (default: audio.opus, or .mp3 .m4a .ogg, beside the recording)
 
 Play Options:
   -file string                    Terminal recording file to play (required)

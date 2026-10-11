@@ -279,11 +279,18 @@ func ResolveSessionFiles(path string) (terminal, audio string, err error) {
 	} else {
 		dir = filepath.Dir(path)
 	}
-	if a := filepath.Join(dir, "audio.mp3"); fileExists(a) {
-		audio = a
+	for _, ext := range SessionAudioExtensions {
+		if a := filepath.Join(dir, "audio."+ext); fileExists(a) {
+			audio = a
+			break
+		}
 	}
 	return terminal, audio, nil
 }
+
+// SessionAudioExtensions are the extensions the recorder gives a session's audio file, in the order they are looked for
+// (see recorder/media_recorder.go: it is named by its codec).
+var SessionAudioExtensions = []string{"opus", "ogg", "mp3", "m4a", "mka", "flac"}
 
 func fileExists(p string) bool {
 	fi, err := os.Stat(p)

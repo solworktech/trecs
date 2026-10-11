@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,8 @@ type SessionRecorderImpl struct {
 	running          bool
 	wg               sync.WaitGroup
 	startTime        time.Time
+	stopMediaOnce    sync.Once
+	endOnce          sync.Once
 }
 
 // NewSessionRecorder creates a new session recorder
@@ -81,7 +84,7 @@ func (sr *SessionRecorderImpl) initializeRecorders(sessionDir string) error {
 	}
 
 	if sr.config.AudioEnabled {
-		audioFile := filepath.Join(sessionDir, "audio.mp3")
+		audioFile := filepath.Join(sessionDir, "audio."+audioExtension(sr.config.AudioCodec))
 		sr.metadata.AudioFile = audioFile
 		recorder, err := NewAudioRecorder(sr.config, audioFile)
 		if err != nil {
@@ -113,7 +116,36 @@ func (sr *SessionRecorderImpl) initializeRecorders(sessionDir string) error {
 	return nil
 }
 
-// Start begins all recording streams
+// namedMedia is a media recorder with the name it goes by in what is said of it.
+type namedMedia struct {
+	name string
+	rec  libtrecs.MediaRecorder
+}
+
+func (sr *SessionRecorderImpl) media() []namedMedia {
+	var out []namedMedia
+	if sr.audioRecorder != nil {
+		out = append(out, namedMedia{"audio", sr.audioRecorder})
+	}
+	if sr.cameraRecorder != nil {
+		out = append(out, namedMedia{"camera", sr.cameraRecorder})
+	}
+	if sr.screenRecorder != nil {
+		out = append(out, namedMedia{"screen", sr.screenRecorder})
+	}
+	return out
+}
+
+// readier is what a media recorder that can say when it is capturing offers.
+type readier interface {
+	WaitReady(timeout time.Duration) error
+}
+
+// Start begins all recording streams, together.
+//
+// ffmpeg takes a moment to open its devices after it is started, and records nothing in it. So the media are started
+// first, and the terminal when every one of them is capturing: what they record and what the terminal records
+// begin at the same moment, and not some part of a second apart, by a different part every time.
 func (sr *SessionRecorderImpl) Start() error {
 	sr.mutex.Lock()
 	defer sr.mutex.Unlock()
@@ -122,58 +154,107 @@ func (sr *SessionRecorderImpl) Start() error {
 		return fmt.Errorf("session recorder already running")
 	}
 
+	media := sr.media()
+	if len(media) > 0 {
+		names := make([]string, len(media))
+		for i, m := range media {
+			names[i] = m.name
+		}
+		fmt.Fprintf(os.Stderr, "recorder: starting %s capture...\n", strings.Join(names, ", "))
+		for _, m := range media {
+			if err := m.rec.Start(); err != nil {
+				sr.stopMedia()
+				return fmt.Errorf("failed to start %s recorder: %w", m.name, err)
+			}
+		}
+		if err := sr.waitMediaReady(media); err != nil {
+			sr.stopMedia()
+			return err
+		}
+	}
+
 	sr.startTime = time.Now()
 	sr.metadata.StartTime = sr.startTime
 
-	// Start terminal recorder first to ensure shell is ready
 	if sr.terminalRecorder != nil {
 		if err := sr.terminalRecorder.Start(); err != nil {
+			sr.stopMedia()
 			return fmt.Errorf("failed to start terminal recorder: %w", err)
 		}
-		sr.wg.Add(1)
-		go func() {
-			defer sr.wg.Done()
-			sr.terminalRecorder.Wait()
-		}()
-	}
-
-	// Start media recorders
-	if sr.audioRecorder != nil {
-		if err := sr.audioRecorder.Start(); err != nil {
-			return fmt.Errorf("failed to start audio recorder: %w", err)
-		}
-		sr.wg.Add(1)
-		go func() {
-			defer sr.wg.Done()
-			_ = sr.audioRecorder.Wait() // Ignore error - already logged by recorder
-		}()
-	}
-
-	if sr.cameraRecorder != nil {
-		if err := sr.cameraRecorder.Start(); err != nil {
-			return fmt.Errorf("failed to start camera recorder: %w", err)
-		}
-		sr.wg.Add(1)
-		go func() {
-			defer sr.wg.Done()
-			_ = sr.cameraRecorder.Wait() // Ignore error - already logged by recorder
-		}()
-	}
-
-	if sr.screenRecorder != nil {
-		if err := sr.screenRecorder.Start(); err != nil {
-			return fmt.Errorf("failed to start screen recorder: %w", err)
-		}
-		sr.wg.Add(1)
-		go func() {
-			defer sr.wg.Done()
-			_ = sr.screenRecorder.Wait() // Ignore error - already logged by recorder
-		}()
 	}
 
 	sr.running = true
 
+	for _, m := range media {
+		sr.wg.Add(1)
+		go func(rec libtrecs.MediaRecorder) {
+			defer sr.wg.Done()
+			_ = rec.Wait() // Ignore error - already logged by recorder
+		}(m.rec)
+	}
+	if sr.terminalRecorder != nil {
+		sr.wg.Add(1)
+		go func() {
+			defer sr.wg.Done()
+			sr.terminalRecorder.Wait()
+			// The shell has exited - Ctrl+D, or exit - and that is the end of the recording: of all of it. The media
+			// are stopped now, and not left for whoever is waiting for them to be done to stop them - which is
+			// the one waiting for this.
+			sr.markEnded()
+			sr.stopMedia()
+		}()
+	}
+
 	return nil
+}
+
+// waitMediaReady waits for every media recorder that can say so to be capturing.
+func (sr *SessionRecorderImpl) waitMediaReady(media []namedMedia) error {
+	errs := make(chan error, len(media))
+	for _, m := range media {
+		go func(m namedMedia) {
+			r, ok := m.rec.(readier)
+			if !ok {
+				errs <- nil
+				return
+			}
+			if err := r.WaitReady(0); err != nil {
+				errs <- fmt.Errorf("%s recorder: %w", m.name, err)
+				return
+			}
+			errs <- nil
+		}(m)
+	}
+	var first error
+	for range media {
+		if err := <-errs; err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+// markEnded notes the moment the recording ended: that of the terminal, not of the media being finished.
+func (sr *SessionRecorderImpl) markEnded() {
+	sr.endOnce.Do(func() { sr.metadata.EndTime = time.Now() })
+}
+
+// stopMedia stops every media recorder, together, and returns when their files are finished. Once, whoever asks
+// first and whoever asks next.
+func (sr *SessionRecorderImpl) stopMedia() {
+	sr.stopMediaOnce.Do(func() {
+		var wg sync.WaitGroup
+		for _, m := range sr.media() {
+			wg.Add(1)
+			go func(m namedMedia) {
+				defer wg.Done()
+				if err := m.rec.Stop(); err != nil {
+					fmt.Fprintf(os.Stderr, "recorder: %s: %v\n", m.name, err)
+				}
+			}(m)
+		}
+		wg.Wait()
+	})
 }
 
 // Stop terminates all recording streams
@@ -186,27 +267,12 @@ func (sr *SessionRecorderImpl) Stop() error {
 	}
 
 	sr.running = false
-	sr.metadata.EndTime = time.Now()
-
-	// Stop all recorders
-	if sr.screenRecorder != nil {
-		_ = sr.screenRecorder.Stop()
-	}
-
-	if sr.cameraRecorder != nil {
-		_ = sr.cameraRecorder.Stop()
-	}
-
-	if sr.audioRecorder != nil {
-		_ = sr.audioRecorder.Stop()
-	}
+	sr.markEnded()
 
 	if sr.terminalRecorder != nil {
 		_ = sr.terminalRecorder.Stop()
 	}
-
-	// Give media recorders a moment to clean up before unlocking
-	time.Sleep(200 * time.Millisecond)
+	sr.stopMedia() // returns when the files are finished
 
 	// Save metadata
 	metadataPath := filepath.Join(sr.config.OutputDir, sr.sessionID, "metadata.json")
