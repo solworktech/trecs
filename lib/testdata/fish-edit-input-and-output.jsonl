@@ -1,0 +1,97 @@
+{"type":"meta","width":172,"height":38}
+{"timestamp":63,"data":"Welcome to fish, the friendly interactive shell\r\nType \u001b[32mhelp\u001b(B\u001b[m for instructions on how to use fish\r\n","width":0,"height":0}
+{"timestamp":69,"data":"\u001b]7;file://port/home/jesse/projects/trecs/editor\u0007","width":0,"height":0}
+{"timestamp":102,"data":"\u001b]0;~/p/t/editor\u0007\u001b[30m\u001b(B\u001b[m","width":0,"height":0}
+{"timestamp":103,"data":"\r","width":0,"height":0}
+{"timestamp":103,"data":"\u001b]133;A;special_key=1\u0007\u001b[92mjesse\u001b(B\u001b[m@\u001b(B\u001b[mport\u001b(B\u001b[m \u001b[32m~/p/t/editor\u001b(B\u001b[m (main)\u001b(B\u001b[m\u003e \u001b]133;B\u0007\u001b[K\r\u001b[32C\u001b[?2004h\u001b[=5u\u001b=","width":0,"height":0}
+{"timestamp":991,"data":"l\r\u001b[33C","width":0,"height":0}
+{"timestamp":992,"data":"\b\u001b[91ml\u001b[30m\u001b(B\u001b[m\r\u001b[33C","width":0,"height":0}
+{"timestamp":993,"data":"\u001b[90ms -al\u001b[30m\u001b(B\u001b[m\r\u001b[33C","width":0,"height":0}
+{"timestamp":1065,"data":"\u001b[91ms\u001b[90m -al\u001b[30m\u001b(B\u001b[m\r\u001b[34C","width":0,"height":0}
+{"timestamp":1065,"data":"\b\bls\u001b[90m -al\u001b[30m\u001b(B\u001b[m\r\u001b[34C","width":0,"height":0}
+{"timestamp":1134,"data":" \u001b[90m-al\u001b[30m\u001b(B\u001b[m\r\u001b[35C","width":0,"height":0}
+{"timestamp":1434,"data":"-\u001b[90mal\u001b[30m\u001b(B\u001b[m\r\u001b[36C","width":0,"height":0}
+{"timestamp":1435,"data":"\b\u001b[36m-\u001b[90mal\u001b[30m\u001b(B\u001b[m\r\u001b[36C","width":0,"height":0}
+{"timestamp":1520,"data":"\u001b[36ma\u001b[90ml\u001b[30m\u001b(B\u001b[m\r\u001b[37C","width":0,"height":0}
+{"timestamp":1565,"data":"\u001b[36ml\u001b[30m\u001b(B\u001b[m\r\u001b[38C\r\u001b[38C","width":0,"height":0}
+{"timestamp":2042,"data":"\r\u001b[38C\r\n\u001b[30m\u001b(B\u001b[m\u001b]133;C;cmdline_url=ls%20-al\u0007","width":0,"height":0}
+{"timestamp":2043,"data":"\u001b[?2004l\u001b[=0u\u001b\u003e","width":0,"height":0}
+{"timestamp":2043,"data":"\u001b]0;ls -al ~/p/t/editor\u0007","width":0,"height":0}
+{"timestamp":2043,"data":"\u001b[30m\u001b(B\u001b[m\r","width":0,"height":0}
+{"timestamp":2051,"data":"total 11232\r\n","width":0,"height":0}
+{"timestamp":2051,"data":"drwxr-xr-x  2 jesse jesse    4096 Oct 11 02:42 \u001b[0m\u001b[01;34m.\u001b[0m/\r\ndrwxrwxr-x 10 jesse jesse    4096 Oct 11 02:00 \u001b[01;34m..\u001b[0m/\r\n-rwxrwxr-x  1 jesse jesse 5712085 Oct  9 16:23 \u001b[01;32meditor\u001b[0m*\r\n-rw-r--r--  1 jesse jesse   49812 Oct 10 20:33 editor_mode.go\r\n-rw-r--r--  1 jesse jesse    3417 Oct 11 02:42 main.go\r\n-rw-r--r--  1 jesse jesse    1763 Oct  5 22:47 ncurses_editor.go\r\n-rwxrwxr-x  1 jesse jesse 5714267 Oct 11 02:42 \u001b[01;32mtrecs-edit\u001b[0m*\r\n","width":0,"height":0}
+{"timestamp":2051,"data":"\u001b]133;D;0\u0007\u001b[?25h","width":0,"height":0}
+{"timestamp":2051,"data":"\u001b[2m⏎\u001b(B\u001b[m                                                                                                                                                                           \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":2059,"data":"\u001b]0;~/p/t/editor\u0007\u001b[30m\u001b(B\u001b[m","width":0,"height":0}
+{"timestamp":2059,"data":"\u001b]133;A;special_key=1\u0007\u001b[92mjesse\u001b(B\u001b[m@\u001b(B\u001b[mport\u001b(B\u001b[m \u001b[32m~/p/t/editor\u001b(B\u001b[m (main)\u001b(B\u001b[m\u003e \u001b]133;B\u0007\u001b[K\r\u001b[32C\u001b[?2004h\u001b[=5u\u001b=","width":0,"height":0}
+{"timestamp":2868,"data":"u\r\u001b[33C","width":0,"height":0}
+{"timestamp":2868,"data":"\u001b[90mname -a\u001b[30m\u001b(B\u001b[m\r\u001b[33C","width":0,"height":0}
+{"timestamp":2868,"data":"\b\u001b[91mu\u001b[90mname -a\u001b[30m\u001b(B\u001b[m\r\u001b[33C","width":0,"height":0}
+{"timestamp":2935,"data":"\u001b[91mn\u001b[90mame -a\u001b[30m\u001b(B\u001b[m\r\u001b[34C","width":0,"height":0}
+{"timestamp":3038,"data":"\u001b[91ma\u001b[90mme -a\u001b[30m\u001b(B\u001b[m\r\u001b[35C","width":0,"height":0}
+{"timestamp":3093,"data":"\u001b[91mm\u001b[90me -a\u001b[30m\u001b(B\u001b[m\r\u001b[36C","width":0,"height":0}
+{"timestamp":3153,"data":"\u001b[91me\u001b[90m -a\u001b[30m\u001b(B\u001b[m\r\u001b[37C","width":0,"height":0}
+{"timestamp":3153,"data":"\b\b\b\b\buname\u001b[90m -a\u001b[30m\u001b(B\u001b[m\r\u001b[37C","width":0,"height":0}
+{"timestamp":3221,"data":" \u001b[90m-a\u001b[30m\u001b(B\u001b[m\r\u001b[38C","width":0,"height":0}
+{"timestamp":3291,"data":"-\u001b[90ma\u001b[30m\u001b(B\u001b[m\r\u001b[39C","width":0,"height":0}
+{"timestamp":3291,"data":"\b\u001b[36m-\u001b[90ma\u001b[30m\u001b(B\u001b[m\r\u001b[39C","width":0,"height":0}
+{"timestamp":3332,"data":"\u001b[36ma\u001b[30m\u001b(B\u001b[m\r\u001b[40C","width":0,"height":0}
+{"timestamp":3333,"data":"\r\u001b[40C","width":0,"height":0}
+{"timestamp":3843,"data":"\r\u001b[40C\r\n\u001b[30m\u001b(B\u001b[m\u001b]133;C;cmdline_url=uname%20-a\u0007","width":0,"height":0}
+{"timestamp":3843,"data":"\u001b[?2004l\u001b[=0u\u001b\u003e","width":0,"height":0}
+{"timestamp":3844,"data":"\u001b]0;uname -a ~/p/t/editor\u0007\u001b[30m\u001b(B\u001b[m\r","width":0,"height":0}
+{"timestamp":3846,"data":"Linux port 6.12.100+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.100-1 (2026-07-30) x86_64 GNU/Linux\r\n","width":0,"height":0}
+{"timestamp":3846,"data":"\u001b]133;D;0\u0007\u001b[?25h","width":0,"height":0}
+{"timestamp":3846,"data":"\u001b[2m⏎\u001b(B\u001b[m                                                                                                                                                                           \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":3859,"data":"\u001b]0;~/p/t/editor\u0007\u001b[30m\u001b(B\u001b[m\u001b]133;A;special_key=1\u0007\u001b[92mjesse\u001b(B\u001b[m@\u001b(B\u001b[mport\u001b(B\u001b[m \u001b[32m~/p/t/editor\u001b(B\u001b[m (main)\u001b(B\u001b[m\u003e \u001b]133;B\u0007\u001b[K\r\u001b[32C\u001b[?2004h\u001b[=5u\u001b=","width":0,"height":0}
+{"timestamp":4628,"data":"o\r\u001b[33C","width":0,"height":0}
+{"timestamp":4628,"data":"\b\u001b[91mo\u001b[30m\u001b(B\u001b[m\r\u001b[33C\u001b[90mnefetch\u001b[30m\u001b(B\u001b[m\r\u001b[33C","width":0,"height":0}
+{"timestamp":4730,"data":"\u001b[91mn\u001b[90mefetch\u001b[30m\u001b(B\u001b[m\r\u001b[34C","width":0,"height":0}
+{"timestamp":4834,"data":"\u001b[91me\u001b[90mfetch\u001b[30m\u001b(B\u001b[m\r\u001b[35C","width":0,"height":0}
+{"timestamp":4934,"data":"\u001b[91mf\u001b[90metch\u001b[30m\u001b(B\u001b[m\r\u001b[36C","width":0,"height":0}
+{"timestamp":4980,"data":"\u001b[91me\u001b[90mtch\u001b[30m\u001b(B\u001b[m\r\u001b[37C","width":0,"height":0}
+{"timestamp":5076,"data":"\u001b[91mt\u001b[90mch\u001b[30m\u001b(B\u001b[m\r\u001b[38C","width":0,"height":0}
+{"timestamp":5134,"data":"\u001b[91mc\u001b[90mh\u001b[30m\u001b(B\u001b[m\r\u001b[39C","width":0,"height":0}
+{"timestamp":5244,"data":"\u001b[91mh\u001b[30m\u001b(B\u001b[m\r\u001b[40C","width":0,"height":0}
+{"timestamp":5244,"data":"\r\u001b[40C\b\b\b\b\b\b\b\bonefetch\r\u001b[40C","width":0,"height":0}
+{"timestamp":5612,"data":"\r\u001b[40C\r\n\u001b[30m\u001b(B\u001b[m\u001b]133;C;cmdline_url=onefetch\u0007","width":0,"height":0}
+{"timestamp":5612,"data":"\u001b[?2004l\u001b[=0u\u001b\u003e","width":0,"height":0}
+{"timestamp":5613,"data":"\u001b]0;onefetch ~/p/t/editor\u0007\u001b[30m\u001b(B\u001b[m\r","width":0,"height":0}
+{"timestamp":5830,"data":"\u001b[?7l\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m           --==============--\u001b[0m              \u001b[38;2;116;205;221;1mJesse Portnoy\u001b[0m \u001b[39;1m~\u001b[0m \u001b[38;2;116;205;221;1mgit version 2.47.3\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m  .-==-.===oooo=oooooo=ooooo===--===-\u001b[0m      \u001b[39m----------------------------------\u001b[39m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m .==  =o=\u001b[0m\u001b[38;2;255;255;255;1moGGGGGG\u001b[0m\u001b[38;2;116;205;221;1mo=oo=o\u001b[0m\u001b[38;2;255;255;255;1mGGGGGGG\u001b[0m\u001b[38;2;116;205;221;1mG=o=  oo-\u001b[0m     \u001b[38;2;116;205;221;1mProject\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39mtrecs (1 branch, 1 tag)\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m -o= oo=\u001b[0m\u001b[38;2;255;255;255;1mG .=GGGGG\u001b[0m\u001b[38;2;116;205;221;1mo=o=\u001b[0m\u001b[38;2;255;255;255;1m= .=GGGGG\u001b[0m\u001b[38;2;116;205;221;1m=ooo o=-\u001b[0m     \u001b[38;2;116;205;221;1mHEAD\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m9a2c618 (main, origin/main)\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m  .-=oo=\u001b[0m\u001b[38;2;255;255;255;1mo==oGGGGG\u001b[0m\u001b[38;2;116;205;221;1m=oo=\u001b[0m\u001b[38;2;255;255;255;1moooGGGGGo\u001b[0m\u001b[38;2;116;205;221;1m=oooo.\u001b[0m       \u001b[38;2;116;205;221;1mPending\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m1+- 41+\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -ooooo\u001b[0m\u001b[38;2;255;255;255;1m=oooooo\u001b[0m\u001b[38;2;116;205;221;1m=\u001b[0m\u001b[38;2;246;210;162;1m.   .\u001b[0m\u001b[38;2;116;205;221;1m=\u001b[0m\u001b[38;2;255;255;255;1m=ooo==\u001b[0m\u001b[38;2;116;205;221;1moooooo-\u001b[0m       \u001b[38;2;116;205;221;1mVersion\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39mv0.1\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -ooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m====_====\u001b[0m\u001b[38;2;116;205;221;1mooooooooooo=\u001b[0m       \u001b[38;2;116;205;221;1mCreated\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m3 weeks ago\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -oooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m==\u001b[0m\u001b[38;2;255;255;255;1m#\u001b[0m\u001b[38;2;116;205;221;1m.\u001b[0m\u001b[38;2;255;255;255;1m#\u001b[0m\u001b[38;2;246;210;162;1m==\u001b[0m\u001b[38;2;116;205;221;1mooooooooooooo\u001b[0m       \u001b[38;2;116;205;221;1mLanguage\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m\u001b[48;2;0;173;216m                          \u001b[49m\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -ooooooooooooo=\u001b[0m\u001b[38;2;255;255;255;1m#\u001b[0m\u001b[38;2;116;205;221;1m.\u001b[0m\u001b[38;2;255;255;255;1m#\u001b[0m\u001b[38;2;116;205;221;1m=oooooooooooooo\u001b[0m       \u001b[39m          \u001b[38;2;0;173;216m●\u001b[39m \u001b[39mGo (100.0 %)\u001b[39m \u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   .oooooooooooooooooooooooooooooooo.\u001b[0m      \u001b[38;2;116;205;221;1mAuthor\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m100% Jesse Portnoy 34\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m    oooooooooooooooooooooooooooooooo.\u001b[0m      \u001b[38;2;116;205;221;1mLast change\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m14 hours ago\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m  ..\u001b[0m\u001b[38;2;116;205;221;1moooooooooooooooooooooooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m..\u001b[0m     \u001b[38;2;116;205;221;1mURL\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39mgit@github.com:solworktech/trecs.git\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m-=o-\u001b[0m\u001b[38;2;116;205;221;1m=ooooooooooooooooooooooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m-oo.\u001b[0m   \u001b[38;2;116;205;221;1mCommits\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m34\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m.=- \u001b[0m\u001b[38;2;116;205;221;1moooooooooooooooooooooooooooooooo\u001b[0m\u001b[38;2;246;210;162;1m-.-\u001b[0m    \u001b[38;2;116;205;221;1mChurn (6)\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39mlib/frame_parser.go 2\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   .oooooooooooooooooooooooooooooooo-\u001b[0m      \u001b[39m           lib/terminal_player_test.go 2\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -oooooooooooooooooooooooooooooooo-\u001b[0m      \u001b[39m           cloud/client.go 2\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -oooooooooooooooooooooooooooooooo-\u001b[0m      \u001b[38;2;116;205;221;1mLines of code\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m7118\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   -oooooooooooooooooooooooooooooooo-\u001b[0m      \u001b[38;2;116;205;221;1mSize\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39m24.46 MiB (62 files)\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m   .oooooooooooooooooooooooooooooooo\u001b[0m       \u001b[38;2;116;205;221;1mLicense\u001b[0m\u001b[39;1m:\u001b[0m \u001b[39mAGPL-3.0-only\u001b[0m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m    =oooooooooooooooooooooooooooooo-\u001b[0m       \r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m    .=oooooooooooooooooooooooooooo-\u001b[0m        \u001b[40m   \u001b[49m\u001b[41m   \u001b[49m\u001b[42m   \u001b[49m\u001b[43m   \u001b[49m\u001b[44m   \u001b[49m\u001b[45m   \u001b[49m\u001b[46m   \u001b[49m\u001b[47m   \u001b[49m\r\n\u001b[39;1m\u001b[0m\u001b[38;2;116;205;221;1m      -=oooooooooooooooooooooooo=.\u001b[0m      \r\n\u001b[39;1m","width":0,"height":0}
+{"timestamp":5830,"data":"\u001b[0m\u001b[38;2;246;210;162;1m     =oo\u001b[0m\u001b[38;2;116;205;221;1m====oooooooooooooooo==-\u001b[0m\u001b[38;2;246;210;162;1moo=-\u001b[0m     \r\n\u001b[39;1m\u001b[0m\u001b[38;2;246;210;162;1m    .-==-    \u001b[0m\u001b[38;2;116;205;221;1m.--=======---     \u001b[0m\u001b[38;2;246;210;162;1m.==-\u001b[0m     \r\n\u001b[?7h","width":0,"height":0}
+{"timestamp":5833,"data":"\u001b]133;D;0\u0007\u001b[?25h","width":0,"height":0}
+{"timestamp":5833,"data":"\u001b[2m⏎\u001b(B\u001b[m                                                                                                                                                                           \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":5841,"data":"\u001b]0;~/p/t/editor\u0007\u001b[30m\u001b(B\u001b[m\u001b]133;A;special_key=1\u0007\u001b[92mjesse\u001b(B\u001b[m@\u001b(B\u001b[mport\u001b(B\u001b[m \u001b[32m~/p/t/editor\u001b(B\u001b[m (main)\u001b(B\u001b[m\u003e \u001b]133;B\u0007\u001b[K\r\u001b[32C","width":0,"height":0}
+{"timestamp":5841,"data":"\u001b[?2004h\u001b[=5u\u001b=","width":0,"height":0}
+{"timestamp":6706,"data":"d\r\u001b[33C","width":0,"height":0}
+{"timestamp":6706,"data":"\u001b[90mf -h\u001b[30m\u001b(B\u001b[m\r\u001b[33C","width":0,"height":0}
+{"timestamp":6706,"data":"\b\u001b[91md\u001b[90mf -h\u001b[30m\u001b(B\u001b[m\r\u001b[33C","width":0,"height":0}
+{"timestamp":6791,"data":"\u001b[91mf\u001b[90m -h\u001b[30m\u001b(B\u001b[m\r\u001b[34C","width":0,"height":0}
+{"timestamp":6791,"data":"\b\bdf\u001b[90m -h\u001b[30m\u001b(B\u001b[m\r\u001b[34C","width":0,"height":0}
+{"timestamp":6848,"data":" \u001b[90m-h\u001b[30m\u001b(B\u001b[m\r\u001b[35C","width":0,"height":0}
+{"timestamp":7067,"data":"-\u001b[90mh\u001b[30m\u001b(B\u001b[m\r\u001b[36C","width":0,"height":0}
+{"timestamp":7067,"data":"\b\u001b[36m-\u001b[90mh\u001b[30m\u001b(B\u001b[m\r\u001b[36C","width":0,"height":0}
+{"timestamp":7118,"data":"\u001b[36mh\u001b[30m\u001b(B\u001b[m\r\u001b[37C","width":0,"height":0}
+{"timestamp":7118,"data":"\r\u001b[37C","width":0,"height":0}
+{"timestamp":7598,"data":"\r\u001b[37C\r\n\u001b[30m\u001b(B\u001b[m\u001b]133;C;cmdline_url=df%20-h\u0007","width":0,"height":0}
+{"timestamp":7598,"data":"\u001b[?2004l\u001b[=0u\u001b\u003e","width":0,"height":0}
+{"timestamp":7599,"data":"\u001b]0;df -h ~/p/t/editor\u0007","width":0,"height":0}
+{"timestamp":7599,"data":"\u001b[30m\u001b(B\u001b[m\r","width":0,"height":0}
+{"timestamp":7604,"data":"Filesystem      Size  Used Avail Use% Mounted on\r\nudev             16G     0   16G   0% /dev\r\ntmpfs           3.1G  1.8M  3.1G   1% /run\r\n","width":0,"height":0}
+{"timestamp":7604,"data":"efivarfs        384K   58K  322K  16% /sys/firmware/efi/efivars\r\n/dev/sda2        55G   14G   39G  26% /\r\ntmpfs            16G   99M   16G   1% /dev/shm\r\ntmpfs           5.0M  8.0K  5.0M   1% /run/lock\r\ntmpfs           1.0M     0  1.0M   0% /run/credentials/systemd-journald.service\r\n/dev/sda5       2.7G  417M  2.2G  17% /tmp\r\n/dev/sda1       975M  9.1M  966M   1% /boot/efi\r\n/dev/sda3        22G  4.4G   16G  22% /var\r\n/dev/sda6       805G   53G  712G   7% /home\r\ntmpfs           1.0M     0  1.0M   0% /run/credentials/getty@tty1.service\r\ntmpfs           3.1G   16M  3.1G   1% /run/user/1000\r\ntmpfs           1.0M     0  1.0M   0% /run/credentials/getty@tty4.service\r\ntmpfs           1.0M     0  1.0M   0% /run/credentials/getty@tty6.service\r\ntmpfs           1.0M     0  1.0M   0% /run/credentials/getty@tty3.service\r\ntmpfs           1.0M     0  1.0M   0% /run/credentials/getty@tty2.service\r\n","width":0,"height":0}
+{"timestamp":7604,"data":"\u001b]133;D;0\u0007\u001b[?25h","width":0,"height":0}
+{"timestamp":7604,"data":"\u001b[2m⏎\u001b(B\u001b[m                                                                                                                                                                           \r⏎ \r\u001b[K","width":0,"height":0}
+{"timestamp":7612,"data":"\u001b]0;~/p/t/editor\u0007\u001b[30m\u001b(B\u001b[m\u001b]133;A;special_key=1\u0007\u001b[92mjesse\u001b(B\u001b[m@\u001b(B\u001b[mport\u001b(B\u001b[m \u001b[32m~/p/t/editor\u001b(B\u001b[m (main)\u001b(B\u001b[m\u003e \u001b]133;B\u0007\u001b[K\r\u001b[32C\u001b[?2004h\u001b[=5u\u001b=","width":0,"height":0}
+{"timestamp":8523,"data":"e\r\u001b[33C","width":0,"height":0}
+{"timestamp":8523,"data":"\u001b[90mxit\u001b[30m\u001b(B\u001b[m\r\u001b[33C","width":0,"height":0}
+{"timestamp":8523,"data":"\b\u001b[91me\u001b[90mxit\u001b[30m\u001b(B\u001b[m\r\u001b[33C","width":0,"height":0}
+{"timestamp":8613,"data":"\u001b[91mx\u001b[90mit\u001b[30m\u001b(B\u001b[m\r\u001b[34C","width":0,"height":0}
+{"timestamp":8616,"data":"\b\bex\u001b[90mit\u001b[30m\u001b(B\u001b[m\r\u001b[34C","width":0,"height":0}
+{"timestamp":8704,"data":"i\u001b[90mt\u001b[30m\u001b(B\u001b[m\r\u001b[35C","width":0,"height":0}
+{"timestamp":8704,"data":"\b\b\b\u001b[91mexi\u001b[90mt\u001b[30m\u001b(B\u001b[m\r\u001b[35C","width":0,"height":0}
+{"timestamp":8802,"data":"\u001b[91mt\u001b[30m\u001b(B\u001b[m\r\u001b[36C","width":0,"height":0}
+{"timestamp":8802,"data":"\r\u001b[36C\b\b\b\bexit\r\u001b[36C","width":0,"height":0}
+{"timestamp":9219,"data":"\r\u001b[36C\r\n\u001b[30m\u001b(B\u001b[m\u001b]133;C;cmdline_url=exit\u0007","width":0,"height":0}
+{"timestamp":9219,"data":"\u001b[?2004l\u001b[=0u\u001b\u003e","width":0,"height":0}
+{"timestamp":9220,"data":"\u001b]0;exit ~/p/t/editor\u0007\u001b[30m\u001b(B\u001b[m\r","width":0,"height":0}
+{"timestamp":9220,"data":"\u001b]133;D;0\u0007\u001b[?25h\u001b[30m\u001b(B\u001b[m","width":0,"height":0}

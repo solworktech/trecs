@@ -17,6 +17,7 @@ Commands:
   view   <file>    View and edit recording
   export <file>    Export the recording's commands and outputs as Markdown
                    (written next to it, as <file>.md; -title sets the heading)
+  info   <file>    Output recording's commands
   help             Show this help
 
 The editor allows you to:
@@ -44,7 +45,7 @@ func main() {
 	case "help", "-h", "-help", "--help":
 		fmt.Print(usage)
 		return
-	case "view", "export":
+	case "view", "export", "info":
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n%s", cmd, usage)
 		os.Exit(1)
@@ -84,7 +85,22 @@ func main() {
 		if err := exportToMarkdown(*file, *title, commands); err != nil {
 			fatalf("%v", err)
 		}
+	case "info":
+		if err := showInfo(commands); err != nil {
+			fatalf("%v", err)
+		}
 	}
+}
+
+func showInfo(commands []libtrecs.Command) error {
+
+	for _, c := range commands {
+		if strings.TrimSpace(c.InputText) == "" {
+			continue
+		}
+		fmt.Println(libtrecs.CollapseCommand(c.InputText))
+	}
+	return nil
 }
 
 // exportToMarkdown writes the commands and their outputs next to the recording,
@@ -102,7 +118,6 @@ func exportToMarkdown(filePath, title string, commands []libtrecs.Command) error
 func runEditor(filePath string, commands []libtrecs.Command) error {
 	// Create player (don't start playback here - editor.Run() does that)
 	player := libtrecs.NewTerminalPlayer()
-
 	// Launch editor
 	editor := NewEditorMode(player, commands, filePath)
 	if err := editor.Run(); err != nil {

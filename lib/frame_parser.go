@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -883,15 +884,19 @@ func syncCommandFrames(cmd *Command) {
 		}
 	}
 
-	if deriveOutputText(cmd) != cmd.OutputText {
+	if was := deriveOutputText(cmd); was != cmd.OutputText {
+		// The edit is applied to the recorded output, so that what was not touched keeps its colours; if it
+		// cannot be (see editedRaw), the plain text is what is written.
+		text, ok := editedRaw(markRe.ReplaceAllString(commandOutputRaw(cmd), ""), was, cmd.OutputText)
+		if !ok {
+			text = strings.ReplaceAll(cmd.OutputText, "\n", "\r\n")
+		}
 		cmd.TypedAhead = nil // the frames are about to be replaced
 		ts := cmd.EndTime
 		if len(cmd.OutputFrames) > 0 {
 			ts = cmd.OutputFrames[0].Timestamp
 		}
-		cmd.OutputFrames = []TerminalFrame{
-			{Timestamp: ts, Data: strings.ReplaceAll(cmd.OutputText, "\n", "\r\n")},
-		}
+		cmd.OutputFrames = replaceOutputText(cmd.OutputFrames, text, ts)
 	}
 }
 
@@ -980,6 +985,22 @@ func shiftFrameTimestamps(frames []TerminalFrame, shift int64) []TerminalFrame {
 // annotation (created in the editor, with no ID yet) is assigned one here,
 // along with a timestamp anchored to its command's start and a CreatedAt,
 // so it round-trips through future saves like any other.
+// metaLine returns the first line of a recording's bytes if it is the header ({"type":"meta",...}), as it is.
+func metaLine(recording []byte) ([]byte, bool) {
+	line := recording
+	if i := bytes.IndexByte(recording, '\n'); i >= 0 {
+		line = recording[:i]
+	}
+	line = bytes.TrimSpace(line)
+	var head struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(line, &head) != nil || head.Type != "meta" {
+		return nil, false
+	}
+	return append([]byte(nil), line...), true
+}
+
 func RebuildRecording(originalPath string, backupPath string, commands []Command) error {
 	input, err := os.ReadFile(originalPath)
 	if err != nil {
@@ -1019,6 +1040,14 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 		return fmt.Errorf("failed to create new recording: %w", err)
 	}
 	defer func() { _ = file.Close() }()
+
+	// The recording's header - the size it was recorded at - goes first, exactly as it was. Without it a
+	// saved recording is replayed at a size it was not made at.
+	if header, ok := metaLine(input); ok {
+		if _, err := file.Write(append(header, '\n')); err != nil {
+			return fmt.Errorf("failed to write the recording header: %w", err)
+		}
+	}
 
 	encoder := json.NewEncoder(file)
 	for _, frame := range newFrames {
