@@ -82,7 +82,7 @@ func main() {
 			fatalf("%v", err)
 		}
 	case "export":
-		if err := exportToMarkdown(*file, *title, commands); err != nil {
+		if err := libtrecs.ExportToMarkdown(*file, *title, commands); err != nil {
 			fatalf("%v", err)
 		}
 	case "info":
@@ -100,17 +100,6 @@ func showInfo(commands []libtrecs.Command) error {
 		}
 		fmt.Println(libtrecs.CollapseCommand(c.InputText))
 	}
-	return nil
-}
-
-// exportToMarkdown writes the commands and their outputs next to the recording,
-// as <file>.md. See libtrecs.MarkdownFromCommands for the format.
-func exportToMarkdown(filePath, title string, commands []libtrecs.Command) error {
-	mdPath := filePath + ".md"
-	if err := os.WriteFile(mdPath, []byte(libtrecs.MarkdownFromCommands(title, commands)), 0o644); err != nil {
-		return fmt.Errorf("cannot write %s: %w", mdPath, err)
-	}
-	fmt.Printf("Successfully saved as %s\n", mdPath)
 	return nil
 }
 

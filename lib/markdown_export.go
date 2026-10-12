@@ -2,6 +2,7 @@ package lib
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"unicode"
@@ -181,4 +182,15 @@ func mdAnnotation(text string) string {
 	}
 	flush()
 	return strings.Join(paragraphs, "\n\n")
+}
+
+// exportToMarkdown writes the commands and their outputs next to the recording,
+// as <file>.md. See libtrecs.MarkdownFromCommands for the format.
+func ExportToMarkdown(filePath, title string, commands []Command) error {
+	mdPath := filePath + ".md"
+	if err := os.WriteFile(mdPath, []byte(MarkdownFromCommands(title, commands)), 0o644); err != nil {
+		return fmt.Errorf("cannot write %s: %w", mdPath, err)
+	}
+	fmt.Printf("Successfully exported as %s\n", mdPath)
+	return nil
 }

@@ -180,6 +180,16 @@ func runRecord(terminal, audio, camera, screen *bool,
 	fmt.Printf("Session ID: %s\n", metadata.SessionID)
 	fmt.Printf("Duration: %v\n", metadata.EndTime.Sub(metadata.StartTime))
 	fmt.Printf("Terminal: %s\n", metadata.TerminalFile)
+	commands, err := libtrecs.ParseRecording(metadata.TerminalFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to parse recording: %v", err)
+	}
+	if len(commands) == 0 {
+		fmt.Fprintf(os.Stderr, "no commands found in recording")
+	}
+	if err := libtrecs.ExportToMarkdown(metadata.TerminalFile, *sessionName, commands); err != nil {
+		fmt.Fprintf(os.Stderr, "%v", err)
+	}
 	if metadata.AudioFile != "" {
 		fmt.Printf("Audio: %s\n", metadata.AudioFile)
 	}
