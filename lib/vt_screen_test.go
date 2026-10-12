@@ -1,9 +1,20 @@
 package lib
 
 import (
+	"os"
 	"strings"
 	"testing"
+
+	"golang.org/x/term"
 )
+
+// skipWithoutTTY skips a test that does not hold when there is no terminal to run in: under CI, say.
+func skipWithoutTTY(t *testing.T) {
+	t.Helper()
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		t.Skip("there is no terminal")
+	}
+}
 
 func vtCellAt(t *testing.T, markup string, row, col int) renderedCell {
 	t.Helper()
@@ -74,6 +85,7 @@ func TestMeasureSizeIsClampedToTheSafetyCap(t *testing.T) {
 // belt and braces against a caller (or a future MeasureSize bug) passing
 // something out of range.
 func TestNewVTScreenSizedClampsInput(t *testing.T) {
+	skipWithoutTTY(t)
 	s := NewVTScreenSized(1, 1)
 	s.Feed("\x1b[1;1H")
 	render := s.Render()

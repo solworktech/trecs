@@ -158,6 +158,13 @@ func (tp *TerminalPlayerImpl) loadFrames() error {
 		if raw.Type == "annotation" {
 			continue
 		}
+		// The recording's header (its terminal size) is not a frame either. Kept as one - an empty frame at time 0 - it
+		// put every frame one place later than LoadFrames has it, and so than the raw frame indices of the commands
+		// (FirstRawFrameIndex, GetCommandIndexAtFrame) which are counted by LoadFrames: a command was taken to have begun
+		// one frame before it had, and a jump to a command landed one frame before its prompt.
+		if raw.Type == "meta" {
+			continue
+		}
 		tp.frames = append(tp.frames, TerminalFrame{
 			Timestamp: raw.Timestamp,
 			Data:      raw.Data,

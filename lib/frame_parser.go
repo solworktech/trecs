@@ -32,6 +32,8 @@ type recordingLine struct {
 	Author          string `json:"author,omitempty"`
 	CreatedAt       string `json:"createdAt,omitempty"`
 	DurationSeconds int    `json:"durationSeconds,omitempty"`
+	Kind            string `json:"kind,omitempty"`
+	Placement       string `json:"placement,omitempty"`
 }
 
 // RecordingMeta carries recording-level metadata captured once at record
@@ -80,6 +82,8 @@ func LoadFrames(filePath string) ([]TerminalFrame, []Annotation, RecordingMeta, 
 				Author:          raw.Author,
 				CreatedAt:       raw.CreatedAt,
 				DurationSeconds: raw.DurationSeconds,
+				Kind:            raw.Kind,
+				Placement:       raw.Placement,
 			})
 			continue
 		case "meta":
@@ -126,10 +130,22 @@ func attachAnnotations(commands []Command, annotations []Annotation) {
 				break
 			}
 		}
-		if best >= 0 {
-			commands[best].Annotation = ann
-			commands[best].HasAnnotation = true
+		if best < 0 {
+			continue
 		}
+		if ann.Kind == AnnotationKindCue {
+			// A cue card goes with its command beside the command's note, not in its place; one of each placement. (A card
+			// of a placement this does not know is left out: it is a newer reader's.)
+			switch ann.Placement {
+			case CuePlacementIntro:
+				commands[best].IntroCard, commands[best].HasIntroCard = ann, true
+			case CuePlacementPost:
+				commands[best].PostCard, commands[best].HasPostCard = ann, true
+			}
+			continue
+		}
+		commands[best].Annotation = ann
+		commands[best].HasAnnotation = true
 	}
 }
 
@@ -1011,7 +1027,7 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	}
 
 	var newFrames []TerminalFrame
-	var annotations []Annotation
+	var annotations, cueCards []Annotation
 
 	for i := range commands {
 		cmd := &commands[i]
@@ -1032,6 +1048,26 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 			}
 			cmd.Annotation.Timestamp = commandFirstTimestamp(*cmd)
 			annotations = append(annotations, cmd.Annotation)
+		}
+		for _, c := range []struct {
+			card      *Annotation
+			has       bool
+			placement string
+		}{{&cmd.IntroCard, cmd.HasIntroCard, CuePlacementIntro}, {&cmd.PostCard, cmd.HasPostCard, CuePlacementPost}} {
+			if !c.has || strings.TrimSpace(c.card.Text) == "" {
+				continue
+			}
+			if c.card.ID == "" {
+				c.card.ID = fmt.Sprintf("cue_%x_%s", time.Now().UnixNano(), c.placement)
+			}
+			if c.card.CreatedAt == "" {
+				c.card.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+			}
+			// Anchored to the command's start, whichever side of it it is shown on: that is what ties it to this command
+			// when the file is read (attachAnnotations), where a time after the command's end would be the next one's.
+			c.card.Kind, c.card.Placement = AnnotationKindCue, c.placement
+			c.card.Timestamp = commandFirstTimestamp(*cmd)
+			cueCards = append(cueCards, *c.card)
 		}
 	}
 
@@ -1056,8 +1092,10 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 			return fmt.Errorf("failed to encode frame: %w", err)
 		}
 	}
-	for _, ann := range annotations {
-		line := recordingLine{Type: "annotation", ID: ann.ID, Timestamp: ann.Timestamp, Text: ann.Text, Author: ann.Author, CreatedAt: ann.CreatedAt, DurationSeconds: ann.DurationSeconds}
+	// The cue cards first, and the notes after them: a reader that does not know of cue cards reads each as a note, and
+	// the last note of a command is the one it keeps - so the command's own note, if it has one, is the one it keeps.
+	for _, ann := range append(cueCards, annotations...) {
+		line := recordingLine{Type: "annotation", ID: ann.ID, Timestamp: ann.Timestamp, Text: ann.Text, Author: ann.Author, CreatedAt: ann.CreatedAt, DurationSeconds: ann.DurationSeconds, Kind: ann.Kind, Placement: ann.Placement}
 		if err := encoder.Encode(line); err != nil {
 			return fmt.Errorf("failed to encode annotation: %w", err)
 		}

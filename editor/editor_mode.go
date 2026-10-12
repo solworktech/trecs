@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -85,6 +86,19 @@ type EditorMode struct {
 	pendingAnnotationFrame *libtrecs.TerminalFrame
 	annotationTimer        *time.Timer
 	fullScreen             bool
+
+	// Cue cards (see cue_cards.go). All of it is the UI goroutine's.
+	playbackLayers *tview.Pages // the playback layout, and the card over it
+	cueOverlay     *cueOverlay
+	cueModal       *cueModal
+	cueSteps       []*libtrecs.Annotation
+	cueTarget      int                    // the command an interlude is for
+	cueGen         int                    // which sequence of cards: a timer from one that has ended does nothing
+	cueActive      bool                   // cards are being shown, and playback is paused for them
+	cueDone        func(skipped bool)     // what follows them
+	cueAfter       *cueAfter              // cards that wait for a held frame - a prompt - to be drawn
+	openURL        func(url string) error // what opens a link of a card (openInBrowser; a test's)
+	cueFinal       bool                   // the last command's post card is up, at the end of the recording
 	// buttonFlex      *tview.Flex
 	commandList     *tview.List
 	deletedCommands map[int]bool
@@ -109,6 +123,7 @@ func NewEditorMode(player libtrecs.TerminalPlayer, commands []libtrecs.Command, 
 		editedCommands:  make(map[int]bool),
 		lastSeenCmdIdx:  -1,
 		debugLog:        logFile,
+		openURL:         openInBrowser,
 	}
 }
 
@@ -134,6 +149,8 @@ func (em *EditorMode) Run() error {
 
 	commandListView := em.createCommandListView()
 	em.pages.AddPage("commandlist", commandListView, true, false)
+
+	em.createCueCardModal() // added as a page of its own when it is opened (Ctrl+A in the command list)
 
 	em.previousPage = "playback"
 
@@ -248,9 +265,12 @@ func (em *EditorMode) makeFrameCallback() func(libtrecs.TerminalFrame) {
 		em.stateMu.Lock()
 		rawIdx := em.player.GetCurrentFrameIndex()
 		newIdx := libtrecs.GetCommandIndexAtFrame(rawIdx, em.commands)
-		shouldTrigger := false
+		shouldTrigger := false // the command's first frame is held: a note to preview, or the first command's intro
+		cardsAfter := false    // cue cards are shown when this frame - the prompt - has been drawn
+		prevForCue := -1       // the command that has just ended - none, after a jump: nothing has
 		if newIdx != em.lastSeenCmdIdx {
 			prevSeen := em.lastSeenCmdIdx
+			prevForCue = prevSeen
 			em.lastSeenCmdIdx = newIdx
 			var reason string
 			eligible := false
@@ -269,9 +289,12 @@ func (em *EditorMode) makeFrameCallback() func(libtrecs.TerminalFrame) {
 				reason = "index out of range"
 			}
 			em.debugf("TRANSITION rawIdx=%d prevSeen=%d newIdx=%d reason=%s", rawIdx, prevSeen, newIdx, reason)
-			if eligible {
+			// A note that is previewed, or the first command's intro, goes before the frame; any other cue card after it
+			// (see cue_cards.go).
+			if eligible || em.firstIntroWanted(newIdx) {
 				shouldTrigger = true
 			}
+			cardsAfter = em.cardsAfterWanted(prevSeen, newIdx)
 		}
 		em.stateMu.Unlock()
 
@@ -285,7 +308,7 @@ func (em *EditorMode) makeFrameCallback() func(libtrecs.TerminalFrame) {
 					em.debugf("AUTO-PREVIEW for command %d discarded as stale (gen mismatch)", newIdx)
 					return // a rebuild happened after this frame was produced - stale, discard
 				}
-				em.autoShowAnnotation(newIdx, frameCopy)
+				em.beginInterlude(prevForCue, newIdx, frameCopy, cardsAfter)
 			})
 			return
 		}
@@ -299,33 +322,51 @@ func (em *EditorMode) makeFrameCallback() func(libtrecs.TerminalFrame) {
 		// was playing before a jump land in the freshly rebuilt buffer.
 		gen := em.displayGeneration.Load()
 		isLastFrame := rawIdx == em.player.GetTotalFrames()-1
+		if cardsAfter {
+			// This frame is the prompt of the command that begins. It is drawn as any other is, over what is there, and
+			// playback is paused now - before the next frame - so that the cards are shown over the prompt.
+			em.player.Pause()
+		}
 		em.app.QueueUpdateDraw(func() {
 			if em.displayGeneration.Load() != gen {
 				return
 			}
-			em.display.Feed(frame.Data)
-			rendered := em.display.Render()
-			em.playbackView.SetText(rendered)
-			em.playbackView.ScrollToEnd()
-			em.progressBar.SetProgress(frame.Timestamp, em.totalDurationMs)
-			if isLastFrame {
-				// playbackLoop deliberately keeps running (idling) rather
-				// than exiting once it reaches the last frame - see its
-				// own comment - specifically so a later seek can still
-				// resume it. Nothing else announces that this happened,
-				// so this is done here, synchronously with the same
-				// per-frame update the ordinary status line uses, rather
-				// than from a separate poller: a poller checking
-				// GetPlaybackState() on its own timer could just as
-				// easily run right after this same closure and
-				// overwrite this message with the ordinary
-				// currentAnnotationHint() the very next moment.
-				em.setFullScreen(false)
-				em.setStatus("Finished. Space/P to replay from the start.")
-			} else {
-				em.statusView.SetText(em.currentAnnotationHint())
+			em.renderFrame(frame, newIdx, isLastFrame)
+			if cardsAfter && !em.beginCards(prevForCue, newIdx) {
+				em.player.Resume()
 			}
 		})
+	}
+}
+
+// renderFrame puts a frame on the screen and updates the progress bar and the status line. The UI goroutine's.
+func (em *EditorMode) renderFrame(frame libtrecs.TerminalFrame, newIdx int, isLastFrame bool) {
+	em.display.Feed(frame.Data)
+	rendered := em.display.Render()
+	em.playbackView.SetText(rendered)
+	em.playbackView.ScrollToEnd()
+	em.progressBar.SetProgress(frame.Timestamp, em.totalDurationMs)
+	if isLastFrame {
+		// playbackLoop deliberately keeps running (idling) rather
+		// than exiting once it reaches the last frame - see its
+		// own comment - specifically so a later seek can still
+		// resume it. Nothing else announces that this happened,
+		// so this is done here, synchronously with the same
+		// per-frame update the ordinary status line uses, rather
+		// than from a separate poller: a poller checking
+		// GetPlaybackState() on its own timer could just as
+		// easily run right after this same closure and
+		// overwrite this message with the ordinary
+		// currentAnnotationHint() the very next moment.
+		em.setFullScreen(false)
+		em.showFinalCard(newIdx) // the last command's post card, if it has one: it stays until playback is replayed or moved
+		if em.cueFinal {
+			em.setStatus(em.buttonStatus())
+		} else {
+			em.setStatus("Finished. Space/P to replay from the start.")
+		}
+	} else if !em.cueActive {
+		em.statusView.SetText(em.currentAnnotationHint())
 	}
 }
 
@@ -466,7 +507,13 @@ func (em *EditorMode) createPlaybackView() tview.Primitive {
 		AddItem(em.playbackMargin, 1, 0, false).
 		AddItem(em.progressBar, 1, 0, false)
 
-	return em.playbackFlex
+	// The cue card is a layer over the whole page, centred in it (see cue_cards.go).
+	em.cueOverlay = newCueOverlay()
+	em.playbackLayers = tview.NewPages().
+		AddPage("base", em.playbackFlex, true, true).
+		AddPage("card", em.cueOverlay, true, false)
+
+	return em.playbackLayers
 }
 
 func (em *EditorMode) createEditView() tview.Primitive {
@@ -554,7 +601,7 @@ func (em *EditorMode) createCommandListView() tview.Primitive {
 	legend := tview.NewTextView().
 		SetDynamicColors(true).
 		SetText("[yellow]Up[white]/[yellow]Down[white] Navigate    [yellow]^P[white] Jump to Playback    " +
-			"[yellow]^E[white] Jump to Edit    [yellow]Esc[white] Close")
+			"[yellow]^E[white] Jump to Edit    [yellow]^A[white] Add cue card    [yellow]Esc[white] Close")
 
 	em.commandList = tview.NewList().ShowSecondaryText(false)
 	em.commandList.SetBorder(true).SetTitle(" Commands ")
@@ -608,6 +655,11 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
+	// The cue card modal has the keyboard while it is open: Ctrl+L and the rest must not reach past it.
+	if pageName == cueCardPage {
+		return em.handleCueCardInput(event)
+	}
+
 	// Ctrl+L toggles the command browser from anywhere (except itself,
 	// where Esc closes it instead). It deliberately leaves an in-progress
 	// annotation alone: merely opening a browser isn't a reason to destroy
@@ -634,6 +686,9 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		case tcell.KeyCtrlE:
 			em.jumpToCommandForEdit(em.commandList.GetCurrentItem())
+			return nil
+		case tcell.KeyCtrlA:
+			em.openCueCardModal()
 			return nil
 		}
 		return event
@@ -683,6 +738,11 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	}
 
 	// Playback mode controls
+
+	// A card with buttons that is up has Enter and Tab (see cue_cards.go).
+	if em.handleCueButtonKey(event) {
+		return nil
+	}
 
 	if event.Key() == tcell.KeyCtrlA {
 		if em.annotationModalVisible {
@@ -780,6 +840,13 @@ func (em *EditorMode) setStatus(msg string) {
 // annotation - "" if not, so callers can just concatenate it onto
 // whatever else they're setting the status to.
 func (em *EditorMode) currentAnnotationHint() string {
+	return em.annotationHint() + em.ctaHint() // and, if a card with buttons is up, what they do
+}
+
+func (em *EditorMode) annotationHint() string {
+	if em.cueActive {
+		return "   [yellow]^A[white] Dismiss Cue Card"
+	}
 	if em.annotationModalVisible {
 		return "   [yellow]^A[white] Close Annotation"
 	}
@@ -821,6 +888,10 @@ func (em *EditorMode) showAnnotationModal() {
 // command's held-back first frame before resuming, so the command starts
 // rendering fresh rather than resuming mid-stream into stale content.
 func (em *EditorMode) hideAnnotationModal() {
+	if em.cueActive { // Ctrl+A during a cue card skips it, and what follows it
+		em.skipCues()
+		return
+	}
 	em.annotationModalVisible = false
 	if em.annotationModalIsTop {
 		em.playbackFlex.ResizeItem(em.annotationModalTopView, 0, 0)
@@ -842,7 +913,7 @@ func (em *EditorMode) hideAnnotationModal() {
 		em.playbackView.SetText(em.display.Render())
 		em.playbackView.ScrollToEnd()
 		em.progressBar.SetProgress(frame.Timestamp, em.totalDurationMs)
-		em.player.Resume()
+		em.resumeOrCards() // the cards that wait for this prompt, or playback
 	} else if em.wasPlayingBeforeAnnotation {
 		em.player.Resume()
 	}
@@ -859,6 +930,7 @@ func (em *EditorMode) jumpToCommand(idx int) {
 		return
 	}
 
+	em.cancelCue()
 	em.currentCmdIdx = idx
 	em.currentCmd = &em.commands[idx]
 	em.inputField.SetText(em.currentCmd.InputText, false)
@@ -907,6 +979,7 @@ func (em *EditorMode) jumpToCommandForPlayback(idx int) {
 		return
 	}
 	em.debugf("JUMP requested: idx=%d", idx)
+	em.cancelCue() // a replay is a jump to the first command, and comes here: the last card goes
 
 	// Always pause first, even if already paused: if playback is actively
 	// running, its background goroutine can otherwise keep feeding frames
@@ -1024,6 +1097,7 @@ func (em *EditorMode) quit() {
 // mistake, not the discard. Safe to call even when no annotation is
 // active.
 func (em *EditorMode) cancelAnnotation() {
+	em.cancelCue()
 	if em.annotationTimer != nil {
 		em.annotationTimer.Stop()
 		em.annotationTimer = nil
@@ -1048,8 +1122,16 @@ func (em *EditorMode) cancelAnnotation() {
 // resets the deleted/edited tracking to a clean slate matching the file.
 func (em *EditorMode) saveRecording() {
 	em.updateCurrentCommand()
+	if _, err := em.writeRecording(em.currentCmdIdx); err != nil {
+		em.setStatus("Cannot save: " + err.Error())
+	}
+}
 
-	savedCmdIdx := em.currentCmdIdx
+// writeRecording writes the commands to the file - what has been staged with them: edits, deletions, cue cards - reloads it,
+// and puts playback at the command that was at savedCmdIdx. It is saveRecording's without updateCurrentCommand, which takes
+// what is in the edit page's fields for the current command: right from the edit page, and not from anywhere else, where
+// they are those of another command. Returns the path of the backup it made.
+func (em *EditorMode) writeRecording(savedCmdIdx int) (string, error) {
 	newIdxForSaved := -1
 	var finalCommands []libtrecs.Command
 	for i, cmd := range em.commands {
@@ -1063,8 +1145,7 @@ func (em *EditorMode) saveRecording() {
 	}
 
 	if len(finalCommands) == 0 {
-		em.setStatus("Cannot save: all commands would be deleted.")
-		return
+		return "", errors.New("all commands would be deleted")
 	}
 
 	backupPath := em.filePath + ".backup"
@@ -1076,11 +1157,11 @@ func (em *EditorMode) saveRecording() {
 	compressedCommands := libtrecs.CompressTimestamps(em.commands, em.deletedCommands)
 
 	if err := libtrecs.RebuildRecording(em.filePath, backupPath, compressedCommands); err != nil {
-		em.setStatus(fmt.Sprintf("Failed to save: %v", err))
-		return
+		return "", fmt.Errorf("failed to write the recording: %w", err)
 	}
 
 	em.reloadFromDisk(newIdxForSaved, backupPath)
+	return backupPath, nil
 }
 
 // reloadFromDisk re-parses the recording file from scratch, replaces the
@@ -1094,6 +1175,7 @@ func (em *EditorMode) reloadFromDisk(targetIdx int, backupPath string) {
 		return
 	}
 
+	em.cancelCue()
 	em.player.Stop()
 
 	newPlayer := libtrecs.NewTerminalPlayer()

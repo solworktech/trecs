@@ -210,6 +210,13 @@ type Command struct {
 	// is false and Annotation is the zero value when there is none.
 	Annotation    Annotation
 	HasAnnotation bool
+
+	// IntroCard and PostCard are the cue cards shown before this command and after it (see Annotation.Kind): at most
+	// one of each. Like Annotation, the Has flag says whether there is one.
+	IntroCard    Annotation
+	HasIntroCard bool
+	PostCard     Annotation
+	HasPostCard  bool
 }
 
 // Annotation is a timestamped note attached to a command. Timestamp is
@@ -231,4 +238,21 @@ type Annotation struct {
 	// automatically; it's still viewable on demand via the manual
 	// show/hide toggle (Ctrl+A in the TUI) regardless of this value.
 	DurationSeconds int `json:"durationSeconds,omitempty"`
+
+	// Kind is "" for a note - the original annotation, one per command - and AnnotationKindCue for a cue card: a
+	// card shown centred over the terminal, before a command (Placement CuePlacementIntro) or after it
+	// (CuePlacementPost). A cue card is an annotation line with these two fields added, and not a line type of its own,
+	// because a reader that does not know of them reads it as the annotation it also is, where a line of an unknown
+	// type is read as a frame - an empty one, at the end of the recording, which breaks its duration.
+	// DurationSeconds is how long the card is shown, as a note's is for a note; the card after the last command is not
+	// timed - it stays until playback is replayed or moved.
+	Kind      string `json:"kind,omitempty"`
+	Placement string `json:"placement,omitempty"`
 }
+
+// What a cue card is, and where it goes (see Annotation.Kind).
+const (
+	AnnotationKindCue = "cue"
+	CuePlacementIntro = "intro"
+	CuePlacementPost  = "post"
+)

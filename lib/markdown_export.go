@@ -10,8 +10,10 @@ import (
 
 // MarkdownFromCommands renders a recording's commands as a Markdown document: a
 // title, a table of contents linking to each command, then for each command its
-// heading, its annotation (if any) and its output. It matches the export the web
-// player offers.
+// heading, its annotation (if any) and its output. A command's cue cards (see
+// Annotation.Kind) go with it as quotes: its intro before its heading, its post card
+// after its output. It matches the export the web player offers - bar the cue cards,
+// which the web player does not show yet.
 func MarkdownFromCommands(title string, commands []Command) string {
 	if strings.TrimSpace(title) == "" {
 		title = "Terminal recording"
@@ -40,6 +42,9 @@ func MarkdownFromCommands(title string, commands []Command) string {
 		b.WriteString("\n")
 	}
 	for _, e := range entries {
+		if card := mdCueCard(e.cmd.IntroCard, e.cmd.HasIntroCard); card != "" {
+			b.WriteString(card + "\n\n")
+		}
 		fmt.Fprintf(&b, "### %s\n\n", mdInlineCode(e.title))
 		if strings.Contains(e.cmd.InputText, "\n") {
 			b.WriteString(mdBlock("bash", e.cmd.InputText) + "\n\n") // as typed: line breaks and all
@@ -51,6 +56,9 @@ func MarkdownFromCommands(title string, commands []Command) string {
 			b.WriteString("_(interactive full-screen session - output not captured)_\n\n")
 		} else if out := CleanOutput(e.cmd.OutputTextRaw); out != "" {
 			b.WriteString(mdBlock("console", out) + "\n\n")
+		}
+		if card := mdCueCard(e.cmd.PostCard, e.cmd.HasPostCard); card != "" {
+			b.WriteString(card + "\n\n")
 		}
 	}
 	return strings.TrimRight(regexp.MustCompile(`\n{3,}`).ReplaceAllString(b.String(), "\n\n"), "\n") + "\n"
@@ -154,6 +162,28 @@ func newHeadingSlugger() func(string) string {
 }
 
 var mdLineStartRe = regexp.MustCompile(`^([#>]|[-+*]\s|\d+[.)]\s)`)
+
+// mdCueCard is a cue card as a Markdown quote, which is what sets it apart from the command's own note, a paragraph. Its text is
+// Markdown already - links, bold and italics are as they were written - and is otherwise as a note's is (see mdAnnotation): what
+// would start a heading, a list or a quote of its own is escaped, as it is text in a card.
+func mdCueCard(card Annotation, has bool) string {
+	if !has {
+		return ""
+	}
+	text := mdAnnotation(card.Text)
+	if text == "" {
+		return ""
+	}
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		if l == "" {
+			lines[i] = ">"
+		} else {
+			lines[i] = "> " + l
+		}
+	}
+	return strings.Join(lines, "\n")
+}
 
 // mdAnnotation is an annotation as Markdown paragraphs: lines trimmed (deep
 // indentation would become a code block), the lines of a paragraph kept apart
