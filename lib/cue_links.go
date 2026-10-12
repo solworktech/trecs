@@ -215,10 +215,11 @@ func cueMatchEmphasis(atoms []cueAtom) {
 	var stack []open
 	for i := range atoms {
 		a := &atoms[i]
-		switch {
-		case a.kind == 'b':
+		//nolint
+		switch a.kind {
+		case 'b':
 			stack = nil
-		case a.kind == 'd':
+		case 'd':
 			if a.canClose {
 				found := false
 				for s := len(stack) - 1; s >= 0; s-- {

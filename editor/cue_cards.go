@@ -554,7 +554,8 @@ func (s *cueSelect) Blur() {
 }
 
 func (s *cueSelect) Draw(screen tcell.Screen) {
-	s.Box.DrawForSubclass(screen, s)
+	//nolint
+	s.DrawForSubclass(screen, s)
 	x, y, w, _ := s.GetInnerRect()
 	labelWidth := tview.TaggedStringWidth(s.label)
 	tview.Print(screen, s.label, x, y, w, tview.AlignLeft, tcell.ColorWhite)

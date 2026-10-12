@@ -382,7 +382,8 @@ func TestTheSelectShowsEachOptionOnceWhenItIsOpenAndLeavesTheModalAlone(t *testi
 		t.Errorf("open, Intro %d times and Post %d times. The screen:\n%s", a, b, h.screen())
 	}
 	for _, l := range strings.Split(h.screen(), "\n") {
-		if strings.Contains(l, " Content ") && !(strings.Contains(l, "┌") && strings.Contains(l, "┐") && strings.Contains(l, "──")) {
+		//nolint
+		if strings.Contains(l, " Content ") && (!strings.Contains(l, "┌") || !strings.Contains(l, "┐") || !strings.Contains(l, "──")) {
 			t.Errorf("the Content box's border is broken: %q", l)
 		}
 	}
@@ -784,7 +785,8 @@ func TestANoteIsFollowedByTheCommandsIntroCardWhenItsPromptHasBeenDrawn(t *testi
 	if !okI || !okN {
 		t.Fatalf("note %v, intro %v", okN, okI)
 	}
-	if !(first.Before(note) && note.Before(intro) && intro.Before(out)) {
+	//nolint
+	if !first.Before(note) || !note.Before(intro) || !intro.Before(out) {
 		t.Errorf("order: command 0 %v, note %v, intro %v, command 1 %v", first.UnixMilli(), note.UnixMilli(), intro.UnixMilli(), out.UnixMilli())
 	}
 	if d := intro.Sub(note); d < 800*time.Millisecond || d > 2500*time.Millisecond {
