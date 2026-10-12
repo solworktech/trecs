@@ -601,7 +601,7 @@ func (em *EditorMode) createCommandListView() tview.Primitive {
 	legend := tview.NewTextView().
 		SetDynamicColors(true).
 		SetText("[yellow]Up[white]/[yellow]Down[white] Navigate    [yellow]^P[white] Jump to Playback    " +
-			"[yellow]^E[white] Jump to Edit    [yellow]^A[white] Add cue card    [yellow]Esc[white] Close")
+			"[yellow]^E[white] Jump to Edit    [yellow]^A[white] Add/Edit cue card    [yellow]Esc[white] Close")
 
 	em.commandList = tview.NewList().ShowSecondaryText(false)
 	em.commandList.SetBorder(true).SetTitle(" Commands ")
@@ -744,7 +744,7 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
-	if event.Key() == tcell.KeyCtrlA {
+	if event.Key() == tcell.KeyCtrlX {
 		if em.annotationModalVisible {
 			em.hideAnnotationModal()
 		} else {
@@ -845,10 +845,10 @@ func (em *EditorMode) currentAnnotationHint() string {
 
 func (em *EditorMode) annotationHint() string {
 	if em.cueActive {
-		return "   [yellow]^A[white] Dismiss Cue Card"
+		return "   [yellow]^X[white] Dismiss Cue Card"
 	}
 	if em.annotationModalVisible {
-		return "   [yellow]^A[white] Close Annotation"
+		return "   [yellow]^X[white] Close Annotation"
 	}
 	idx := libtrecs.GetCommandIndexAtFrame(em.player.GetCurrentFrameIndex(), em.commands)
 	if idx < 0 || idx >= len(em.commands) || !em.commands[idx].HasAnnotation {

@@ -1086,18 +1086,22 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	}
 
 	encoder := json.NewEncoder(file)
-	for _, frame := range newFrames {
-		line := recordingLine{Type: "frame", Timestamp: frame.Timestamp, Data: frame.Data, Width: frame.Width, Height: frame.Height}
-		if err := encoder.Encode(line); err != nil {
-			return fmt.Errorf("failed to encode frame: %w", err)
-		}
-	}
-	// The cue cards first, and the notes after them: a reader that does not know of cue cards reads each as a note, and
+	// The annotations go first, straight after the header, and the frames after them. A player that is given a recording as it
+	// arrives starts with the first of it: an annotation at the end of the file is not known until the end of the file has
+	// arrived, and a card that is to be shown before the first command - or a note on one of the first - would be missed.
+	//
+	// The cue cards come first of them, and the notes after: a reader that does not know of cue cards reads each as a note, and
 	// the last note of a command is the one it keeps - so the command's own note, if it has one, is the one it keeps.
 	for _, ann := range append(cueCards, annotations...) {
 		line := recordingLine{Type: "annotation", ID: ann.ID, Timestamp: ann.Timestamp, Text: ann.Text, Author: ann.Author, CreatedAt: ann.CreatedAt, DurationSeconds: ann.DurationSeconds, Kind: ann.Kind, Placement: ann.Placement}
 		if err := encoder.Encode(line); err != nil {
 			return fmt.Errorf("failed to encode annotation: %w", err)
+		}
+	}
+	for _, frame := range newFrames {
+		line := recordingLine{Type: "frame", Timestamp: frame.Timestamp, Data: frame.Data, Width: frame.Width, Height: frame.Height}
+		if err := encoder.Encode(line); err != nil {
+			return fmt.Errorf("failed to encode frame: %w", err)
 		}
 	}
 

@@ -222,3 +222,51 @@ func TestACardWithNoTextIsNotWrittenAndALoadedOneKeepsItsId(t *testing.T) {
 		t.Errorf("%+v", lines)
 	}
 }
+
+// A player that is given a recording as it arrives starts with the first of it. The annotations are at the top of the file, after
+// the header and before every frame, so that it has them - the cards, above all, one of which is shown before the first command.
+func TestAnnotationsAreWrittenBeforeTheFramesAndAfterTheHeader(t *testing.T) {
+	path := copyToTemp(t, cueFixture)
+	cmds, _ := ParseRecording(path)
+	cmds[0].IntroCard, cmds[0].HasIntroCard = cueCard("Before everything", 3), true
+	cmds[2].Annotation, cmds[2].HasAnnotation = Annotation{Text: "a note"}, true
+	cmds[len(cmds)-1].PostCard, cmds[len(cmds)-1].HasPostCard = cueCard("After everything", 3), true
+	if err := RebuildRecording(path, path+".bak", cmds); err != nil {
+		t.Fatal(err)
+	}
+	var kinds []string
+	for _, l := range strings.Split(strings.TrimSpace(readFile(t, path)), "\n") {
+		var rl recordingLine
+		if err := json.Unmarshal([]byte(l), &rl); err != nil {
+			t.Fatal(err)
+		}
+		k := rl.Type
+		if k == "annotation" && rl.Kind == AnnotationKindCue {
+			k = "cue"
+		}
+		kinds = append(kinds, k)
+	}
+	if kinds[0] != "meta" {
+		t.Errorf("the header is not first: %q", kinds[:4])
+	}
+	lastAnnotation, firstFrame := -1, -1
+	for i, k := range kinds {
+		if k == "annotation" || k == "cue" {
+			lastAnnotation = i
+		}
+		if k == "frame" && firstFrame < 0 {
+			firstFrame = i
+		}
+	}
+	if lastAnnotation < 0 || firstFrame < 0 || lastAnnotation > firstFrame {
+		t.Errorf("an annotation after a frame: the last at %d, the first frame at %d: %q", lastAnnotation, firstFrame, kinds[:8])
+	}
+	if want := []string{"meta", "cue", "cue", "annotation", "frame"}; strings.Join(kinds[:5], ",") != strings.Join(want, ",") {
+		t.Errorf("the head of the file is %q, want %q (the cards, then the notes)", kinds[:5], want)
+	}
+	// and it is read back as before
+	got, err := ParseRecording(path)
+	if err != nil || !got[0].HasIntroCard || !got[2].HasAnnotation || !got[len(got)-1].HasPostCard {
+		t.Errorf("read back: %v %+v", err, got[0].HasIntroCard)
+	}
+}
