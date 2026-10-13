@@ -37,7 +37,7 @@ builds:
       - arm64
 
 archives:
-  - format: tar.gz
+  - formats: ["tar.gz"]
     # this name template makes the OS and Arch compatible with `uname`.
     name_template: >-
       {{ .ProjectName }}_
@@ -49,7 +49,7 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 snapshot:
-  # name_template: "{{ incpatch .Version }}-next"
+# name_template: "{{ incpatch .Version }}-next"
 changelog:
   sort: asc
   filters:
@@ -115,6 +115,49 @@ nfpms:
       - deb
       - rpm
       - archlinux
+brews:
+  -
+    name: trecs
+    commit_author:
+      name: jessp01
+      email: jesse@packman.io
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    directory: Formula
+    description: |-
+      A tool for recording and editing terminal sessions with precise timestamp
+      control.
+
+      - Sharp at any size. A video is a grid of pixels: soft on a phone, blurry
+      at full screen, unreadable once someone zooms in. A recording is text,
+      drawn fresh at whatever size the viewer has.
+
+      - Kilobytes, not megabytes. The same session as a screen video runs to
+      hundreds of megabytes. A recording loads at once, plays on a poor
+      connection and costs next to nothing to host.
+
+      - The real thing, not a polished excerpt. Docs show the snippet someone
+      chose to paste, and drift out of date. A recording shows the actual output
+      , the actual error and the actual fix, right next to your written steps.
+
+      The editor allows you to:
+      - Watch recording playback
+      - Pause at any point
+      - Edit command input and output
+      - Delete commands
+      - Save edited recordings with automatic timestamp compression
+    license: "AGPLv3"
+    install: |
+      bin.install "trecs"
+      bin.install "trecs-edit"
+    # test: |
+    #  system "#{bin}/trecs -h"
+    # Repository to push the generated files to.
+    repository:
+      owner: solworktech
+      name: homebrew-trecs
+      branch: main
+      token: "{{ .Env.GH_TOKEN }}"
+
 # The lines beneath this are called `modelines`. See `:help modeline`
 # Feel free to remove those if you don't want/use them.
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
