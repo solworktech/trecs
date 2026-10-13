@@ -306,3 +306,27 @@ func TestPositionAfterSeekingIntoTheGap(t *testing.T) {
 		t.Errorf("seeked to 600 while paused: position = %d", got)
 	}
 }
+
+// A seek by time into a quiet stretch lands there, to the millisecond: the frame after it is not delivered at once, but when what is
+// left of the stretch is over, and the position goes on from the time that was asked for. It is so too when the frame is the one that
+// a pause had interrupted the wait for.
+func TestSeekingByTimeIntoAGapPlaysTheRestOfTheGap(t *testing.T) {
+	p, rec := startQuietRecording(t)
+	p.Pause()
+	time.Sleep(50 * time.Millisecond) // the loop has noticed, and is holding the wait for the third frame
+	before := rec.count()
+	p.SeekTo(800)
+	p.Resume()
+	time.Sleep(150 * time.Millisecond)
+	if got := rec.count(); got != before {
+		t.Errorf("the frame after the gap was delivered at once (%d frames, there were %d)", got, before)
+	}
+	if pos := p.Position(); pos < 800 || pos > 1100 {
+		t.Errorf("position = %d, want it to go on from 800", pos)
+	}
+	start := time.Now()
+	waitFor(t, 2*time.Second, func() bool { return rec.count() == before+1 })
+	if d := time.Since(start); d > 700*time.Millisecond {
+		t.Errorf("the frame came %v later: 450 ms of the gap were left", d)
+	}
+}

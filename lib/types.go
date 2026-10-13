@@ -251,6 +251,13 @@ type Annotation struct {
 	// timed - it stays until playback is replayed or moved.
 	Kind      string `json:"kind,omitempty"`
 	Placement string `json:"placement,omitempty"`
+
+	// For a timed annotation (AnnotationKindTimed) only. PausePlayback: playback is paused when it is shown, and goes on by itself
+	// when its duration is over. (A viewer who pauses playback while any annotation is up keeps it up until they resume.) ShowInNav:
+	// the first line of its text is shown under the command that holds it, in the list of commands. Both are false if they are
+	// missing, which is how a timed annotation was before there was a choice.
+	PausePlayback bool `json:"pausePlayback,omitempty"`
+	ShowInNav     bool `json:"showInNav,omitempty"`
 }
 
 // What a cue card is, and where it goes (see Annotation.Kind).

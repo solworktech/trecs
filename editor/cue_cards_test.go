@@ -101,7 +101,7 @@ func newHarnessFile(t *testing.T, fixture string, mutate func(cmds []libtrecs.Co
 			t.Error("the editor did not stop")
 		}
 	})
-	h.waitFor("the editor to be drawn", func() bool { return strings.Contains(h.screen(), "Browse Commands") }, 5*time.Second)
+	h.waitFor("the editor to be drawn", func() bool { return strings.Contains(h.screen(), "^L Browse") }, 5*time.Second)
 	return h
 }
 

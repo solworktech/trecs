@@ -206,13 +206,24 @@ func TestTabGoesRoundTheModalFromTheTextAndTheTimeCanBeChanged(t *testing.T) {
 		{"Discard (nothing to delete)", func(m *timedModal) tview.Primitive { return m.discard }},
 		{"time", func(m *timedModal) tview.Primitive { return m.time }},
 		{"style", func(m *timedModal) tview.Primitive { return m.style }},
+		{"pause", func(m *timedModal) tview.Primitive { return m.pause }},
+		{"nav", func(m *timedModal) tview.Primitive { return m.nav }},
 		{"text again", func(m *timedModal) tview.Primitive { return m.text }},
 	} {
 		h.key(tcell.KeyTab)
 		h.waitFor("focus on "+step.name, func() bool { return h.focusedIs(step.p) }, 2*time.Second)
 	}
-	h.key(tcell.KeyBacktab)
-	h.waitFor("Shift+Tab to the style", func() bool { return h.focusedIs(func(m *timedModal) tview.Primitive { return m.style }) }, 2*time.Second)
+	for _, back := range []struct {
+		name string
+		p    func(m *timedModal) tview.Primitive
+	}{
+		{"nav", func(m *timedModal) tview.Primitive { return m.nav }},
+		{"pause", func(m *timedModal) tview.Primitive { return m.pause }},
+		{"style", func(m *timedModal) tview.Primitive { return m.style }},
+	} {
+		h.key(tcell.KeyBacktab)
+		h.waitFor("Shift+Tab to the "+back.name, func() bool { return h.focusedIs(back.p) }, 2*time.Second)
+	}
 	h.key(tcell.KeyBacktab)
 	h.waitFor("Shift+Tab to the time", func() bool { return h.focusedIs(func(m *timedModal) tview.Primitive { return m.time }) }, 2*time.Second)
 	// the time takes digits and colons, and nothing else
@@ -521,7 +532,7 @@ func TestCtrlTShowsAndHidesTheCommandsAnnotationAsCtrlADid(t *testing.T) {
 func TestTheLegendSaysCtrlATimedAnnotations(t *testing.T) {
 	h := newHarness(t, nil)
 	h.pausePlayback()
-	if !strings.Contains(h.screen(), "^A Timed Annotations") || !strings.Contains(h.screen(), "Browse Commands") {
+	if !strings.Contains(h.screen(), "^A Timed Annotations") || !strings.Contains(h.screen(), "^L Browse") {
 		t.Errorf("the legend:\n%s", strings.Split(h.screen(), "\n")[0])
 	}
 }
@@ -534,7 +545,9 @@ func TestTimedAnnotationsFollowTheirCommandsWhenAnotherIsDeletedAndTheRecordingW
 	})
 	h.pausePlayback()
 	h.onUI(func() { h.em.deletedCommands[1] = true }) // 0.264 s to 0.312 s of the stretched recording
-	h.key(tcell.KeyCtrlA)
+	h.key(tcell.KeyCtrlA)                             // the list of the one there is
+	h.waitFor("the list", func() bool { return h.front() == timedListPage }, 2*time.Second)
+	h.key(tcell.KeyCtrlN) // and a new one
 	h.waitFor("the modal", func() bool { return h.front() == timedNotePage }, 2*time.Second)
 	h.setTimeField("00:03")
 	h.typeText("A new one")
@@ -619,7 +632,9 @@ func (h *harness) openTimedModalPaused() {
 
 func (h *harness) focusTimedStyle() {
 	h.t.Helper()
-	h.key(tcell.KeyBacktab) // from the text
+	for i := 0; i < 3; i++ {
+		h.key(tcell.KeyBacktab) // from the text: the nav menu's select, the pause's, then the style's
+	}
 	h.waitFor("focus on the style", func() bool { return h.focusedIs(func(m *timedModal) tview.Primitive { return m.style }) }, 2*time.Second)
 }
 

@@ -189,6 +189,12 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 	// through again.
 	skipDelay := false
 
+	// A seek by time (SeekTo) lands between two frames, not on one: the frame it finds is the next, and it comes after what is left
+	// of the gap - from the time that was asked for, not from the frame before - so that playback is where it was sent, to the
+	// millisecond, and not at the next frame. seekFromIdx is that frame, and seekFromTs the time; -1 when there is none.
+	seekFromIdx := -1
+	var seekFromTs int64
+
 	// When a pause interrupts a frame's wait, how much of it was left, so
 	// resuming continues from there instead of restarting the full delay.
 	interruptedIdx := -1
@@ -234,6 +240,10 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 		}
 
 		if tp.seeking {
+			seekFromIdx = -1
+			// A seek supersedes a wait that a pause interrupted: to the frame that was being waited for, it is a new wait, from where
+			// it was sent, and not what was left of the old one.
+			interruptedIdx = -1
 			// Jump to seek position
 			if tp.targetIndex >= 0 {
 				if tp.targetIndex < len(tp.frames) {
@@ -255,6 +265,9 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 				tp.lastPos = min(tp.targetTimestamp, tp.frames[len(tp.frames)-1].Timestamp)
 			}
 			skipDelay = true
+			if tp.targetIndex < 0 && tp.currentIndex < len(tp.frames) && tp.frames[tp.currentIndex].Timestamp > tp.targetTimestamp {
+				skipDelay, seekFromIdx, seekFromTs = false, tp.currentIndex, tp.targetTimestamp
+			}
 			// A seek always leaves "finished" behind, even one that lands
 			// exactly back at the end again - that will be re-detected at
 			// the top of the next iteration and handled the same way as
@@ -305,6 +318,8 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 			delay = 0
 		case interruptedIdx == idx:
 			delay = interruptedRemaining
+		case seekFromIdx == idx:
+			delay = time.Duration(float64(time.Duration(currentFrame.Timestamp-seekFromTs)*time.Millisecond) / tp.speed)
 		case idx == 0:
 			delay = time.Duration(currentFrame.Timestamp) * time.Millisecond
 			delay = time.Duration(float64(delay) / tp.speed)
@@ -331,6 +346,9 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 		var from int64
 		if idx > 0 {
 			from = tp.frames[idx-1].Timestamp
+		}
+		if seekFromIdx == idx {
+			from = seekFromTs
 		}
 		tp.mutex.Lock()
 		tp.waiting, tp.waitFrom, tp.waitTo, tp.waitDeadline, tp.waitFull = true, from, currentFrame.Timestamp, deadline, full
@@ -384,6 +402,7 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 		tp.currentIndex++
 		tp.lastPos = currentFrame.Timestamp
 		tp.mutex.Unlock()
+		seekFromIdx = -1
 	}
 }
 

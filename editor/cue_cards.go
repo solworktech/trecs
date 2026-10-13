@@ -567,10 +567,17 @@ type cueSelect struct {
 	cursor   int // the one marked while it is open
 	open     bool
 	selected func(index int)
+	mark     tcell.Color // the colour of the option that is marked; the green of a card's edge, if none is set
 }
 
 func newCueSelect(label string, options []string) *cueSelect {
 	return &cueSelect{Box: tview.NewBox(), label: label, options: options}
+}
+
+// SetMarkColor sets the background of the marked option, for a select that is on a green of its own.
+func (s *cueSelect) SetMarkColor(c tcell.Color) *cueSelect {
+	s.mark = c
+	return s
 }
 
 func (s *cueSelect) SetSelectedFunc(f func(index int)) *cueSelect {
@@ -615,7 +622,11 @@ func (s *cueSelect) Draw(screen tcell.Screen) {
 		}
 	}
 	plain := tcell.StyleDefault.Background(tcell.ColorBlack).Foreground(tcell.ColorWhite)
-	marked := tcell.StyleDefault.Background(cueCardBorder).Foreground(tcell.ColorBlack)
+	markColor := cueCardBorder
+	if s.mark != tcell.ColorDefault {
+		markColor = s.mark
+	}
+	marked := tcell.StyleDefault.Background(markColor).Foreground(tcell.ColorBlack)
 	draw := func(row int, text string, style tcell.Style) {
 		for col := 0; col < optionWidth+2 && col < w; col++ {
 			screen.SetContent(x+col, y+row, ' ', nil, style)
@@ -732,10 +743,10 @@ func (em *EditorMode) createCueCardModal() {
 	m.del = button("Delete cue card", em.deleteCueCard)
 	m.discard = button("Discard  Esc", em.closeCueCardModal)
 
-	m.buttons = tview.NewFlex().SetDirection(tview.FlexColumn)
+	m.buttons = opaque(tview.NewFlex(), false).SetDirection(tview.FlexColumn)
 	em.layoutCueButtons()
 
-	m.box = tview.NewFlex().SetDirection(tview.FlexRow).
+	m.box = opaque(tview.NewFlex(), true).SetDirection(tview.FlexRow).
 		AddItem(m.command, 1, 0, false).
 		AddItem(m.kind, 2, 0, true). // the second row is where it shows its options when it is open
 		AddItem(m.text, 8, 0, false).

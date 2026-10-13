@@ -103,11 +103,12 @@ type EditorMode struct {
 	timedOverlay   *timedOverlay
 	timedModal     *timedModal
 	timedListModal *timedListModal
-	timedLast      int64       // the position of playback when they were last looked at: those since are shown
-	timedTimer     *time.Timer // takes the one that is up away when its duration is over
-	timedGen       int         // which: a timer from one that has gone does nothing
+	timedLast      int64 // the position of playback when they were last looked at: those since are shown
 	timedShown     bool
-	cueFinal       bool // the last command's post card is up, at the end of the recording
+	timedRemaining time.Duration // how long what is up has still to be shown: counted down by the progress clock, while playback is not paused
+	timedTickAt    time.Time     // when the progress clock last counted it
+	timedPausedIt  bool          // it paused playback, which has not been resumed since: dismissing it resumes it
+	cueFinal       bool          // the last command's post card is up, at the end of the recording
 	// buttonFlex      *tview.Flex
 	commandList     *tview.List
 	deletedCommands map[int]bool
@@ -659,6 +660,12 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
+	// Ctrl+E in any text input - in the edit page, or a modal - opens what is in it in $EDITOR. (Outside one, it is what it was on the
+	// playback page: edit the command being played.)
+	if event.Key() == tcell.KeyCtrlE && em.editFocusedInputExternally() {
+		return nil
+	}
+
 	pageName, _ := em.pages.GetFrontPage()
 
 	// On the playback page specifically, Esc also exits full screen (the
@@ -734,9 +741,6 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		case tcell.KeyCtrlN:
 			em.jumpToCommand(em.currentCmdIdx + 1)
 			return nil
-		case tcell.KeyCtrlE:
-			em.editFocusedFieldExternally()
-			return nil
 		case tcell.KeyTab:
 			currentFocus := em.app.GetFocus()
 			switch currentFocus {
@@ -781,7 +785,11 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		case em.annotationModalVisible:
 			em.hideAnnotationModal()
 		case em.timedShown:
+			resume := em.timedPausedIt && em.player.GetPlaybackState() == libtrecs.PlaybackPaused
 			em.hideTimed()
+			if resume { // it paused playback, for the viewer to read it: dismissed, playback goes on
+				em.player.Resume()
+			}
 			em.setStatus(em.currentAnnotationHint())
 		}
 		return nil
@@ -1306,13 +1314,7 @@ func (em *EditorMode) openInExternalEditor(initial string) (string, error) {
 
 	var runErr error
 	suspended := em.app.Suspend(func() {
-		// Run via sh -c so a $EDITOR containing arguments (e.g. "code
-		// --wait") is honoured, not treated as one literal binary name.
-		cmd := exec.Command("sh", "-c", editorCmd+" \""+tmpPath+"\"")
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		runErr = cmd.Run()
+		runErr = externalEditorRun(editorCmd, tmpPath)
 	})
 	if !suspended {
 		return "", fmt.Errorf("could not suspend the editor UI")
@@ -1328,23 +1330,65 @@ func (em *EditorMode) openInExternalEditor(initial string) (string, error) {
 	return strings.TrimRight(string(data), "\n"), nil
 }
 
-// editFocusedFieldExternally opens whichever of Input/Output currently has
-// focus in the external editor, then loads the result back into that field.
-func (em *EditorMode) editFocusedFieldExternally() {
-	field := em.inputField
-	label := "Input"
-	if em.app.GetFocus() == em.outputField {
-		field = em.outputField
-		label = "Output"
-	}
+// externalEditorRun runs the editor on a file, with the terminal handed over; a variable so that a test can stand in for one.
+var externalEditorRun = func(editorCmd, path string) error {
+	// Run via sh -c so a $EDITOR containing arguments (e.g. "code --wait") is honoured, not treated as one literal binary name.
+	cmd := exec.Command("sh", "-c", editorCmd+" \""+path+"\"")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
 
-	edited, err := em.openInExternalEditor(field.GetText())
-	if err != nil {
-		em.setStatus(fmt.Sprintf("External editor failed: %v", err))
-		return
+// editFocusedInputExternally opens whichever text input has the focus in $EDITOR, and loads what comes back into it. It says whether
+// there was one: a text area (the command, its output, a note, the text of a card or of a timed annotation) or an input field (a
+// time, a duration).
+func (em *EditorMode) editFocusedInputExternally() bool {
+	switch f := em.app.GetFocus().(type) {
+	case *tview.TextArea:
+		edited, err := em.openInExternalEditor(f.GetText())
+		if err != nil {
+			em.setStatus(fmt.Sprintf("External editor failed: %v", err))
+			return true
+		}
+		f.SetText(edited, true)
+		em.setStatus("Updated from external editor.")
+		return true
+	case *tview.InputField:
+		edited, err := em.openInExternalEditor(f.GetText())
+		if err != nil {
+			em.setStatus(fmt.Sprintf("External editor failed: %v", err))
+			return true
+		}
+		f.SetText(em.inputFieldValue(f, edited))
+		em.setStatus("Updated from external editor.")
+		return true
 	}
-	field.SetText(edited, false)
-	em.setStatus(fmt.Sprintf("%s updated from external editor.", label))
+	return false
+}
+
+// inputFieldValue is what an input field takes of what was typed in the editor: its first line - it is a line - and, for those that are
+// numbers, the characters they accept (the time of a timed annotation: digits and colons; a duration: digits), as typing would have.
+func (em *EditorMode) inputFieldValue(f *tview.InputField, edited string) string {
+	line, _, _ := strings.Cut(strings.ReplaceAll(edited, "\r\n", "\n"), "\n")
+	line = strings.TrimSpace(line)
+	keep := func(ok func(r rune) bool, max int) string {
+		var sb strings.Builder
+		for _, r := range line {
+			if ok(r) && sb.Len() < max {
+				sb.WriteRune(r)
+			}
+		}
+		return sb.String()
+	}
+	digit := func(r rune) bool { return r >= '0' && r <= '9' }
+	switch {
+	case f == em.annotationDurationField, em.cueModal != nil && f == em.cueModal.duration, em.timedModal != nil && f == em.timedModal.duration:
+		return keep(digit, 9)
+	case em.timedModal != nil && f == em.timedModal.time:
+		return keep(func(r rune) bool { return digit(r) || r == ':' }, 8)
+	}
+	return line
 }
 
 // styleButton overrides tview's default button colours (a bright cyan
@@ -1477,11 +1521,16 @@ func (em *EditorMode) runProgressClock(done <-chan struct{}) {
 		default:
 		}
 		em.app.QueueUpdateDraw(func() {
-			if p := em.player; p != nil && p.GetPlaybackState() == libtrecs.PlaybackPlaying {
+			p := em.player
+			if p == nil {
+				return
+			}
+			if p.GetPlaybackState() == libtrecs.PlaybackPlaying {
 				pos := p.Position()
 				em.progressBar.SetProgress(pos, em.totalDurationMs)
-				em.fireTimed(pos) // the timed annotation that its time has come
+				em.fireTimed(pos) // the timed annotation that its time has come - which may pause playback
 			}
+			em.tickTimed(p.GetPlaybackState() == libtrecs.PlaybackPaused, time.Now())
 		})
 	}
 }

@@ -34,6 +34,8 @@ type recordingLine struct {
 	DurationSeconds int    `json:"durationSeconds,omitempty"`
 	Kind            string `json:"kind,omitempty"`
 	Placement       string `json:"placement,omitempty"`
+	PausePlayback   bool   `json:"pausePlayback,omitempty"`
+	ShowInNav       bool   `json:"showInNav,omitempty"`
 }
 
 // RecordingMeta carries recording-level metadata captured once at record
@@ -84,6 +86,8 @@ func LoadFrames(filePath string) ([]TerminalFrame, []Annotation, RecordingMeta, 
 				DurationSeconds: raw.DurationSeconds,
 				Kind:            raw.Kind,
 				Placement:       raw.Placement,
+				PausePlayback:   raw.PausePlayback,
+				ShowInNav:       raw.ShowInNav,
 			})
 			continue
 		case "meta":
@@ -1137,7 +1141,7 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	// one it keeps.
 	all := append(append(append([]Annotation{}, cueCards...), timed...), annotations...)
 	for _, ann := range all {
-		line := recordingLine{Type: "annotation", ID: ann.ID, Timestamp: ann.Timestamp, Text: ann.Text, Author: ann.Author, CreatedAt: ann.CreatedAt, DurationSeconds: ann.DurationSeconds, Kind: ann.Kind, Placement: ann.Placement}
+		line := recordingLine{Type: "annotation", ID: ann.ID, Timestamp: ann.Timestamp, Text: ann.Text, Author: ann.Author, CreatedAt: ann.CreatedAt, DurationSeconds: ann.DurationSeconds, Kind: ann.Kind, Placement: ann.Placement, PausePlayback: ann.PausePlayback, ShowInNav: ann.ShowInNav}
 		if err := encoder.Encode(line); err != nil {
 			return fmt.Errorf("failed to encode annotation: %w", err)
 		}

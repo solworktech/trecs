@@ -20,6 +20,11 @@ import (
 // libtrecs.ParseCueText). It is held by the command its time is in (see libtrecs.AnnotationKindTimed), which is how it moves with
 // that command when others are deleted.
 //
+// Two more choices are made when it is added. Pause playback: playback is paused when it is shown, held for its duration, and goes on
+// by itself when the annotation is gone (Ctrl+X ends it early, and also resumes). Show in nav menu: its first line is shown under its
+// command in the list of commands (in the web player). Otherwise it is shown for its duration while playback plays; when the viewer
+// pauses playback it stays where it is until they resume it, so there is time to read it (the web player does the same).
+//
 // On the playback screen, Ctrl+A lists them, to edit one or add another (or adds one, if there are none yet) (it is not done while a preview or cards are holding playback: they are dismissed
 // first); Ctrl+X dismisses what is up - a preview, cards that hold playback, or a timed annotation; and Ctrl+T shows or hides
 // the annotation of the command being played.
@@ -41,7 +46,47 @@ var (
 		{"Bottom (left corner)", libtrecs.TimedPlacementBottom},
 	}
 	timedStyleDefault = 1 // the bottom: what a timed annotation was before there was a choice, and what none is
+
+	// The two yes-or-no selects, in the order they are offered in: the first is what a new annotation starts on. A timed annotation
+	// that has neither field in the recording is "No" for both - what it was before there was a choice.
+	timedPauseOptions = []string{"Yes", "No"}
+	timedNavOptions   = []string{"No", "Yes"}
+
+	// The modal is drawn over the playback. A flex does not clear what is under it (see opaque), so a modal made of flexes has to be
+	// told to, or the recording shows in the gaps between its parts; its own colour is the dark of its fields.
+	timedModalBackground = tcell.ColorBlack
+	timedModalMark       = cueCardBorder // what is marked in a select, and the button that is activated
+	timedModalHint       = "[gray]^E opens the field in $EDITOR"
 )
+
+// opaque makes a flex paint its background before it draws what it holds, which tview's flex does not (it never clears its area):
+// what is under it - here, the playback - would show in the space between and around what it holds. The draw function runs after the
+// border is drawn and before the items are, so it paints everything inside the border.
+func opaque(f *tview.Flex, bordered bool) *tview.Flex {
+	f.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		bx, by, bw, bh := x, y, width, height
+		if bordered {
+			bx, by, bw, bh = x+1, y+1, width-2, height-2
+		}
+		style := tcell.StyleDefault.Background(f.GetBackgroundColor())
+		for yy := by; yy < by+bh; yy++ {
+			for xx := bx; xx < bx+bw; xx++ {
+				screen.SetContent(xx, yy, ' ', nil, style)
+			}
+		}
+		return f.GetInnerRect()
+	})
+	return f
+}
+
+func yesNoIndex(yes bool, options []string) int {
+	for i, o := range options {
+		if (o == "Yes") == yes {
+			return i
+		}
+	}
+	return 0
+}
 
 func timedStyleIndex(placement string) int {
 	for i, s := range timedStyles {
@@ -199,37 +244,104 @@ func (em *EditorMode) showTimed(a *libtrecs.Annotation) {
 	em.timedOverlay.centered = a.Placement == libtrecs.TimedPlacementCentered
 	em.playbackLayers.ShowPage("timed")
 	em.timedShown = true
-	em.timedGen++
-	gen := em.timedGen
-	if em.timedTimer != nil {
-		em.timedTimer.Stop()
-	}
 	seconds := a.DurationSeconds
 	if seconds < 1 {
 		seconds = timedDefaultSeconds
 	}
-	em.timedTimer = time.AfterFunc(time.Duration(seconds)*time.Second, func() {
-		em.app.QueueUpdateDraw(func() {
-			if gen == em.timedGen {
-				em.hideTimed()
-				em.setStatus(em.currentAnnotationHint())
-			}
-		})
-	})
+	// Its time is counted by the progress clock (see tickTimed), not by a timer: a timer would run out while playback is paused.
+	em.timedRemaining = time.Duration(seconds) * time.Second
+	em.timedTickAt = time.Now()
+	em.timedPausedIt = false
+	if a.PausePlayback && em.player.GetPlaybackState() == libtrecs.PlaybackPlaying {
+		em.player.Pause() // it stays up until the viewer resumes playback, and its time is counted from then
+		em.timedPausedIt = true
+	}
 	em.setStatus(em.currentAnnotationHint())
 }
 
-func (em *EditorMode) hideTimed() {
-	em.timedGen++
-	if em.timedTimer != nil {
-		em.timedTimer.Stop()
-		em.timedTimer = nil
+// tickTimed is called by the progress clock, with whether playback is paused: the time of what is up is counted down by the time
+// that has passed while playback plays - so a viewer who pauses it to read has the annotation up until they resume - and also while
+// it is the annotation that paused playback: that is its duration, and when it is over, the annotation goes and playback goes on.
+func (em *EditorMode) tickTimed(paused bool, now time.Time) {
+	if !em.timedShown {
+		return
 	}
+	last := em.timedTickAt
+	em.timedTickAt = now
+	if !paused {
+		em.timedPausedIt = false // playback has been resumed (by the viewer): from here the annotation is as any other
+	}
+	if (paused && !em.timedPausedIt) || last.IsZero() {
+		return
+	}
+	if em.timedRemaining -= now.Sub(last); em.timedRemaining <= 0 {
+		resume := em.timedPausedIt && paused
+		em.hideTimed()
+		if resume {
+			em.player.Resume()
+		}
+		em.setStatus(em.currentAnnotationHint())
+	}
+}
+
+func (em *EditorMode) hideTimed() {
 	em.timedShown = false
+	em.timedPausedIt = false
+	em.timedRemaining = 0
 	if em.timedOverlay != nil {
 		em.timedOverlay.text = ""
 		em.playbackLayers.HidePage("timed")
 	}
+}
+
+// jumpToTime puts playback at a time - that one, to the millisecond - and plays from it. What is on the screen is what the command that
+// holds the time had drawn by then (a jump to a command starts from its own prompt; this goes through what it printed up to the time,
+// without waiting for it), so that playback goes on from a screen that is as it was. What was up goes, and nothing before the time is
+// shown; the timed annotation that is at the time is, by playback reaching it, as any is.
+func (em *EditorMode) jumpToTime(ts int64) {
+	if len(em.commands) == 0 {
+		return
+	}
+	em.cancelAnnotation()
+	em.player.Pause() // as a jump to a command does: first, so that a frame in flight is not fed to the screen that is rebuilt
+	em.player.SeekTo(ts)
+
+	host := em.timedHost(ts)
+	cmd := em.commands[host]
+	var before []libtrecs.TerminalFrame
+	if cmd.HasPrompt {
+		before = append(before, cmd.PromptFrame)
+	}
+	before = append(before, cmd.InputFrames...)
+	before = append(before, cmd.OutputFrames...)
+	sort.SliceStable(before, func(i, j int) bool { return before[i].Timestamp < before[j].Timestamp })
+
+	em.clearDisplayForJump()
+	started := false
+	for _, f := range before {
+		if f.Timestamp >= ts {
+			break
+		}
+		em.display.Feed(f.Data)
+		started = true
+	}
+	if started {
+		em.playbackView.SetText(em.display.Render())
+		em.playbackView.ScrollToEnd()
+	}
+	em.currentCmdIdx = host
+	em.stateMu.Lock()
+	if started {
+		em.lastSeenCmdIdx = host // it is in the command: it did not begin here, and has no intro or note to show again
+	} else {
+		em.lastSeenCmdIdx = -1
+	}
+	em.stateMu.Unlock()
+	em.progressBar.SetProgress(ts, em.totalDurationMs)
+	em.resetTimed(ts) // the one at this time is not before it: playback reaches it, and shows it
+	em.player.Resume()
+	em.pages.SwitchToPage("playback")
+	em.setStatus(fmt.Sprintf("Jumped to %s, in command %d of %d.", libtrecs.ClockText(ts), host+1, len(em.commands)) + em.currentAnnotationHint())
 }
 
 // ---- the modal -----------------------------------------------------------------------------------------------------------------
@@ -239,6 +351,8 @@ type timedModal struct {
 	box        *tview.Flex
 	time       *tview.InputField
 	style      *cueSelect // how it is shown: the same select as a cue card's Type
+	pause      *cueSelect // whether playback is paused when it is shown
+	nav        *cueSelect // whether its first line is in the list of commands, under the command that holds it
 	text       *tview.TextArea
 	duration   *tview.InputField
 	message    *tview.TextView
@@ -265,7 +379,12 @@ func (em *EditorMode) createTimedModal() {
 	for i, s := range timedStyles {
 		labels[i] = s.label
 	}
-	m.style = newCueSelect("Style: ", labels)
+	m.style = newCueSelect("Style: ", labels).SetMarkColor(timedModalMark)
+	m.pause = newCueSelect("Pause playback? ", timedPauseOptions).SetMarkColor(timedModalMark)
+	m.nav = newCueSelect("Show in nav menu? ", timedNavOptions).SetMarkColor(timedModalMark)
+	for _, sel := range []*cueSelect{m.style, m.pause, m.nav} {
+		sel.SetBackgroundColor(timedModalBackground)
+	}
 
 	m.text = tview.NewTextArea()
 	m.text.SetWrap(true)
@@ -277,35 +396,39 @@ func (em *EditorMode) createTimedModal() {
 	m.duration.SetBorder(true).SetTitle(" Display duration (seconds) ")
 
 	m.message = tview.NewTextView().SetDynamicColors(true)
+	m.message.SetBackgroundColor(timedModalBackground)
 
 	button := func(label string, do func()) *tview.Button {
 		b := tview.NewButton(label)
 		b.SetStyle(tcell.StyleDefault.Background(tcell.ColorDarkSlateGray).Foreground(tcell.ColorWhite))
-		b.SetActivatedStyle(tcell.StyleDefault.Background(cueCardBorder).Foreground(tcell.ColorBlack))
+		b.SetActivatedStyle(tcell.StyleDefault.Background(timedModalMark).Foreground(tcell.ColorBlack))
 		b.SetSelectedFunc(do)
 		return b
 	}
 	m.save = button("Save  ^S", em.saveTimed)
 	m.del = button("Delete annotation", em.deleteTimed)
 	m.discard = button("Discard  Esc", em.closeTimedModal)
-	m.buttons = tview.NewFlex().SetDirection(tview.FlexColumn)
+	m.buttons = opaque(tview.NewFlex().SetDirection(tview.FlexColumn), false)
+	m.buttons.SetBackgroundColor(timedModalBackground)
 	em.layoutTimedButtons()
 
-	m.box = tview.NewFlex().SetDirection(tview.FlexRow).
+	m.box = opaque(tview.NewFlex(), true).SetDirection(tview.FlexRow).
 		AddItem(m.time, 3, 0, false).
 		AddItem(m.style, 2, 0, false). // the second row is where it shows its options when it is open
+		AddItem(m.pause, 2, 0, false).
+		AddItem(m.nav, 2, 0, false).
 		AddItem(m.text, 8, 0, true).
 		AddItem(m.duration, 3, 0, false).
 		AddItem(m.message, 1, 0, false).
 		AddItem(m.buttons, 1, 0, false)
 	m.box.SetBorder(true).SetTitle(" Add annotation ").SetBorderPadding(0, 0, 1, 1)
-	m.box.SetBackgroundColor(tcell.ColorBlack)
+	m.box.SetBackgroundColor(timedModalBackground)
 
-	m.order = []tview.Primitive{m.time, m.style, m.text, m.duration, m.save, m.del, m.discard}
+	m.order = []tview.Primitive{m.time, m.style, m.pause, m.nav, m.text, m.duration, m.save, m.del, m.discard}
 
 	m.frame = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().AddItem(nil, 0, 1, false).AddItem(m.box, 64, 0, true).AddItem(nil, 0, 1, false), 21, 0, true).
+		AddItem(tview.NewFlex().AddItem(nil, 0, 1, false).AddItem(m.box, 64, 0, true).AddItem(nil, 0, 1, false), 25, 0, true).
 		AddItem(nil, 0, 1, false)
 }
 
@@ -342,6 +465,8 @@ func (em *EditorMode) openTimedModalAt(posMs int64) {
 	m.text.SetText("", true)
 	m.duration.SetText(strconv.Itoa(timedDefaultSeconds))
 	m.style.SetCurrentOption(timedStyleDefault)
+	m.pause.SetCurrentOption(0)
+	m.nav.SetCurrentOption(0)
 	m.message.SetText("")
 	m.time.SetText(libtrecs.ClockText(posMs)) // a second of it: the one that playback is in
 	em.refreshTimedModal(true)                // and if there is an annotation at that second, it is what is shown
@@ -387,6 +512,8 @@ func (em *EditorMode) refreshTimedModal(load bool) {
 	case existing != nil && load:
 		m.text.SetText(existing.Text, true)
 		m.style.SetCurrentOption(timedStyleIndex(existing.Placement))
+		m.pause.SetCurrentOption(yesNoIndex(existing.PausePlayback, timedPauseOptions))
+		m.nav.SetCurrentOption(yesNoIndex(existing.ShowInNav, timedNavOptions))
 		if existing.DurationSeconds > 0 {
 			m.duration.SetText(strconv.Itoa(existing.DurationSeconds))
 		}
@@ -394,7 +521,7 @@ func (em *EditorMode) refreshTimedModal(load bool) {
 	case existing != nil:
 		m.message.SetText("[gray]There is one at this second: saving replaces it.")
 	default:
-		m.message.SetText("")
+		m.message.SetText(timedModalHint)
 	}
 }
 
@@ -458,7 +585,10 @@ func (em *EditorMode) saveTimed() {
 	// One at a second: what is there is replaced, and keeps its id and its date, so that it is the same annotation to everything
 	// that has read the file.
 	styleIndex, _ := m.style.GetCurrentOption()
-	a := libtrecs.Annotation{Timestamp: ms, Text: text, DurationSeconds: seconds, Kind: libtrecs.AnnotationKindTimed, Placement: timedStyles[styleIndex].placement}
+	pauseIndex, _ := m.pause.GetCurrentOption()
+	navIndex, _ := m.nav.GetCurrentOption()
+	a := libtrecs.Annotation{Timestamp: ms, Text: text, DurationSeconds: seconds, Kind: libtrecs.AnnotationKindTimed, Placement: timedStyles[styleIndex].placement,
+		PausePlayback: timedPauseOptions[pauseIndex] == "Yes", ShowInNav: timedNavOptions[navIndex] == "Yes"}
 	verb := "added at"
 	if old := em.removeTimedAtSecond(ms / 1000); old != nil {
 		a.ID, a.CreatedAt = old.ID, old.CreatedAt
@@ -505,7 +635,7 @@ func (em *EditorMode) writeTimed(host int, done string) {
 func (em *EditorMode) cycleTimedFocus(back bool) {
 	m := em.timedModal
 	cur := em.app.GetFocus()
-	at := 2 // the text
+	at := 4 // the text
 	for i, p := range m.order {
 		if p == cur {
 			at = i
