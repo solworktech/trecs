@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode"
 )
@@ -51,6 +52,13 @@ func MarkdownFromCommands(title string, commands []Command) string {
 		}
 		if note := mdAnnotation(e.cmd.Annotation.Text); note != "" {
 			b.WriteString(note + "\n\n")
+		}
+		timed := append([]Annotation(nil), e.cmd.TimedAnnotations...)
+		sort.SliceStable(timed, func(i, j int) bool { return timed[i].Timestamp < timed[j].Timestamp })
+		for _, a := range timed {
+			if p := mdTimedAnnotation(a); p != "" {
+				b.WriteString(p + "\n\n")
+			}
 		}
 		if isInteractiveOutput(e.cmd.OutputTextRaw) {
 			b.WriteString("_(interactive full-screen session - output not captured)_\n\n")
@@ -170,7 +178,7 @@ func mdCueCard(card Annotation, has bool) string {
 	if !has {
 		return ""
 	}
-	text := mdAnnotation(card.Text)
+	text := mdCueText(card.Text)
 	if text == "" {
 		return ""
 	}
@@ -185,11 +193,80 @@ func mdCueCard(card Annotation, has bool) string {
 	return strings.Join(lines, "\n")
 }
 
+// mdCueText is the text of a card or a timed annotation as Markdown: a fenced block is as it was written - it has no Markdown of its
+// own to be escaped, and its lines are as they are - and what is between the blocks is as a note's is (see mdAnnotation), except
+// that what is in a code span is left alone too.
+func mdCueText(text string) string {
+	var parts []string
+	for _, r := range CueFenceRegions(text) {
+		if r.Fence {
+			parts = append(parts, r.Text)
+		} else if p := mdAnnotationWith(r.Text, mdEscapeAngleOutsideCode); p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+// mdTimedAnnotation is a timed annotation as Markdown: its text, after the time it is at.
+func mdTimedAnnotation(a Annotation) string {
+	body := mdCueText(a.Text)
+	if body == "" {
+		return ""
+	}
+	at := fmt.Sprintf("**[%s]**", ClockText(a.Timestamp))
+	if strings.HasPrefix(body, "```") { // a block does not go on the line of the time
+		return at + "\n\n" + body
+	}
+	return at + " " + body
+}
+
+// ClockText is a time in milliseconds as minutes and seconds - 03:07 - and with hours, if there are any: 1:03:07.
+func ClockText(ms int64) string {
+	sec := max(0, ms) / 1000
+	if sec >= 3600 {
+		return fmt.Sprintf("%d:%02d:%02d", sec/3600, sec/60%60, sec%60)
+	}
+	return fmt.Sprintf("%02d:%02d", sec/60, sec%60)
+}
+
+// mdEscapeAngleOutsideCode is a line with its < escaped, but for those in a code span, where they are what they are.
+func mdEscapeAngleOutsideCode(line string) string {
+	var sb strings.Builder
+	for i := 0; i < len(line); {
+		switch c := line[i]; c {
+		case '`':
+			n := 1
+			for i+n < len(line) && line[i+n] == '`' {
+				n++
+			}
+			if closeAt, ok := cueFindCloser(line, i+n, n); ok {
+				sb.WriteString(line[i : closeAt+n])
+				i = closeAt + n
+			} else {
+				sb.WriteString(line[i : i+n])
+				i += n
+			}
+		case '<':
+			sb.WriteString("&lt;")
+			i++
+		default:
+			sb.WriteByte(c)
+			i++
+		}
+	}
+	return sb.String()
+}
+
 // mdAnnotation is an annotation as Markdown paragraphs: lines trimmed (deep
 // indentation would become a code block), the lines of a paragraph kept apart
 // with hard breaks, blank lines separating paragraphs, and anything that would
 // start a heading, quote or list at the start of a line escaped.
 func mdAnnotation(text string) string {
+	return mdAnnotationWith(text, func(l string) string { return strings.ReplaceAll(l, "<", "&lt;") })
+}
+
+func mdAnnotationWith(text string, escapeAngle func(string) string) string {
 	var paragraphs []string
 	var cur []string
 	flush := func() {
@@ -204,7 +281,7 @@ func mdAnnotation(text string) string {
 			flush()
 			continue
 		}
-		l = strings.ReplaceAll(l, "<", "&lt;")
+		l = escapeAngle(l)
 		if loc := mdLineStartRe.FindStringIndex(l); loc != nil {
 			l = `\` + l
 		}

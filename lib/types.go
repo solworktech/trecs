@@ -217,6 +217,9 @@ type Command struct {
 	HasIntroCard bool
 	PostCard     Annotation
 	HasPostCard  bool
+
+	// TimedAnnotations are those whose time is in this command (see AnnotationKindTimed), each with its own Timestamp.
+	TimedAnnotations []Annotation
 }
 
 // Annotation is a timestamped note attached to a command. Timestamp is
@@ -236,7 +239,7 @@ type Annotation struct {
 	// the screen and resuming - right before its command's content
 	// starts rendering. Zero (the default) means it's never shown
 	// automatically; it's still viewable on demand via the manual
-	// show/hide toggle (Ctrl+A in the TUI) regardless of this value.
+	// show/hide toggle (Ctrl+T in the TUI) regardless of this value.
 	DurationSeconds int `json:"durationSeconds,omitempty"`
 
 	// Kind is "" for a note - the original annotation, one per command - and AnnotationKindCue for a cue card: a
@@ -252,7 +255,17 @@ type Annotation struct {
 
 // What a cue card is, and where it goes (see Annotation.Kind).
 const (
-	AnnotationKindCue = "cue"
-	CuePlacementIntro = "intro"
-	CuePlacementPost  = "post"
+	// AnnotationKindTimed is an annotation that is shown at a given time of playback, and is not with a command: its Timestamp is
+	// that time, in milliseconds, as it is (a note's and a card's are those of their command's start). It is held by the command
+	// that time is in - the last that had begun, or the first if it is before them all - which is what moves it with that command
+	// when others are deleted.
+	AnnotationKindTimed = "timed"
+	AnnotationKindCue   = "cue"
+	CuePlacementIntro   = "intro"
+	CuePlacementPost    = "post"
+
+	// How a timed annotation is shown - its Placement: as a card, centred over the terminal, or in a box at the bottom of it, at
+	// the left. The bottom is what none, or one that is not known, is.
+	TimedPlacementCentered = "centered"
+	TimedPlacementBottom   = "bottom"
 )

@@ -120,7 +120,7 @@ brews:
     name: trecs
     commit_author:
       name: jessp01
-      email: jesse@packman.io
+      email: jesse@solwork.io
     commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
     directory: Formula
     description: |-

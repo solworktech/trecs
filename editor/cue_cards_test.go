@@ -71,8 +71,14 @@ type harness struct {
 // notes - before anything has played.
 func newHarness(t *testing.T, mutate func(cmds []libtrecs.Command)) *harness {
 	t.Helper()
+	return newHarnessFile(t, cueFixture, mutate)
+}
+
+// newHarnessFile is the same over another recording, which has the fixture's six commands.
+func newHarnessFile(t *testing.T, fixture string, mutate func(cmds []libtrecs.Command)) *harness {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "terminal.jsonl")
-	copyFile(t, cueFixture, path)
+	copyFile(t, fixture, path)
 	cmds, err := libtrecs.ParseRecording(path)
 	if err != nil || len(cmds) != 6 {
 		t.Fatalf("%d commands, %v", len(cmds), err)
@@ -170,7 +176,7 @@ func (h *harness) typeText(s string) {
 func (h *harness) onUI(f func()) {
 	h.t.Helper()
 	done := make(chan struct{})
-	h.em.app.QueueUpdate(func() { f(); close(done) })
+	h.em.app.QueueUpdateDraw(func() { f(); close(done) })
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):
@@ -246,7 +252,7 @@ func TestCtrlAInTheCommandListOpensTheModalForTheCommandInFocusAndSaveWritesTheR
 	h := newHarness(t, nil)
 	h.pausePlayback()
 	h.key(tcell.KeyCtrlL)
-	h.waitText("Add cue card", 2*time.Second) // the list's legend says so
+	h.waitText("Add/Edit cue card", 2*time.Second) // the list's legend says so
 	h.openModalOn(2)
 
 	h.waitText("Command 3 of 6", 2*time.Second)
@@ -720,7 +726,7 @@ func TestTheLastCardGoesWhenPlaybackIsMovedThroughTheCommandList(t *testing.T) {
 	h.waitFor("the card, at the end again", func() bool { return has("FINAL CARD") }, 6*time.Second)
 }
 
-func TestCtrlASkipsTheFirstIntroAndPlaybackGoesOnWithTheFrameThatWasHeld(t *testing.T) {
+func TestCtrlXSkipsTheFirstIntroAndPlaybackGoesOnWithTheFrameThatWasHeld(t *testing.T) {
 	h := newHarness(t, func(cmds []libtrecs.Command) {
 		cmds[0].IntroCard, cmds[0].HasIntroCard = card("INTRO ZERO", 30, libtrecs.CuePlacementIntro), true
 	})
@@ -735,7 +741,7 @@ func TestCtrlASkipsTheFirstIntroAndPlaybackGoesOnWithTheFrameThatWasHeld(t *test
 	if !has("INTRO ZERO") {
 		t.Fatal("Space took the card away")
 	}
-	h.key(tcell.KeyCtrlA)
+	h.key(tcell.KeyCtrlX)
 	h.waitFor("the card gone and the command shown", func() bool { return !has("INTRO ZERO") && has("ls /etc/hostname") }, 3*time.Second)
 	h.waitFor("the recording to play on", func() bool { return has("echo done") }, 4*time.Second)
 	if s := h.status(); strings.Contains(s, "Dismiss Cue Card") {
@@ -743,7 +749,7 @@ func TestCtrlASkipsTheFirstIntroAndPlaybackGoesOnWithTheFrameThatWasHeld(t *test
 	}
 }
 
-func TestCtrlASkipsACardShownAfterAPromptAndWhatWouldHaveFollowedIt(t *testing.T) {
+func TestCtrlXSkipsACardShownAfterAPromptAndWhatWouldHaveFollowedIt(t *testing.T) {
 	h := newHarness(t, func(cmds []libtrecs.Command) {
 		cmds[0].PostCard, cmds[0].HasPostCard = card("POST ZERO", 30, libtrecs.CuePlacementPost), true
 		cmds[1].IntroCard, cmds[1].HasIntroCard = card("INTRO ONE", 30, libtrecs.CuePlacementIntro), true
@@ -755,7 +761,7 @@ func TestCtrlASkipsACardShownAfterAPromptAndWhatWouldHaveFollowedIt(t *testing.T
 	if !has("POST ZERO") {
 		t.Fatal("Space took the card away")
 	}
-	h.key(tcell.KeyCtrlA)
+	h.key(tcell.KeyCtrlX)
 	h.waitFor("playback to go on", func() bool { return !has("POST ZERO") && has("echo hello world") }, 3*time.Second)
 	if has("INTRO ONE") {
 		t.Error("the intro that followed was shown after the post card was skipped")
@@ -970,7 +976,7 @@ func TestEnterOpensTheFocusedLinkOfACardAndTabMovesToTheNext(t *testing.T) {
 	if !has("Grab it:") {
 		t.Fatal("Space took the card away")
 	}
-	h.key(tcell.KeyCtrlA)
+	h.key(tcell.KeyCtrlX)
 	h.waitFor("the card to go", func() bool { return !has("Grab it:") }, 3*time.Second)
 	h.key(tcell.KeyEnter)
 	time.Sleep(150 * time.Millisecond)

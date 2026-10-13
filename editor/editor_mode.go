@@ -98,7 +98,16 @@ type EditorMode struct {
 	cueDone        func(skipped bool)     // what follows them
 	cueAfter       *cueAfter              // cards that wait for a held frame - a prompt - to be drawn
 	openURL        func(url string) error // what opens a link of a card (openInBrowser; a test's)
-	cueFinal       bool                   // the last command's post card is up, at the end of the recording
+
+	// Timed annotations (see timed_annotations.go). The UI goroutine's.
+	timedOverlay   *timedOverlay
+	timedModal     *timedModal
+	timedListModal *timedListModal
+	timedLast      int64       // the position of playback when they were last looked at: those since are shown
+	timedTimer     *time.Timer // takes the one that is up away when its duration is over
+	timedGen       int         // which: a timer from one that has gone does nothing
+	timedShown     bool
+	cueFinal       bool // the last command's post card is up, at the end of the recording
 	// buttonFlex      *tview.Flex
 	commandList     *tview.List
 	deletedCommands map[int]bool
@@ -122,6 +131,7 @@ func NewEditorMode(player libtrecs.TerminalPlayer, commands []libtrecs.Command, 
 		deletedCommands: make(map[int]bool),
 		editedCommands:  make(map[int]bool),
 		lastSeenCmdIdx:  -1,
+		timedLast:       -1,
 		debugLog:        logFile,
 		openURL:         openInBrowser,
 	}
@@ -151,6 +161,8 @@ func (em *EditorMode) Run() error {
 	em.pages.AddPage("commandlist", commandListView, true, false)
 
 	em.createCueCardModal() // added as a page of its own when it is opened (Ctrl+A in the command list)
+	em.createTimedModal()
+	em.createTimedListModal() // and this one by Ctrl+A on the playback screen
 
 	em.previousPage = "playback"
 
@@ -472,7 +484,7 @@ func (em *EditorMode) toggleFullScreen() {
 func (em *EditorMode) createPlaybackView() tview.Primitive {
 	em.playbackLegend = tview.NewTextView().
 		SetDynamicColors(true).
-		SetText("[yellow]Space[white]/[yellow]P[white] Pause/Resume    [yellow]^E[white] Edit Current Command    " +
+		SetText("[yellow]Space[white]/[yellow]P[white] Pause/Resume    [yellow]^E[white] Edit Current Command    [yellow]^A[white] Timed Annotations    " +
 			"[yellow]^P[white]/[yellow]^N[white] Prev/Next Command    " +
 			"[yellow]^L[white] Browse Commands    [yellow]^F[white] Full Screen    [yellow]Q[white] Quit")
 
@@ -485,7 +497,7 @@ func (em *EditorMode) createPlaybackView() tview.Primitive {
 	// Two separate panels, each hidden by default (0 rows), rather than
 	// one repositioned widget: an auto-preview ("before rendering the
 	// command") shows at the top, just under the legend, while a manually
-	// requested one (Ctrl+A on already-playing content) shows at the
+	// requested one (Ctrl+T on already-playing content) shows at the
 	// bottom, just above the progress bar - each stays fixed in the
 	// layout, and only one is ever visible at a time (see
 	// annotationModalIsTop). ColorNavy, not ColorBlue - ColorBlue renders
@@ -509,8 +521,10 @@ func (em *EditorMode) createPlaybackView() tview.Primitive {
 
 	// The cue card is a layer over the whole page, centred in it (see cue_cards.go).
 	em.cueOverlay = newCueOverlay()
+	em.timedOverlay = newTimedOverlay()
 	em.playbackLayers = tview.NewPages().
 		AddPage("base", em.playbackFlex, true, true).
+		AddPage("timed", em.timedOverlay, true, false). // a timed annotation, at the bottom left
 		AddPage("card", em.cueOverlay, true, false)
 
 	return em.playbackLayers
@@ -655,9 +669,15 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
-	// The cue card modal has the keyboard while it is open: Ctrl+L and the rest must not reach past it.
+	// The cue card modal has the keyboard while it is open: Ctrl+L and the rest must not reach past it. So has the other.
 	if pageName == cueCardPage {
 		return em.handleCueCardInput(event)
+	}
+	if pageName == timedNotePage {
+		return em.handleTimedInput(event)
+	}
+	if pageName == timedListPage {
+		return em.handleTimedListInput(event)
 	}
 
 	// Ctrl+L toggles the command browser from anywhere (except itself,
@@ -744,7 +764,30 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
+	// Ctrl+A adds an annotation, at the time playback is at. Not while a preview, an annotation that was asked for, or cards are
+	// holding playback - they have a timer, and playback to give back when they are done, which the modal would be in the way of:
+	// they are dismissed first, with Ctrl+X.
+	if event.Key() == tcell.KeyCtrlA {
+		if em.annotationModalVisible {
+			em.setStatus("Dismiss what is showing first." + em.currentAnnotationHint())
+			return nil
+		}
+		em.openTimedEntry()
+		return nil
+	}
+	// Ctrl+X dismisses what is up: a preview, an annotation that was asked for, or cards that hold playback, or a timed annotation.
 	if event.Key() == tcell.KeyCtrlX {
+		switch {
+		case em.annotationModalVisible:
+			em.hideAnnotationModal()
+		case em.timedShown:
+			em.hideTimed()
+			em.setStatus(em.currentAnnotationHint())
+		}
+		return nil
+	}
+	// What Ctrl+A was before it added an annotation: the annotation of the command that is being played, shown or hidden.
+	if event.Key() == tcell.KeyCtrlT {
 		if em.annotationModalVisible {
 			em.hideAnnotationModal()
 		} else {
@@ -790,13 +833,13 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case ' ', 'p', 'P':
 			if em.annotationModalVisible {
-				// No-op, not "same as Ctrl+A": playback is already paused
+				// No-op, not "same as Ctrl+X": playback is already paused
 				// for the annotation regardless of phase (linger or
 				// actually showing), and during the linger phase there's
 				// no visible indication anything's even happening, so
 				// treating a pause attempt as "skip the annotation" here
 				// is just confusing - it looks like pressing pause cleared
-				// the screen. Ctrl+A remains the only explicit dismiss.
+				// the screen. Ctrl+X remains the only explicit dismiss.
 				return nil
 			}
 			switch em.player.GetPlaybackState() {
@@ -850,11 +893,14 @@ func (em *EditorMode) annotationHint() string {
 	if em.annotationModalVisible {
 		return "   [yellow]^X[white] Close Annotation"
 	}
+	if em.timedShown {
+		return "   [yellow]^X[white] Dismiss Annotation"
+	}
 	idx := libtrecs.GetCommandIndexAtFrame(em.player.GetCurrentFrameIndex(), em.commands)
 	if idx < 0 || idx >= len(em.commands) || !em.commands[idx].HasAnnotation {
 		return ""
 	}
-	return "   [yellow]^A[white] Display Annotation"
+	return "   [yellow]^T[white] Display Annotation"
 }
 
 // showAnnotationModal pauses playback (if playing) and expands the
@@ -880,15 +926,15 @@ func (em *EditorMode) showAnnotationModal() {
 }
 
 // hideAnnotationModal collapses the annotation panel back to hidden.
-// For a manually-opened annotation (Ctrl+A on already-rendered content) it
+// For a manually-opened annotation (Ctrl+T on already-rendered content) it
 // just resumes playback, if it was actually playing (as opposed to already
 // paused by the person) before the annotation interrupted it. For an
 // auto-previewed one (whether ended naturally via its timer or dismissed
-// early with Ctrl+A) it additionally clears the screen and delivers the
+// early with Ctrl+X) it additionally clears the screen and delivers the
 // command's held-back first frame before resuming, so the command starts
 // rendering fresh rather than resuming mid-stream into stale content.
 func (em *EditorMode) hideAnnotationModal() {
-	if em.cueActive { // Ctrl+A during a cue card skips it, and what follows it
+	if em.cueActive { // Ctrl+X during a cue card skips it, and what follows it
 		em.skipCues()
 		return
 	}
@@ -1018,6 +1064,7 @@ func (em *EditorMode) jumpToCommandForPlayback(idx int) {
 	em.stateMu.Unlock()
 	em.debugf("JUMP: reset lastSeenCmdIdx %d -> -1", prevLastSeen)
 	em.progressBar.SetProgress(seekTarget, em.totalDurationMs)
+	em.resetTimed(seekTarget) // what is before the place playback is sent to is not shown
 	em.player.Resume()
 	em.pages.SwitchToPage("playback")
 	em.setStatus(fmt.Sprintf("Jumped to command %d of %d.", idx+1, len(em.commands)) + em.currentAnnotationHint())
@@ -1211,6 +1258,9 @@ func (em *EditorMode) reloadFromDisk(targetIdx int, backupPath string) {
 		newPlayer.SeekToFrame(cmd.FirstRawFrameIndex)
 		em.currentCmdIdx = targetIdx
 		em.progressBar.SetProgress(seekTarget, em.totalDurationMs)
+		em.resetTimed(seekTarget)
+	} else {
+		em.resetTimed(0)
 	}
 
 	em.pages.SwitchToPage("playback")
@@ -1314,7 +1364,7 @@ func (em *EditorMode) editFocusedFieldExternally() {
 // length string of "─" characters, this adapts to the actual terminal size
 // rather than falling short (or wrapping) on anything but one exact width.
 // newAnnotationModalView creates one annotation display panel - the
-// top-positioned (auto-preview) and bottom-positioned (manual Ctrl+A)
+// top-positioned (auto-preview) and bottom-positioned (manual Ctrl+T)
 // panels are separate widgets sharing this same styling, per
 // createPlaybackView. ColorNavy, not ColorBlue - ColorBlue renders closer
 // to cyan and makes the white foreground hard to read.
@@ -1391,14 +1441,18 @@ func (pb *progressBar) draw(screen tcell.Screen, x, y, width int) {
 	tview.Print(screen, line, x, y, width, tview.AlignLeft, tcell.ColorYellow)
 }
 
-// formatDuration renders a millisecond timestamp as mm:ss.
+// formatDuration renders a millisecond timestamp as mm:ss, and as h:mm:ss from an hour on.
 func formatDuration(ms int64) string {
 	if ms < 0 {
 		ms = 0
 	}
 	totalSeconds := ms / 1000
-	m := totalSeconds / 60
+	h := totalSeconds / 3600
+	m := totalSeconds % 3600 / 60
 	s := totalSeconds % 60
+	if h > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
+	}
 	return fmt.Sprintf("%02d:%02d", m, s)
 }
 
@@ -1424,7 +1478,9 @@ func (em *EditorMode) runProgressClock(done <-chan struct{}) {
 		}
 		em.app.QueueUpdateDraw(func() {
 			if p := em.player; p != nil && p.GetPlaybackState() == libtrecs.PlaybackPlaying {
-				em.progressBar.SetProgress(p.Position(), em.totalDurationMs)
+				pos := p.Position()
+				em.progressBar.SetProgress(pos, em.totalDurationMs)
+				em.fireTimed(pos) // the timed annotation that its time has come
 			}
 		})
 	}

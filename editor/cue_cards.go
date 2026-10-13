@@ -49,45 +49,89 @@ var (
 // button is never cut across two lines.
 // The text is regular weight - the demo's card is semibold throughout, but here bold is something the author asks for, and has to
 // show - with bold and italic as they are written (**bold**, *italic*; see libtrecs.ParseCueText).
+//
+// Code is blue: a light blue, #5fafff - the terminal's own blue is dark, and hard to read on this background - and in bold or in
+// italics if it is in them. A link in a text that cannot be clicked - a timed annotation - is its label, in green, and its address
+// after it. (None of these is underlined: tview 0.42 loses an underline that is set by a tag, as it applies the attributes.)
 const (
-	cueTextTag        = "[white:#101216:-]"
-	cueBoldTag        = "[white:#101216:b]"
-	cueItalicTag      = "[white:#101216:i]"
-	cueBoldItalicTag  = "[white:#101216:bi]"
-	cueButtonTag      = "[black:#4caf50:b]"
-	cueButtonFocusTag = "[black:#c8f7cb:bu]"
+	cueTextTag           = "[white:#101216:-]"
+	cueBoldTag           = "[white:#101216:b]"
+	cueItalicTag         = "[white:#101216:i]"
+	cueBoldItalicTag     = "[white:#101216:bi]"
+	cueCodeTag           = "[#5fafff:#101216:-]"
+	cueCodeBoldTag       = "[#5fafff:#101216:b]"
+	cueCodeItalicTag     = "[#5fafff:#101216:i]"
+	cueCodeBoldItalicTag = "[#5fafff:#101216:bi]"
+	cueLinkTag           = "[#6fdc7b:#101216:-]"
+	cueAddressTag        = "[#8b949e:#101216:-]"
+	cueButtonTag         = "[black:#4caf50:b]"
+	cueButtonFocusTag    = "[black:#c8f7cb:b]"
 )
 
-var cueStyleTags = []string{cueTextTag, cueBoldTag, cueItalicTag, cueBoldItalicTag, cueButtonTag, cueButtonFocusTag}
+var cueStyleTags = []string{
+	cueTextTag, cueBoldTag, cueItalicTag, cueBoldItalicTag, cueCodeTag, cueCodeBoldTag, cueCodeItalicTag, cueCodeBoldItalicTag,
+	cueLinkTag, cueAddressTag, cueButtonTag, cueButtonFocusTag,
+}
 
 // taggedCueText is the text of a card as tview prints it: what was typed is text, not colour tags ([red] is what it says), bold
-// and italics are bold and italic, and each link is a button, the one numbered focus as the focused one.
-func taggedCueText(text string, focus int) string {
+// and italics are bold and italic, code is blue, and each link is a button, the one numbered focus as the focused one.
+func taggedCueText(text string, focus int) string { return taggedMarkdown(text, focus, true) }
+
+// taggedAnnotationText is the same for a timed annotation, whose links cannot be clicked: each is its label and its address.
+func taggedAnnotationText(text string) string { return taggedMarkdown(text, -1, false) }
+
+func taggedMarkdown(text string, focus int, buttons bool) string {
 	var sb strings.Builder
 	n := 0
 	for _, seg := range libtrecs.ParseCueText(text) {
-		if seg.URL == "" {
+		switch {
+		case seg.URL != "" && buttons:
+			tag := cueButtonTag
+			if n == focus {
+				tag = cueButtonFocusTag
+			}
+			n++
+			label := strings.ReplaceAll(seg.Text, " ", "\u00a0")
+			sb.WriteString(tag + "\u00a0" + tview.Escape(label) + "\u00a0" + cueTextTag)
+		case seg.URL != "":
+			sb.WriteString(cueLinkTag + tview.Escape(seg.Text) + cueTextTag + " " + cueAddressTag + "(" + tview.Escape(seg.URL) + ")" + cueTextTag)
+		case seg.Code:
+			tag := cueCodeTag
 			switch {
 			case seg.Bold && seg.Italic:
-				sb.WriteString(cueBoldItalicTag + tview.Escape(seg.Text) + cueTextTag)
+				tag = cueCodeBoldItalicTag
 			case seg.Bold:
-				sb.WriteString(cueBoldTag + tview.Escape(seg.Text) + cueTextTag)
+				tag = cueCodeBoldTag
 			case seg.Italic:
-				sb.WriteString(cueItalicTag + tview.Escape(seg.Text) + cueTextTag)
-			default:
-				sb.WriteString(tview.Escape(seg.Text))
+				tag = cueCodeItalicTag
 			}
-			continue
+			sb.WriteString(tag + tview.Escape(seg.Text) + cueTextTag)
+		case seg.Bold && seg.Italic:
+			sb.WriteString(cueBoldItalicTag + tview.Escape(seg.Text) + cueTextTag)
+		case seg.Bold:
+			sb.WriteString(cueBoldTag + tview.Escape(seg.Text) + cueTextTag)
+		case seg.Italic:
+			sb.WriteString(cueItalicTag + tview.Escape(seg.Text) + cueTextTag)
+		default:
+			sb.WriteString(tview.Escape(seg.Text))
 		}
-		tag := cueButtonTag
-		if n == focus {
-			tag = cueButtonFocusTag
-		}
-		n++
-		label := strings.ReplaceAll(seg.Text, " ", "\u00a0")
-		sb.WriteString(tag + "\u00a0" + tview.Escape(label) + "\u00a0" + cueTextTag)
 	}
 	return sb.String()
+}
+
+// wrapCueLines wraps tagged text to a width: each of its lines is wrapped on its own, and a style that runs on from one line to
+// the next is carried onto it.
+func wrapCueLines(tagged string, width int) []string {
+	var lines []string
+	for _, paragraph := range strings.Split(strings.Trim(tagged, "\n"), "\n") {
+		paragraph = strings.TrimRight(paragraph, " \t\r")
+		if paragraph == "" {
+			lines = append(lines, "")
+			continue
+		}
+		lines = append(lines, tview.WordWrap(paragraph, width)...)
+	}
+	return carryCueStyles(lines)
 }
 
 // cueOverlay draws the card centred in the area it is given, over what is under it. Nothing is drawn while it has no text.
@@ -129,6 +173,11 @@ type cueLayout struct {
 // layoutCueCard is the card's size and place in an area, and its text wrapped to fit: no wider than 80% of the area, as the
 // demo's is, and centred in it. focus is the button to draw as the focused one.
 func layoutCueCard(text string, areaW, areaH, focus int) cueLayout {
+	return layoutTaggedCard(taggedCueText(text, focus), areaW, areaH)
+}
+
+// layoutTaggedCard is the card's size and place - centred, no wider than 80% of the area - for text that is tagged already.
+func layoutTaggedCard(tagged string, areaW, areaH int) cueLayout {
 	const padX, padY = 2, 1
 	if areaW < 12 || areaH < 5 {
 		return cueLayout{}
@@ -139,16 +188,7 @@ func layoutCueCard(text string, areaW, areaH, focus int) cueLayout {
 	}
 	maxText := maxW - 2 - 2*padX
 
-	var lines []string
-	for _, paragraph := range strings.Split(strings.Trim(taggedCueText(text, focus), "\n"), "\n") {
-		paragraph = strings.TrimRight(paragraph, " \t\r")
-		if paragraph == "" {
-			lines = append(lines, "")
-			continue
-		}
-		lines = append(lines, tview.WordWrap(paragraph, maxText)...)
-	}
-	lines = carryCueStyles(lines)
+	lines := wrapCueLines(tagged, maxText)
 	if maxLines := areaH - 2 - 2*padY; len(lines) > maxLines && maxLines >= 1 { // as tall as the area, and no more
 		lines = append(lines[:maxLines-1:maxLines-1], "…")
 	}
@@ -189,21 +229,13 @@ func carryCueStyles(lines []string) []string {
 	return lines
 }
 
-func (c *cueOverlay) Draw(screen tcell.Screen) {
-	if c.text == "" {
-		return
-	}
-	x, y, w, h := c.GetRect()
-	l := layoutCueCard(c.text, w, h, c.focus)
-	if l.w == 0 {
-		return
-	}
-	left, top := x+l.left, y+l.top
-	style := tcell.StyleDefault.Background(cueCardBackground).Foreground(cueCardBorder)
-	for row := 0; row < l.h; row++ {
-		for col := 0; col < l.w; col++ {
+// drawRoundedBox fills a box on the card's background and draws its border, in a colour.
+func drawRoundedBox(screen tcell.Screen, left, top, w, h int, border tcell.Color) {
+	style := tcell.StyleDefault.Background(cueCardBackground).Foreground(border)
+	for row := 0; row < h; row++ {
+		for col := 0; col < w; col++ {
 			r := ' '
-			top0, bottom, first, last := row == 0, row == l.h-1, col == 0, col == l.w-1
+			top0, bottom, first, last := row == 0, row == h-1, col == 0, col == w-1
 			switch {
 			case top0 && first:
 				r = '╭'
@@ -221,6 +253,19 @@ func (c *cueOverlay) Draw(screen tcell.Screen) {
 			screen.SetContent(left+col, top+row, r, nil, style)
 		}
 	}
+}
+
+func (c *cueOverlay) Draw(screen tcell.Screen) {
+	if c.text == "" {
+		return
+	}
+	x, y, w, h := c.GetRect()
+	l := layoutCueCard(c.text, w, h, c.focus)
+	if l.w == 0 {
+		return
+	}
+	left, top := x+l.left, y+l.top
+	drawRoundedBox(screen, left, top, l.w, l.h, cueCardBorder)
 	for i, line := range l.lines {
 		if 1+1+i >= l.h-1 {
 			break
@@ -352,7 +397,7 @@ func (em *EditorMode) cardsAfterWanted(prevIdx, newIdx int) bool {
 }
 
 // runCues shows the cards one after the other, each for its own duration, over whatever is on the screen, and then calls
-// done - with skipped set if Ctrl+A ended it. The UI goroutine's. Playback is paused for the whole of it (the caller has
+// done - with skipped set if Ctrl+X ended it. The UI goroutine's. Playback is paused for the whole of it (the caller has
 // seen to that), and the same guard as for a note that is previewed keeps other bindings out (see handleInput).
 func (em *EditorMode) runCues(cards []*libtrecs.Annotation, done func(skipped bool)) {
 	em.annotationModalVisible = true
@@ -474,7 +519,7 @@ func (em *EditorMode) beginCards(prevIdx, newIdx int) bool {
 	return true
 }
 
-// skipCues is Ctrl+A while cards are being shown: they end, and what was waiting for them goes on.
+// skipCues is Ctrl+X while cards are being shown: they end, and what was waiting for them goes on.
 func (em *EditorMode) skipCues() {
 	em.endCues(true)
 }
@@ -491,6 +536,7 @@ func (em *EditorMode) cancelCue() {
 	if em.cueOverlay != nil {
 		em.hideCueCard()
 	}
+	em.hideTimed() // a seek takes a timed annotation away too
 }
 
 // showFinalCard is called when playback has reached the end of the recording: the post card of the last command goes up and

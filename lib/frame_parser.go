@@ -130,6 +130,17 @@ func attachAnnotations(commands []Command, annotations []Annotation) {
 				break
 			}
 		}
+		if ann.Kind == AnnotationKindTimed {
+			// at a time, and with the command that time is in: or with the first, if it is before them all
+			if best < 0 {
+				if len(commands) == 0 {
+					continue
+				}
+				best = 0
+			}
+			commands[best].TimedAnnotations = append(commands[best].TimedAnnotations, ann)
+			continue
+		}
 		if best < 0 {
 			continue
 		}
@@ -930,6 +941,19 @@ func syncCommandFrames(cmd *Command) {
 //
 // commands is not modified; the returned commands are copies with their
 // own, independent frame slices.
+// shiftAnnotationTimestamps is annotations a time earlier, as a copy: the command they came from keeps its own.
+func shiftAnnotationTimestamps(in []Annotation, shift int64) []Annotation {
+	if in == nil {
+		return nil
+	}
+	out := make([]Annotation, len(in))
+	for i, a := range in {
+		a.Timestamp = max(0, a.Timestamp-shift)
+		out[i] = a
+	}
+	return out
+}
+
 func CompressTimestamps(commands []Command, deleted map[int]bool) []Command {
 	var result []Command
 	var shift int64
@@ -950,6 +974,7 @@ func CompressTimestamps(commands []Command, deleted map[int]bool) []Command {
 		}
 		shifted.InputFrames = shiftFrameTimestamps(cmd.InputFrames, shift)
 		shifted.OutputFrames = shiftFrameTimestamps(cmd.OutputFrames, shift)
+		shifted.TimedAnnotations = shiftAnnotationTimestamps(cmd.TimedAnnotations, shift) // with the command, to the same time of what is left
 		shifted.StartTime -= shift
 		shifted.EndTime -= shift
 		result = append(result, shifted)
@@ -1027,7 +1052,8 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	}
 
 	var newFrames []TerminalFrame
-	var annotations, cueCards []Annotation
+	var annotations, cueCards, timed []Annotation
+	idCounter := int64(0)
 
 	for i := range commands {
 		cmd := &commands[i]
@@ -1069,6 +1095,22 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 			c.card.Timestamp = commandFirstTimestamp(*cmd)
 			cueCards = append(cueCards, *c.card)
 		}
+		// A timed annotation keeps its own time: it is not anchored to the command it is with.
+		for j := range cmd.TimedAnnotations {
+			a := &cmd.TimedAnnotations[j]
+			if strings.TrimSpace(a.Text) == "" {
+				continue
+			}
+			if a.ID == "" {
+				idCounter++
+				a.ID = fmt.Sprintf("tm_%x", time.Now().UnixNano()+idCounter)
+			}
+			if a.CreatedAt == "" {
+				a.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+			}
+			a.Kind = AnnotationKindTimed
+			timed = append(timed, *a)
+		}
 	}
 
 	file, err := os.Create(originalPath)
@@ -1090,9 +1132,11 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	// arrives starts with the first of it: an annotation at the end of the file is not known until the end of the file has
 	// arrived, and a card that is to be shown before the first command - or a note on one of the first - would be missed.
 	//
-	// The cue cards come first of them, and the notes after: a reader that does not know of cue cards reads each as a note, and
-	// the last note of a command is the one it keeps - so the command's own note, if it has one, is the one it keeps.
-	for _, ann := range append(cueCards, annotations...) {
+	// The cue cards come first of them, then the timed annotations, and the notes after: a reader that does not know of the others
+	// reads each as a note, and the last note of a command is the one it keeps - so the command's own note, if it has one, is the
+	// one it keeps.
+	all := append(append(append([]Annotation{}, cueCards...), timed...), annotations...)
+	for _, ann := range all {
 		line := recordingLine{Type: "annotation", ID: ann.ID, Timestamp: ann.Timestamp, Text: ann.Text, Author: ann.Author, CreatedAt: ann.CreatedAt, DurationSeconds: ann.DurationSeconds, Kind: ann.Kind, Placement: ann.Placement}
 		if err := encoder.Encode(line); err != nil {
 			return fmt.Errorf("failed to encode annotation: %w", err)
