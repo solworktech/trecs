@@ -108,24 +108,6 @@ func TestTheSelectsAreOnTheTabRoundAndOpenWithEnter(t *testing.T) {
 	h.waitFor("focus on the nav select", func() bool { return h.focusedIs(func(m *timedModal) tview.Primitive { return m.nav }) }, 2*time.Second)
 }
 
-// ---- the modal's colour ---------------------------------------------------------------------------------------------------------
-
-// Every cell of the modal is the green, but those of the fields, which are dark: none is the terminal's own background or what the
-// recording drew there.
-func (h *harness) cellBackgrounds(x, y, w, ht int) (bgs map[tcell.Color]int) {
-	bgs = map[tcell.Color]int{}
-	h.onUI(func() {
-		cells, sw, _ := h.sim.GetContents()
-		for row := y; row < y+ht; row++ {
-			for col := x; col < x+w; col++ {
-				_, bg, _ := cells[row*sw+col].Style.Decompose()
-				bgs[bg]++
-			}
-		}
-	})
-	return
-}
-
 // fillPlayback puts a character that nothing else on the screen has in every cell of the playback, so that any of it showing in a
 // modal is seen.
 func (h *harness) fillPlayback() {
