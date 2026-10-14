@@ -18,6 +18,10 @@ Commands:
   export <file>    Export the recording's commands and outputs as Markdown
                    (written next to it, as <file>.md; -title sets the heading)
   info   <file>    Output recording's commands
+  merge  -o <out> <file> <file> [<file>...]
+                   Join recordings into one, in the order given: each starts
+                   where the one before it ended (-gap ms of pause, default 1000,
+                   then the screen is cleared). Annotations go with their frames.
   help             Show this help
 
 The editor allows you to:
@@ -44,6 +48,11 @@ func main() {
 	switch cmd {
 	case "help", "-h", "-help", "--help":
 		fmt.Print(usage)
+		return
+	case "merge":
+		if err := runMerge(os.Args[2:]); err != nil {
+			fatalf("%v", err)
+		}
 		return
 	case "view", "export", "info":
 	default:
@@ -113,5 +122,34 @@ func runEditor(filePath string, commands []libtrecs.Command) error {
 		return fmt.Errorf("editor error: %w", err)
 	}
 
+	return nil
+}
+
+// runMerge is `merge -o out.jsonl a.jsonl b.jsonl ...`: flags and files may come in any order.
+func runMerge(args []string) error {
+	flags := flag.NewFlagSet("merge", flag.ContinueOnError)
+	out := flags.String("o", "", "the merged recording to write (required)")
+	gap := flags.Int64("gap", libtrecs.DefaultMergeGapMs, "milliseconds between the end of one recording and the start of the next")
+	var files []string
+	for len(args) > 0 {
+		if err := flags.Parse(args); err != nil {
+			return fmt.Errorf("failed to parse flags: %w", err)
+		}
+		args = flags.Args()
+		if len(args) > 0 {
+			files, args = append(files, args[0]), args[1:]
+		}
+	}
+	if *out == "" {
+		return fmt.Errorf("where to write the merged recording is required: editor merge -o <out> <file> <file> ...")
+	}
+	if len(files) < 2 {
+		return fmt.Errorf("two recordings or more are needed: editor merge -o <out> <file> <file> ...")
+	}
+	warn := func(format string, a ...any) { fmt.Fprintf(os.Stderr, "Warning: "+format+"\n", a...) }
+	if err := libtrecs.MergeRecordings(files, *out, *gap, warn); err != nil {
+		return err
+	}
+	fmt.Printf("Merged %d recordings into %s\n", len(files), *out)
 	return nil
 }
