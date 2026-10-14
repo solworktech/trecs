@@ -19,7 +19,7 @@ func TestMergeSubcommandTakesFlagsBeforeAndAfterTheFiles(t *testing.T) {
 		"flags last":  {a, b, "-gap", "250", "-o", filepath.Join(dir, "1.jsonl")},
 		"flags mixed": {a, "-o", filepath.Join(dir, "1.jsonl"), b, "-gap", "250"},
 	} {
-		os.Remove(filepath.Join(dir, "1.jsonl"))
+		_ = os.Remove(filepath.Join(dir, "1.jsonl"))
 		if err := runMerge(args); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}

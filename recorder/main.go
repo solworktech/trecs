@@ -230,14 +230,14 @@ func runPlay(playFile *string, playSpeed *float64) {
 }
 
 func printUsage() {
-	fmt.Println(`
+	fmt.Printf(`
 Usage:
-  trecs record [options]       Record terminal and media streams
-  trecs play [options]         Play back terminal recording
-  trecs login [options]        Log in to a trecs server (saves the session)
-  trecs logout                 Log out and forget the saved session
-  trecs upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
-  trecs help                   Show this help message
+  %[1]s record [options]       Record terminal and media streams
+  %[1]s play [options]         Play back terminal recording
+  %[1]s login [options]        Log in to a %[1]s server (saves the session)
+  %[1]s logout                 Log out and forget the saved session
+  %[1]s upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
+  %[1]s help                   Show this help message
 
 Record Options:
   -terminal                       Enable terminal recording (default: true)
@@ -279,22 +279,22 @@ Play Options:
 
 Examples:
   # Record terminal only (uses timestamp as session name)
-  trecs record
+  %[1]s record
 
   # Record with custom session name
-  trecs record -name my-session
+  %[1]s record -name my-session
 
   # Record terminal and audio
-  trecs record -audio
+  %[1]s record -audio
 
   # Record all streams
-  trecs record -audio -camera -screen
+  %[1]s record -audio -camera -screen
 
   # Play back a recording at 2x speed
-  trecs play -file recordings/2024_01_15_10_30_45/terminal.jsonl -speed 2.0
+  %[1]s play -file recordings/2024_01_15_10_30_45/terminal.jsonl -speed 2.0
 
 During Recording:
   - Use Ctrl+C to interrupt commands in the shell (works normally)
   - Type 'exit' or press Ctrl+D to end the recording
-  - The recording will stop and you'll return to your original shell`)
+  - The recording will stop and you'll return to your original shell %s`, os.Args[0], "\n")
 }
