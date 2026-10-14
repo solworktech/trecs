@@ -1,7 +1,5 @@
 # Terminal Recorder & Editor
 
-[![dpkg-reconfigure tzdata](http://trecs.solwork.io/v1/recordings/2fad93d1-f3dc-4e86-a309-aa7acd2ed6ca/preview.png)](http://trecs.solwork.io/watch/2fad93d1-f3dc-4e86-a309-aa7acd2ed6ca)
-
 A tool for recording and editing terminal sessions with precise timestamp control.
 
 ## Directory Structure
