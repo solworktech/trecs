@@ -96,7 +96,10 @@ func newHarnessFile(t *testing.T, fixture string, mutate func(cmds []libtrecs.Co
 	t.Cleanup(func() {
 		h.em.app.Stop()
 		select {
-		case <-h.done:
+		case err := <-h.done:
+			if err != nil {
+				t.Errorf("the editor stopped with an error: %v", err)
+			}
 		case <-time.After(5 * time.Second):
 			t.Error("the editor did not stop")
 		}
