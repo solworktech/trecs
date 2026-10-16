@@ -244,7 +244,7 @@ Record Options:
   -audio                          Enable audio recording (default: false)
   -camera                         Enable camera recording (default: false)
   -screen                         Enable screen recording (default: false)
-  -output string                  Output directory (default: "./recordings")
+  -output string                  Output directory (default: "$HOME/.config/trecs/recordings")
   -name string                    Session name (default: timestamp YYYY_MM_DD_HH_MM_SS)
   -cmd string                     Terminal command to execute (default: current shell, or sh if unable to detect)
   -audio-device string            Audio device (default: "default")

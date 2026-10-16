@@ -1,4 +1,4 @@
-trecs 1 "Oct 9 2026" trecs "User Manual"
+trecs 1 "Oct 16 2026" trecs "User Manual"
 ========================================
 
 ## DESCRIPTION
@@ -25,21 +25,28 @@ right next to your written steps.
 
 ```sh
 Usage:
-  trecs record [options]       Record terminal and media streams
-  trecs play [options]         Play back terminal recording
-  trecs login [options]        Log in to a trecs server (saves the session)
-  trecs logout                 Log out and forget the saved session
-  trecs upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
-  trecs help                   Show this help message
+  ./recorder/trecs record [options]       Record terminal and media streams
+  ./recorder/trecs play [options]         Play back terminal recording
+  ./recorder/trecs login [options]        Log in to a ./recorder/trecs server (saves the session)
+  ./recorder/trecs logout                 Log out and forget the saved session
+  ./recorder/trecs upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
+  ./recorder/trecs help                   Show this help message
 
 Record Options:
   -terminal                       Enable terminal recording (default: true)
   -audio                          Enable audio recording (default: false)
+  -camera                         Enable camera recording (default: false)
+  -screen                         Enable screen recording (default: false)
   -output string                  Output directory (default: "./recordings")
   -name string                    Session name (default: timestamp YYYY_MM_DD_HH_MM_SS)
   -cmd string                     Terminal command to execute (default: current shell, or sh if unable to detect)
   -audio-device string            Audio device (default: "default")
-  -audio-codec string             Audio codec (default: "libmp3lame")
+  -audio-codec string             Audio codec: libopus (default, Ogg), libmp3lame, aac
+  -audio-bitrate string           Audio bitrate (default: 32k for libopus - a voice, in 1/4 of the size of 128k MP3)
+  -camera-device string           Camera device (default: "/dev/video0")
+  -camera-size string             Camera resolution (default: "640x480")
+  -screen-display string          Screen display (default: ":0")
+  -screen-size string             Screen resolution (default: "1920x1080")
 
   -commands-file string           Type the commands in this file instead of reading the keyboard (CI-friendly)
   -human-like                     With -commands-file: type with human pauses (default: instant)
@@ -55,13 +62,33 @@ Login Options:
 
 Upload Options (before the path):
   -name string                    Recording title
-  -description string             Description (default: the commands typed)
+  -description string             Your own description (Markdown)
+  -annotations-as-description     Describe it with its "show in nav menu" annotations, each
+                                  linking to its moment (-aad for short)
+  -commands-as-description        Describe it with the commands typed (-cad for short; the
+                                  default)
   -visibility string              private (default), unlisted or public
-  -audio string                   Audio file (default: audio.mp3 beside the recording)
+  -audio string                   Audio file (default: audio.opus, or .mp3 .m4a .ogg, beside the recording)
 
 Play Options:
   -file string                    Terminal recording file to play (required)
   -speed float                    Playback speed multiplier (default: 1.0)
+
+Examples:
+  # Record terminal only (uses timestamp as session name)
+  ./recorder/trecs record
+
+  # Record with custom session name
+  ./recorder/trecs record -name my-session
+
+  # Record terminal and audio
+  ./recorder/trecs record -audio
+
+  # Record all streams
+  ./recorder/trecs record -audio -camera -screen
+
+  # Play back a recording at 2x speed
+  ./recorder/trecs play -file recordings/2024_01_15_10_30_45/terminal.jsonl -speed 2.0
 
 During Recording:
   - Use Ctrl+C to interrupt commands in the shell (works normally)

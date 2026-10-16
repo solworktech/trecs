@@ -17,13 +17,29 @@ Original recordings are backed up before editing.
 ## Synopsis
 
 ```sh
+Trecs recording editor - edit terminal recordings
+
 Usage: editor <command> [options]
 
 Commands:
   view   <file>    View and edit recording
   export <file>    Export the recording's commands and outputs as Markdown
                    (written next to it, as <file>.md; -title sets the heading)
+  info   <file>    Output recording's commands
+  merge  -o <out> <file> <file> [<file>...]
+                   Join recordings into one, in the order given: each starts
+                   where the one before it ended (-gap ms of pause, default 1000,
+                   then the screen is cleared). Annotations go with their frames.
   help             Show this help
+
+The editor allows you to:
+- Watch recording playback
+- Pause at any point
+- Edit command input and output
+- Delete commands
+- Save edited recordings with automatic timestamp compression
+
+Original recordings are backed up before editing.
 ```
 
 ## Examples

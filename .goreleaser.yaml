@@ -58,8 +58,8 @@ changelog:
       - '^test:'
 
 nfpms:
-  - package_name: mdtopdf
-  - file_name_template: "{{ .ConventionalFileName }}"
+  - package_name: trecs
+    file_name_template: "{{ .ConventionalFileName }}"
     id: packages
     homepage: https://github.com/solworktech/trecs
     description: |-
@@ -85,7 +85,7 @@ nfpms:
       - Delete commands
       - Save edited recordings with automatic timestamp compression
     maintainer: Jesse Portnoy <jesse@solwork.io>
-    license: MIT
+    license: AGPL-3.0-or-later
     vendor: Solworktech
     bindir: /usr/bin
     section: utils
@@ -145,7 +145,7 @@ brews:
       - Edit command input and output
       - Delete commands
       - Save edited recordings with automatic timestamp compression
-    license: "AGPLv3"
+    license: "AGPL-3.0-or-later"
     install: |
       bin.install "trecs"
       bin.install "trecs-edit"
