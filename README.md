@@ -16,6 +16,8 @@ This repository holds the two command-line tools:
 
 Recordings are played in the browser by the Trecs web player (see [The player](#the-player)).
 
+[![gh-dash & prs - tracks PRs from the comfort of your terminal](https://jesse.packman.io/v1/recordings/d628fafa-a1ef-430b-b04f-0ac78976db87/preview.png)](https://jesse.packman.io/watch/d628fafa-a1ef-430b-b04f-0ac78976db87)
+
 ## Contents
 
 - [Install](#install)
