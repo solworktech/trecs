@@ -15,6 +15,7 @@ import (
 	"golang.org/x/term"
 
 	"trecs/cloud"
+	libtrecs "trecs/lib"
 )
 
 func fail(format string, args ...any) {
@@ -123,12 +124,26 @@ var visibilities = map[string]bool{"private": true, "unlisted": true, "public": 
 func runUpload(args []string) {
 	fs := flag.NewFlagSet("upload", flag.ExitOnError)
 	name := fs.String("name", "", "Recording title (default: a timestamp)")
-	description := fs.String("description", "", "Description (default: the list of commands typed in the recording)")
+	description := fs.String("description", "", "Your own description (Markdown)")
+	var fromAnnotations, fromCommands bool
+	fs.BoolVar(&fromAnnotations, "annotations-as-description", false, "Describe the recording with its annotations marked \"show in nav menu\", each linking to its moment")
+	fs.BoolVar(&fromAnnotations, "aad", false, "Short for -annotations-as-description")
+	fs.BoolVar(&fromCommands, "commands-as-description", false, "Describe the recording with the list of commands typed in it (the default)")
+	fs.BoolVar(&fromCommands, "cad", false, "Short for -commands-as-description")
 	visibility := fs.String("visibility", "", "private, unlisted or public (default: private - recordings often show secrets)")
 	audio := fs.String("audio", "", "Audio file to attach (default: audio.opus - or .mp3, .m4a, .ogg - beside the recording, if there is one)")
 	_ = fs.Parse(args)
 	if fs.NArg() != 1 {
-		fail("usage: recorder upload [-name N] [-description D] [-visibility private|unlisted|public] [-audio FILE] <session directory | terminal.jsonl>\n(options go before the path)")
+		fail("usage: %s upload [-name N] [-description D | -annotations-as-description | -commands-as-description] [-visibility private|unlisted|public] [-audio FILE] <session directory | terminal.jsonl>\n(options go before the path)", os.Args[0])
+	}
+	chosen := 0
+	for _, on := range []bool{*description != "", fromAnnotations, fromCommands} {
+		if on {
+			chosen++
+		}
+	}
+	if chosen > 1 {
+		fail("choose one of -description, -annotations-as-description (-aad) and -commands-as-description (-cad)")
 	}
 	terminal, sessionAudio, err := cloud.ResolveSessionFiles(fs.Arg(0))
 	if err != nil {
@@ -137,12 +152,12 @@ func runUpload(args []string) {
 	if *audio == "" {
 		*audio = sessionAudio
 	}
-	uploadFiles(cloud.Upload{Name: *name, Description: *description, Visibility: *visibility, TerminalPath: terminal, AudioPath: *audio})
+	uploadFiles(cloud.Upload{Name: *name, Description: *description, Visibility: *visibility, TerminalPath: terminal, AudioPath: *audio}, fromAnnotations)
 }
 
 // uploadFiles sends one recording to the server of the saved session and
 // reports what happened. It exits non-zero on failure, saying what to do.
-func uploadFiles(u cloud.Upload) {
+func uploadFiles(u cloud.Upload, annotationsAsDescription bool) {
 	if u.Visibility != "" && !visibilities[u.Visibility] {
 		fail("visibility must be private, unlisted or public, not %q", u.Visibility)
 	}
@@ -155,11 +170,49 @@ func uploadFiles(u cloud.Upload) {
 
 	fmt.Printf("Uploading %s to %s ...\n", u.TerminalPath, session.Server)
 	start := time.Now()
-	rec, err := cloud.FromSession(session).Upload(ctx, u)
+	client := cloud.FromSession(session)
+	rec, err := client.Upload(ctx, u)
 	if err != nil {
-		fail("upload failed: %v\nThe recording is untouched; upload it later with: recorder upload %s", err, u.TerminalPath)
+		fail("upload failed: %v\nThe recording is untouched; upload it later with: %s upload %s", err, os.Args[0], u.TerminalPath)
 	}
 	secs := rec.DurationMs / 1000
 	fmt.Printf("Uploaded \"%s\" (%d:%02d, %s) in %v\n", rec.Name, secs/60, secs%60, rec.Visibility, time.Since(start).Round(time.Millisecond))
-	fmt.Printf("Watch: %s/watch/%s\n", session.Server, rec.ID)
+	watchURL := session.Server + "/watch/" + rec.ID
+	fmt.Printf("Watch: %s\n", watchURL)
+	if annotationsAsDescription {
+		if err := describeFromAnnotations(ctx, client, rec, u.TerminalPath, watchURL); err != nil {
+			fail("the recording is uploaded, but its description could not be set: %v\nChange it from the recording's edit page.", err)
+		}
+	}
 }
+
+// describeFromAnnotations replaces the description of an uploaded recording with its annotations marked "show in
+// nav menu", as links to their moments. That is done after the upload because the links need the recording's id, which the
+// server gives it. With no such annotations nothing is changed (the description stays the list of commands), and
+// says so.
+func describeFromAnnotations(ctx context.Context, client *cloud.Client, rec *cloud.Recording, terminal, watchURL string) error {
+	_, annotations, _, err := libtrecs.LoadFrames(terminal)
+	if err != nil {
+		return err
+	}
+	desc, used, total := libtrecs.AnnotationDescription(annotations, watchURL, descriptionMaxChars)
+	if total == 0 {
+		fmt.Fprintln(os.Stderr, "No annotation is marked \"show in nav menu\": the description is the list of commands instead.")
+		return nil
+	}
+	if used == 0 {
+		fmt.Fprintf(os.Stderr, "The first annotation alone is longer than the %d characters a description may have: the description is the list of commands instead.\n", descriptionMaxChars)
+		return nil
+	}
+	if _, err := client.UpdateRecording(ctx, rec.ID, cloud.RecordingEdit{Name: rec.Name, Description: desc, Visibility: rec.Visibility}); err != nil {
+		return err
+	}
+	if used < total {
+		fmt.Fprintf(os.Stderr, "Only the first %d of %d annotations fit in the %d characters a description may have.\n", used, total, descriptionMaxChars)
+	}
+	fmt.Printf("Description: %d annotation(s) from the nav menu\n", used)
+	return nil
+}
+
+// descriptionMaxChars is the longest description the server keeps.
+const descriptionMaxChars = 2000

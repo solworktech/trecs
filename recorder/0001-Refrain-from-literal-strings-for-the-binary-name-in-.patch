@@ -1,0 +1,109 @@
+From adb0107119ef1d06e8cea558098ea34958278183 Mon Sep 17 00:00:00 2001
+From: Jesse Portnoy <jesse@packman.io>
+Date: Wed, 14 Oct 2026 13:19:30 +0100
+Subject: [PATCH] Refrain from literal strings for the binary name in usage and
+ error messages
+
+---
+ editor/main.go           |  6 +++---
+ editor/merge_cli_test.go |  2 +-
+ recorder/main.go         | 26 +++++++++++++-------------
+ 3 files changed, 17 insertions(+), 17 deletions(-)
+
+diff --git a/editor/main.go b/editor/main.go
+index 11e7b94..08d54ab 100644
+--- a/editor/main.go
++++ b/editor/main.go
+@@ -71,7 +71,7 @@ func main() {
+ 		fatalf("failed to parse flags: %v", err)
+ 	}
+ 	if *file == "" {
+-		fatalf("a recording file is required: editor %s <file>", cmd)
++		fatalf("a recording file is required: %s %s <file>", os.Args[0], cmd)
+ 	}
+ 	if _, err := os.Stat(*file); err != nil {
+ 		fatalf("cannot access recording file: %v", err)
+@@ -141,10 +141,10 @@ func runMerge(args []string) error {
+ 		}
+ 	}
+ 	if *out == "" {
+-		return fmt.Errorf("where to write the merged recording is required: editor merge -o <out> <file> <file> ...")
++		return fmt.Errorf("where to write the merged recording is required: %s merge -o <out> <list of input files>", os.Args[0])
+ 	}
+ 	if len(files) < 2 {
+-		return fmt.Errorf("two recordings or more are needed: editor merge -o <out> <file> <file> ...")
++		return fmt.Errorf("two recordings or more are needed: %s merge -o <out> <list of input files", os.Args[0])
+ 	}
+ 	warn := func(format string, a ...any) { fmt.Fprintf(os.Stderr, "Warning: "+format+"\n", a...) }
+ 	if err := libtrecs.MergeRecordings(files, *out, *gap, warn); err != nil {
+diff --git a/editor/merge_cli_test.go b/editor/merge_cli_test.go
+index 0939a11..3ca1e69 100644
+--- a/editor/merge_cli_test.go
++++ b/editor/merge_cli_test.go
+@@ -19,7 +19,7 @@ func TestMergeSubcommandTakesFlagsBeforeAndAfterTheFiles(t *testing.T) {
+ 		"flags last":  {a, b, "-gap", "250", "-o", filepath.Join(dir, "1.jsonl")},
+ 		"flags mixed": {a, "-o", filepath.Join(dir, "1.jsonl"), b, "-gap", "250"},
+ 	} {
+-		os.Remove(filepath.Join(dir, "1.jsonl"))
++		_ = os.Remove(filepath.Join(dir, "1.jsonl"))
+ 		if err := runMerge(args); err != nil {
+ 			t.Fatalf("%s: %v", name, err)
+ 		}
+diff --git a/recorder/main.go b/recorder/main.go
+index f50ac57..501807c 100644
+--- a/recorder/main.go
++++ b/recorder/main.go
+@@ -230,14 +230,14 @@ func runPlay(playFile *string, playSpeed *float64) {
+ }
+ 
+ func printUsage() {
+-	fmt.Println(`
++	fmt.Printf(`
+ Usage:
+-  trecs record [options]       Record terminal and media streams
+-  trecs play [options]         Play back terminal recording
+-  trecs login [options]        Log in to a trecs server (saves the session)
+-  trecs logout                 Log out and forget the saved session
+-  trecs upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
+-  trecs help                   Show this help message
++  %[1]s record [options]       Record terminal and media streams
++  %[1]s play [options]         Play back terminal recording
++  %[1]s login [options]        Log in to a %[1]s server (saves the session)
++  %[1]s logout                 Log out and forget the saved session
++  %[1]s upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
++  %[1]s help                   Show this help message
+ 
+ Record Options:
+   -terminal                       Enable terminal recording (default: true)
+@@ -279,22 +279,22 @@ Play Options:
+ 
+ Examples:
+   # Record terminal only (uses timestamp as session name)
+-  trecs record
++  %[1]s record
+ 
+   # Record with custom session name
+-  trecs record -name my-session
++  %[1]s record -name my-session
+ 
+   # Record terminal and audio
+-  trecs record -audio
++  %[1]s record -audio
+ 
+   # Record all streams
+-  trecs record -audio -camera -screen
++  %[1]s record -audio -camera -screen
+ 
+   # Play back a recording at 2x speed
+-  trecs play -file recordings/2024_01_15_10_30_45/terminal.jsonl -speed 2.0
++  %[1]s play -file recordings/2024_01_15_10_30_45/terminal.jsonl -speed 2.0
+ 
+ During Recording:
+   - Use Ctrl+C to interrupt commands in the shell (works normally)
+   - Type 'exit' or press Ctrl+D to end the recording
+-  - The recording will stop and you'll return to your original shell`)
++  - The recording will stop and you'll return to your original shell %s`, os.Args[0], "\n")
+ }
+-- 
+2.47.3
+

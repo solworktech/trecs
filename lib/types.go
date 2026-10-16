@@ -20,6 +20,10 @@ type RecordingMetaLine struct {
 	Type   string `json:"type"`
 	Width  int    `json:"width"`
 	Height int    `json:"height"`
+	// Env is the system the recording was made on ("Ubuntu 24.04.1 LTS", see DetectEnv) and Shell the shell that
+	// was recorded ("bash"). Either is left out of the file when unknown, as in every recording made before they existed.
+	Env   string `json:"env,omitempty"`
+	Shell string `json:"shell,omitempty"`
 }
 
 // NewRecordingMetaLine builds the metadata line for a terminal of the given

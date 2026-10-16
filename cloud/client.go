@@ -234,6 +234,49 @@ func (c *Client) Upload(ctx context.Context, u Upload) (*Recording, error) {
 	return &rec, nil
 }
 
+// RecordingEdit is the complete new state of a recording's editable fields: the server replaces them all (PUT), so
+// the name and visibility have to be sent too, as they are. The thumbnail moment is always sent as null - "chosen
+// automatically" - which the server requires to be present; this is for a recording just uploaded, which has none chosen.
+type RecordingEdit struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Visibility  string `json:"visibility"`
+}
+
+func (e RecordingEdit) MarshalJSON() ([]byte, error) {
+	type plain RecordingEdit
+	return json.Marshal(struct {
+		plain
+		PreviewAtMs *int64 `json:"preview_at_ms"`
+	}{plain: plain(e)})
+}
+
+// UpdateRecording changes a recording's name, description and visibility, and returns it as it now is. Its channels
+// and preview moment are left as they were.
+func (c *Client) UpdateRecording(ctx context.Context, id string, e RecordingEdit) (*Recording, error) {
+	if len(c.Cookies) == 0 {
+		return nil, ErrNotLoggedIn
+	}
+	body, err := json.Marshal(e)
+	if err != nil {
+		return nil, err
+	}
+	req, err := c.newRequest(ctx, http.MethodPut, "/v1/recordings/"+url.PathEscape(id), bytes.NewReader(body), "application/json")
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.do(req, true)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var rec Recording
+	if err := json.NewDecoder(resp.Body).Decode(&rec); err != nil {
+		return nil, fmt.Errorf("the change was made but the server's answer was not understood: %w", err)
+	}
+	return &rec, nil
+}
+
 func writeParts(mw *multipart.Writer, u Upload, term, audio *os.File) error {
 	for _, f := range [][2]string{{"name", u.Name}, {"description", u.Description}, {"visibility", u.Visibility}} {
 		if f[1] == "" {

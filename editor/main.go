@@ -144,7 +144,7 @@ func runMerge(args []string) error {
 		return fmt.Errorf("where to write the merged recording is required: %s merge -o <out> <list of input files>", os.Args[0])
 	}
 	if len(files) < 2 {
-		return fmt.Errorf("two recordings or more are needed: %s merge -o <out> <list of input files", os.Args[0])
+		return fmt.Errorf("two recordings or more are needed: %s merge -o <out> <list of input files>", os.Args[0])
 	}
 	warn := func(format string, a ...any) { fmt.Fprintf(os.Stderr, "Warning: "+format+"\n", a...) }
 	if err := libtrecs.MergeRecordings(files, *out, *gap, warn); err != nil {

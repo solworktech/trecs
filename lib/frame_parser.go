@@ -28,6 +28,8 @@ type recordingLine struct {
 	Width           int    `json:"width,omitempty"`
 	Height          int    `json:"height,omitempty"`
 	ID              string `json:"id,omitempty"`
+	Env             string `json:"env,omitempty"`
+	Shell           string `json:"shell,omitempty"`
 	Text            string `json:"text,omitempty"`
 	Author          string `json:"author,omitempty"`
 	CreatedAt       string `json:"createdAt,omitempty"`
@@ -46,6 +48,9 @@ type recordingLine struct {
 type RecordingMeta struct {
 	Width  int
 	Height int
+	// Env and Shell: where it was recorded and with what (see RecordingMetaLine); "" if not saved.
+	Env   string
+	Shell string
 }
 
 // LoadFrames reads a .jsonl recording and splits it into frames,
@@ -97,6 +102,8 @@ func LoadFrames(filePath string) ([]TerminalFrame, []Annotation, RecordingMeta, 
 			// one wins, but nothing does that yet.
 			meta.Width = raw.Width
 			meta.Height = raw.Height
+			meta.Env = raw.Env
+			meta.Shell = raw.Shell
 			continue
 		}
 		frames = append(frames, TerminalFrame{
@@ -1117,6 +1124,11 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 		}
 	}
 
+	// The header (terminal size, where it was recorded) is carried over as it was; the backup is the file as it was.
+	_, _, meta, err := LoadFrames(backupPath)
+	if err != nil {
+		return fmt.Errorf("failed to read the recording's header: %w", err)
+	}
 	file, err := os.Create(originalPath)
 	if err != nil {
 		return fmt.Errorf("failed to create new recording: %w", err)
@@ -1132,6 +1144,9 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	}
 
 	encoder := json.NewEncoder(file)
+	if err := writeMetaLine(encoder, meta); err != nil {
+		return fmt.Errorf("failed to encode recording metadata: %w", err)
+	}
 	// The annotations go first, straight after the header, and the frames after them. A player that is given a recording as it
 	// arrives starts with the first of it: an annotation at the end of the file is not known until the end of the file has
 	// arrived, and a card that is to be shown before the first command - or a note on one of the first - would be missed.

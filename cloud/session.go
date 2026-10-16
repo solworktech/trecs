@@ -14,7 +14,7 @@ import (
 
 // ErrNotLoggedIn means there is no usable session: none was saved, or it has
 // expired, or the server no longer accepts it.
-var ErrNotLoggedIn = errors.New("not logged in (or the session has expired): run `recorder login`")
+var ErrNotLoggedIn = errors.New("not logged in (or the session has expired): run `" + os.Args[0] + " login`")
 
 // Cookie is one cookie the server set at login.
 type Cookie struct {
@@ -64,7 +64,7 @@ func LoadSession() (*Session, error) {
 	}
 	var s Session
 	if err := json.Unmarshal(data, &s); err != nil || s.Server == "" || len(s.Cookies) == 0 {
-		return nil, fmt.Errorf("%s is not a valid session file; run `recorder login` again", path)
+		return nil, fmt.Errorf("%s is not a valid session file; run `%s login` again", path, os.Args[0])
 	}
 	if !s.Expires.IsZero() && time.Now().After(s.Expires) {
 		return nil, ErrNotLoggedIn

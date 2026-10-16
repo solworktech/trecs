@@ -164,7 +164,9 @@ func (tr *TerminalRecorderImpl) Start() error {
 	if err != nil {
 		width, height = 0, 0 // PTY will use its default size; nothing to record
 	}
-	if err := tr.encoder.Encode(libtrecs.NewRecordingMetaLine(width, height)); err != nil {
+	metaLine := libtrecs.NewRecordingMetaLine(width, height)
+	metaLine.Env, metaLine.Shell = libtrecs.DetectEnv(), libtrecs.ShellName(shell)
+	if err := tr.encoder.Encode(metaLine); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to encode recording metadata: %v\n", err)
 	}
 

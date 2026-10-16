@@ -135,10 +135,8 @@ func writeMerged(output string, meta RecordingMeta, annotations []Annotation, fr
 	}()
 	w := bufio.NewWriter(tmp)
 	enc := json.NewEncoder(w)
-	if meta.Width > 0 && meta.Height > 0 {
-		if err = enc.Encode(NewRecordingMetaLine(meta.Width, meta.Height)); err != nil {
-			return err
-		}
+	if err = writeMetaLine(enc, meta); err != nil {
+		return err
 	}
 	for _, a := range annotations {
 		line := recordingLine{Type: "annotation", ID: a.ID, Timestamp: a.Timestamp, Text: a.Text, Author: a.Author, CreatedAt: a.CreatedAt, DurationSeconds: a.DurationSeconds, Kind: a.Kind, Placement: a.Placement, PausePlayback: a.PausePlayback, ShowInNav: a.ShowInNav}
@@ -161,4 +159,14 @@ func writeMerged(output string, meta RecordingMeta, annotations []Annotation, fr
 		return err
 	}
 	return os.Rename(tmp.Name(), output)
+}
+
+// writeMetaLine writes the header line for meta - nothing, if the recording had none to carry (no size, no environment).
+func writeMetaLine(enc *json.Encoder, meta RecordingMeta) error {
+	if !(meta.Width > 0 && meta.Height > 0) && meta.Env == "" && meta.Shell == "" {
+		return nil
+	}
+	line := NewRecordingMetaLine(meta.Width, meta.Height)
+	line.Env, line.Shell = meta.Env, meta.Shell
+	return enc.Encode(line)
 }

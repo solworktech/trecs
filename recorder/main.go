@@ -41,7 +41,7 @@ func main() {
 	cameraSize := recordCmd.String("camera-size", "640x480", "Camera resolution")
 	screenDisplay := recordCmd.String("screen-display", ":0", "Screen display (X11 or macOS)")
 	screenSize := recordCmd.String("screen-size", "1920x1080", "Screen resolution")
-	uploadAfter := recordCmd.Bool("upload", false, "Upload the recording when it ends (log in first with `trecs login`)")
+	uploadAfter := recordCmd.Bool("upload", false, "Upload the recording when it ends (log in first with `"+os.Args[0]+" login`)")
 	uploadVisibility := recordCmd.String("visibility", "", "Visibility for -upload: private (default), unlisted or public")
 	extras := &recordExtras{
 		commandsFile: recordCmd.String("commands-file", "", "Run the commands in this file (one per line; blank lines and lines starting with # are skipped) instead of reading the keyboard. Needs no terminal, so it works in CI"),
@@ -205,7 +205,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 		uploadFiles(cloud.Upload{
 			Name: *sessionName, Visibility: *uploadVisibility,
 			TerminalPath: metadata.TerminalFile, AudioPath: metadata.AudioFile,
-		})
+		}, false)
 	}
 }
 
@@ -269,7 +269,11 @@ Login Options:
 
 Upload Options (before the path):
   -name string                    Recording title
-  -description string             Description (default: the commands typed)
+  -description string             Your own description (Markdown)
+  -annotations-as-description     Describe it with its "show in nav menu" annotations, each
+                                  linking to its moment (-aad for short)
+  -commands-as-description        Describe it with the commands typed (-cad for short; the
+                                  default)
   -visibility string              private (default), unlisted or public
   -audio string                   Audio file (default: audio.opus, or .mp3 .m4a .ogg, beside the recording)
 

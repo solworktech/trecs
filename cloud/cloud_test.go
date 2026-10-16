@@ -113,7 +113,7 @@ func TestSessionLoadingNamesWhatIsWrong(t *testing.T) {
 	}
 	_ = os.MkdirAll(filepath.Dir(path), 0o700)
 	_ = os.WriteFile(path, []byte("not json"), 0o600)
-	if _, err := LoadSession(); err == nil || errors.Is(err, ErrNotLoggedIn) || !strings.Contains(err.Error(), "recorder login") {
+	if _, err := LoadSession(); err == nil || errors.Is(err, ErrNotLoggedIn) || !strings.Contains(err.Error(), os.Args[0]+" login") {
 		t.Errorf("corrupt file: %v", err)
 	}
 	expired := &Session{Server: "http://x.test", Cookies: []Cookie{{Name: "c", Value: "v"}}, Expires: time.Now().Add(-time.Minute)}
@@ -267,5 +267,35 @@ func TestResolveSessionFiles(t *testing.T) {
 		if term, audio, err := ResolveSessionFiles(in); err != nil || filepath.Base(term) != "terminal.jsonl" || filepath.Base(audio) != "audio.mp3" {
 			t.Errorf("%s: %q %q %v", in, term, audio, err)
 		}
+	}
+}
+
+func TestUpdateRecordingPutsTheWholeEdit(t *testing.T) {
+	var got struct {
+		method, path, cookie, ctype, raw string
+		body                             RecordingEdit
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got.method, got.path, got.ctype = r.Method, r.URL.Path, r.Header.Get("Content-Type")
+		if ck, _ := r.Cookie("trecs_session"); ck != nil {
+			got.cookie = ck.Value
+		}
+		raw, _ := io.ReadAll(r.Body)
+		got.raw = string(raw)
+		_ = json.Unmarshal(raw, &got.body)
+		_, _ = io.WriteString(w, `{"id":"abc","name":"N","description":"D","visibility":"private"}`)
+	}))
+	defer srv.Close()
+
+	c := FromSession(&Session{Server: srv.URL, Cookies: []Cookie{{Name: "trecs_session", Value: "tok"}}})
+	rec, err := c.UpdateRecording(context.Background(), "abc", RecordingEdit{Name: "N", Description: "D", Visibility: "private"})
+	if err != nil || rec.Description != "D" {
+		t.Fatalf("got %+v, %v", rec, err)
+	}
+	if got.method != "PUT" || got.path != "/v1/recordings/abc" || got.cookie != "tok" || got.ctype != "application/json" || got.body != (RecordingEdit{"N", "D", "private"}) || !strings.Contains(got.raw, `"preview_at_ms":null`) {
+		t.Errorf("sent %+v", got)
+	}
+	if _, err := (&Client{Server: srv.URL}).UpdateRecording(context.Background(), "abc", RecordingEdit{}); !errors.Is(err, ErrNotLoggedIn) {
+		t.Errorf("without a login: %v", err)
 	}
 }
