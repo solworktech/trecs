@@ -15,6 +15,7 @@ permissions:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    environment: Trecs-GH-Actions
     steps:
       - uses: actions/checkout@v3
         with:
@@ -33,6 +34,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           # Your GoReleaser Pro key, if you are using the 'goreleaser-pro'
           # distribution:
           # GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
