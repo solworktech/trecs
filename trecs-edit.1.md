@@ -31,15 +31,6 @@ Commands:
                    where the one before it ended (-gap ms of pause, default 1000,
                    then the screen is cleared). Annotations go with their frames.
   help             Show this help
-
-The editor allows you to:
-- Watch recording playback
-- Pause at any point
-- Edit command input and output
-- Delete commands
-- Save edited recordings with automatic timestamp compression
-
-Original recordings are backed up before editing.
 ```
 
 ## Examples

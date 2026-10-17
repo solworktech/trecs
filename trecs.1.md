@@ -25,19 +25,19 @@ right next to your written steps.
 
 ```sh
 Usage:
-  ./recorder/trecs record [options]       Record terminal and media streams
-  ./recorder/trecs play [options]         Play back terminal recording
-  ./recorder/trecs login [options]        Log in to a ./recorder/trecs server (saves the session)
-  ./recorder/trecs logout                 Log out and forget the saved session
-  ./recorder/trecs upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
-  ./recorder/trecs help                   Show this help message
+  trecs record [options]       Record terminal and media streams
+  trecs play [options]         Play back terminal recording
+  trecs login [options]        Log in to a trecs server (saves the session)
+  trecs logout                 Log out and forget the saved session
+  trecs upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
+  trecs help                   Show this help message
 
 Record Options:
   -terminal                       Enable terminal recording (default: true)
   -audio                          Enable audio recording (default: false)
   -camera                         Enable camera recording (default: false)
   -screen                         Enable screen recording (default: false)
-  -output string                  Output directory (default: "./recordings")
+  -output string                  Output directory (default: "$HOME/.config/trecs/recordings")
   -name string                    Session name (default: timestamp YYYY_MM_DD_HH_MM_SS)
   -cmd string                     Terminal command to execute (default: current shell, or sh if unable to detect)
   -audio-device string            Audio device (default: "default")
@@ -73,22 +73,6 @@ Upload Options (before the path):
 Play Options:
   -file string                    Terminal recording file to play (required)
   -speed float                    Playback speed multiplier (default: 1.0)
-
-Examples:
-  # Record terminal only (uses timestamp as session name)
-  ./recorder/trecs record
-
-  # Record with custom session name
-  ./recorder/trecs record -name my-session
-
-  # Record terminal and audio
-  ./recorder/trecs record -audio
-
-  # Record all streams
-  ./recorder/trecs record -audio -camera -screen
-
-  # Play back a recording at 2x speed
-  ./recorder/trecs play -file recordings/2024_01_15_10_30_45/terminal.jsonl -speed 2.0
 
 During Recording:
   - Use Ctrl+C to interrupt commands in the shell (works normally)
