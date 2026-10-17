@@ -250,6 +250,9 @@ func newSixelHarness(t *testing.T, gfx termGraphics, out *syncBuf) *harness {
 		h.em.app.Stop()
 		select {
 		case <-h.done:
+			if err != nil {
+				t.Errorf("the editor stopped with an error: %v", err)
+			}
 		case <-time.After(5 * time.Second):
 			t.Error("the editor did not stop")
 		}
@@ -334,7 +337,7 @@ func TestThePicturesAreNotDrawnWhenTheViewIsNarrowerThanTheRecordedScreen(t *tes
 	h.em = NewEditorMode(libtrecs.NewTerminalPlayer(), cmds, path)
 	h.em.sixel = newSixelPainter(termGraphics{sixel: true, cellW: 8, cellH: 16})
 	h.em.sixel.out = &out
-	h.em.app.SetScreen(h.sim)
+	_ = h.em.app.SetScreen(h.sim)
 	h.sim.SetSize(80, 45) // the recording is 100 wide: the lines wrap
 	go func() { h.done <- h.em.Run() }()
 	t.Cleanup(func() { h.em.app.Stop(); <-h.done })
