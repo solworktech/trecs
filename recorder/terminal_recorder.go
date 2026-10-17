@@ -8,13 +8,13 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"regexp"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/creack/pty"
+	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 	libtrecs "trecs/lib"
 )
@@ -35,6 +35,7 @@ type TerminalRecorderImpl struct {
 	oldState    *term.State    // Original terminal state (for restoration)
 	sigWinch    chan os.Signal // Window resize signal handler
 
+	cellW, cellH    int           // a character cell in pixels, 0 if the terminal did not say (see setWindowSize)
 	interactive     bool          // a person at a terminal, as opposed to a scripted session
 	marks           bool          // the shell was started with prompt marks (see shellint.go)
 	cleanup         func()        // removes the shell integration's temporary files
@@ -166,6 +167,7 @@ func (tr *TerminalRecorderImpl) Start() error {
 	}
 	metaLine := libtrecs.NewRecordingMetaLine(width, height)
 	metaLine.Env, metaLine.Shell = libtrecs.DetectEnv(), libtrecs.ShellName(shell)
+	metaLine.CellWidth, metaLine.CellHeight = tr.cellW, tr.cellH
 	if err := tr.encoder.Encode(metaLine); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to encode recording metadata: %v\n", err)
 	}
@@ -214,19 +216,31 @@ func (tr *TerminalRecorderImpl) setWindowSize() (width, height int, err error) {
 	// Get the current window size from stdin - or, for a scripted session, which
 	// has no terminal to ask, from the configuration (the same every time, so a
 	// recording made in CI looks like the one made on a laptop).
+	var xpix, ypix uint16
 	if tr.interactive {
 		width, height, err = term.GetSize(int(os.Stdin.Fd()))
 		if err != nil {
 			return 0, 0, err
 		}
+		// The window's size in pixels, if the terminal says (many do not): programs that draw pictures (img2sixel,
+		// chafa, lsix...) size them by it, and a recording of a picture needs the size of a cell to be played back.
+		if ws, werr := unix.IoctlGetWinsize(int(os.Stdin.Fd()), unix.TIOCGWINSZ); werr == nil {
+			xpix, ypix = ws.Xpixel, ws.Ypixel
+		}
 	} else {
 		width, height = scriptedSize(tr.config.Cols, tr.config.Rows)
+	}
+	tr.cellW, tr.cellH = 0, 0
+	if xpix > 0 && ypix > 0 && width > 0 && height > 0 {
+		tr.cellW, tr.cellH = int(xpix)/width, int(ypix)/height
 	}
 
 	// Set the PTY window size
 	if err := pty.Setsize(tr.ptmx, &pty.Winsize{
 		Rows: uint16(height),
 		Cols: uint16(width),
+		X:    xpix,
+		Y:    ypix,
 	}); err != nil {
 		return 0, 0, err
 	}
@@ -252,6 +266,7 @@ func (tr *TerminalRecorderImpl) captureAndEchoOutput() {
 	defer close(tr.captureDone)
 	reader := bufio.NewReaderSize(tr.ptmx, 4096)
 	buffer := make([]byte, 4096)
+	filter := newDCSFilter()
 
 	// Runs until the PTY reports EOF/an error - which is what closing it (Stop)
 	// or the shell exiting produces - so everything the shell wrote is read.
@@ -267,19 +282,25 @@ func (tr *TerminalRecorderImpl) captureAndEchoOutput() {
 			tr.noteOutput(data)
 
 			// Remove DCS (Device Control String) sequences that cause playback issues
-			// Pattern: ESC P ... ESC \
-			// These are VIM capability queries that shouldn't be recorded
-			data = filterDCSSequences(data)
+			// (ESC P ... ESC \: VIM capability queries and the like that shouldn't be
+			// recorded) - but not sixel graphics, which are output (see dcsFilter). A
+			// graphic cut by the end of this read is held until the rest has come, so
+			// this may be nothing at all.
+			data = filter.Filter(data)
 
-			// Create frame with filtered data
-			frame := libtrecs.TerminalFrame{
-				Timestamp: time.Since(tr.startTime).Milliseconds(),
-				Data:      data,
-			}
+			// Create frame with filtered data (a chunk that is only the start of a graphic
+			// being held back makes no frame; one that was all a dropped string does, empty
+			// as it always has)
+			if data != "" || !filter.holding() {
+				frame := libtrecs.TerminalFrame{
+					Timestamp: time.Since(tr.startTime).Milliseconds(),
+					Data:      data,
+				}
 
-			// Write to file
-			if err := tr.encoder.Encode(frame); err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to encode frame: %v\n", err)
+				// Write to file
+				if err := tr.encoder.Encode(frame); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to encode frame: %v\n", err)
+				}
 			}
 
 			// Echo original (unfiltered) to stdout so user sees everything
@@ -289,6 +310,9 @@ func (tr *TerminalRecorderImpl) captureAndEchoOutput() {
 			}
 			_, _ = os.Stdout.Write(echo) // Ignore error - stdout may be broken
 		}
+	}
+	if rest := filter.Flush(); rest != "" { // the output ended on an escape that began nothing
+		_ = tr.encoder.Encode(libtrecs.TerminalFrame{Timestamp: time.Since(tr.startTime).Milliseconds(), Data: rest})
 	}
 }
 
@@ -353,13 +377,4 @@ func (tr *TerminalRecorderImpl) GetOutput() chan libtrecs.Frame {
 // Wait blocks until recording completes
 func (tr *TerminalRecorderImpl) Wait() {
 	<-tr.done
-}
-
-// filterDCSSequences removes Device Control String sequences that cause playback issues
-// DCS sequences are: ESC P ... ESC \
-// These are used by VIM for terminal capability queries and should not be recorded
-func filterDCSSequences(data string) string {
-	// Remove DCS sequences: ESC P ... ESC backslash
-	re := regexp.MustCompile(`\x1bP[^\x1b]*\x1b\\`)
-	return re.ReplaceAllString(data, "")
 }

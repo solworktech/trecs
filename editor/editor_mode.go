@@ -35,6 +35,8 @@ type EditorMode struct {
 	playbackView               *tview.TextView
 	progressBar                *progressBar
 	display                    libtrecs.Screen
+	sixel                      *sixelPainter // draws the recording's sixel pictures over the playback view (see sixel.go)
+	cellW, cellH               int           // a character cell, in pixels, where the recording was made; 0 = not known
 	displayCols, displayRows   int
 	totalDurationMs            int64
 	statusView                 *tview.TextView
@@ -177,6 +179,8 @@ func (em *EditorMode) Run() error {
 	em.rootFlex = root
 
 	em.app.SetRoot(root, true)
+	em.initSixel()
+	em.app.SetAfterDrawFunc(em.paintPictures)
 	em.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		return em.handleInput(event)
 	})
@@ -251,6 +255,7 @@ func (em *EditorMode) measureDisplaySize() {
 		em.debugf("measureDisplaySize: %v (keeping previous size)", err)
 		return
 	}
+	em.cellW, em.cellH = meta.CellWidth, meta.CellHeight
 	if meta.Width > 0 && meta.Height > 0 {
 		em.displayCols, em.displayRows = meta.Width, meta.Height
 		em.debugf("measureDisplaySize: %dx%d (from recording metadata)", em.displayCols, em.displayRows)
@@ -263,7 +268,9 @@ func (em *EditorMode) measureDisplaySize() {
 // newDisplay creates an empty display sized by the most recent
 // measureDisplaySize call (or the minimum size, if that has never run).
 func (em *EditorMode) newDisplay() libtrecs.Screen {
-	return libtrecs.NewVTScreenSized(em.displayCols, em.displayRows)
+	vt := libtrecs.NewVTScreenSized(em.displayCols, em.displayRows)
+	vt.SetCellSize(em.cellW, em.cellH)
+	return vt
 }
 
 // makeFrameCallback builds the per-frame handler shared by Run() and
@@ -355,7 +362,7 @@ func (em *EditorMode) makeFrameCallback() func(libtrecs.TerminalFrame) {
 // renderFrame puts a frame on the screen and updates the progress bar and the status line. The UI goroutine's.
 func (em *EditorMode) renderFrame(frame libtrecs.TerminalFrame, newIdx int, isLastFrame bool) {
 	em.display.Feed(frame.Data)
-	rendered := em.display.Render()
+	rendered := em.renderDisplay()
 	em.playbackView.SetText(rendered)
 	em.playbackView.ScrollToEnd()
 	em.progressBar.SetProgress(frame.Timestamp, em.totalDurationMs)
@@ -964,7 +971,7 @@ func (em *EditorMode) hideAnnotationModal() {
 		em.display = em.newDisplay()
 		em.displayGeneration.Add(1)
 		em.display.Feed(frame.Data)
-		em.playbackView.SetText(em.display.Render())
+		em.playbackView.SetText(em.renderDisplay())
 		em.playbackView.ScrollToEnd()
 		em.progressBar.SetProgress(frame.Timestamp, em.totalDurationMs)
 		em.resumeOrCards() // the cards that wait for this prompt, or playback

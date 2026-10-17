@@ -340,6 +340,12 @@ tp.pauseResume <- struct{}{}
 - Line-by-line encoding/decoding
 - Easy to filter/transform
 
+**Meta line.** An optional first line `{"type":"meta","width":W,"height":H,"cell_width":CW,"cell_height":CH}` gives the terminal's size in cells and the size of a cell in pixels (the last two only when the terminal reports them).
+
+**Sixel graphics.** The output keeps the Device Control Strings that are sixel graphics (`ESC P ... q data ESC \`), whole, in the frame that completes them (`recorder/dcsfilter.go` holds one back until it ends, across reads); every other DCS - the terminal's answers to queries - is dropped. A graphic over 2 MB (`lib.MaxSixelBytes`) is replaced by the marker `ESC ] 7733 ; sixel-dropped BEL`, which no terminal shows and which does not move the cursor. Readers accept lines up to 16 MiB (`maxRecordingLine`).
+
+**Pictures on the emulated screen.** `lib/vt_images.go` and the web player's `termScreen.js` do the same thing: a picture's box of cells (columns = ceil(width / cell width), rows likewise) is filled with placeholder characters - private use, plane 16, `0x100000 + id*4096 + row*64 + col`, with up to 15 ids and boxes up to 63x63 - and the cursor is moved to the line below the box, in the column it began at. The emulator then scrolls, erases and overwrites the pictures as it does text; `ImagePlacements()` reads the grid back and says which parts of which pictures are where. The editor paints them over the grid with sixel (`editor/sixel.go`: cropped, scaled to its own cell size, re-encoded with at most 255 colours); the web player lays an image over the cells. `apiserver/internal/preview` leaves the space empty.
+
 ### Session Metadata (metadata.json)
 
 **Purpose:** Session catalogue and recovery

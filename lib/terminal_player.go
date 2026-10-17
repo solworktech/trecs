@@ -146,6 +146,7 @@ func (tp *TerminalPlayerImpl) Play(terminalFile string) error {
 // recording's real length once it had any annotations saved.
 func (tp *TerminalPlayerImpl) loadFrames() error {
 	scanner := bufio.NewScanner(tp.file)
+	scanner.Buffer(make([]byte, 0, 64<<10), maxRecordingLine)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(strings.TrimSpace(string(line))) == 0 {

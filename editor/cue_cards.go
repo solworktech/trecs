@@ -485,7 +485,7 @@ func (em *EditorMode) deliverHeldFrame() {
 		frame := *em.pendingAnnotationFrame
 		em.pendingAnnotationFrame = nil
 		em.display.Feed(frame.Data)
-		em.playbackView.SetText(em.display.Render())
+		em.playbackView.SetText(em.renderDisplay())
 		em.playbackView.ScrollToEnd()
 		em.progressBar.SetProgress(frame.Timestamp, em.totalDurationMs)
 	}
@@ -607,8 +607,7 @@ func (s *cueSelect) Blur() {
 }
 
 func (s *cueSelect) Draw(screen tcell.Screen) {
-	//nolint
-	s.DrawForSubclass(screen, s)
+	s.Box.DrawForSubclass(screen, s)
 	x, y, w, _ := s.GetInnerRect()
 	labelWidth := tview.TaggedStringWidth(s.label)
 	tview.Print(screen, s.label, x, y, w, tview.AlignLeft, tcell.ColorWhite)

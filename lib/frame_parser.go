@@ -2,7 +2,6 @@ package lib
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,9 +26,11 @@ type recordingLine struct {
 	Data            string `json:"data,omitempty"`
 	Width           int    `json:"width,omitempty"`
 	Height          int    `json:"height,omitempty"`
-	ID              string `json:"id,omitempty"`
 	Env             string `json:"env,omitempty"`
 	Shell           string `json:"shell,omitempty"`
+	CellWidth       int    `json:"cell_width,omitempty"`
+	CellHeight      int    `json:"cell_height,omitempty"`
+	ID              string `json:"id,omitempty"`
 	Text            string `json:"text,omitempty"`
 	Author          string `json:"author,omitempty"`
 	CreatedAt       string `json:"createdAt,omitempty"`
@@ -51,7 +52,14 @@ type RecordingMeta struct {
 	// Env and Shell: where it was recorded and with what (see RecordingMetaLine); "" if not saved.
 	Env   string
 	Shell string
+	// CellWidth and CellHeight: one character cell in pixels, 0 if unknown (see RecordingMetaLine).
+	CellWidth  int
+	CellHeight int
 }
+
+// maxRecordingLine is the longest line of a recording a reader accepts. A frame carrying a sixel image is a long
+// line (the recorder keeps images up to 2 MB), far over bufio.Scanner's default 64 KB.
+const maxRecordingLine = 16 << 20
 
 // LoadFrames reads a .jsonl recording and splits it into frames,
 // annotations, and recording-level metadata (see RecordingMeta) by line.
@@ -70,6 +78,7 @@ func LoadFrames(filePath string) ([]TerminalFrame, []Annotation, RecordingMeta, 
 	var annotations []Annotation
 	var meta RecordingMeta
 	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, 64<<10), maxRecordingLine)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -104,6 +113,7 @@ func LoadFrames(filePath string) ([]TerminalFrame, []Annotation, RecordingMeta, 
 			meta.Height = raw.Height
 			meta.Env = raw.Env
 			meta.Shell = raw.Shell
+			meta.CellWidth, meta.CellHeight = raw.CellWidth, raw.CellHeight
 			continue
 		}
 		frames = append(frames, TerminalFrame{
@@ -922,19 +932,15 @@ func syncCommandFrames(cmd *Command) {
 		}
 	}
 
-	if was := deriveOutputText(cmd); was != cmd.OutputText {
-		// The edit is applied to the recorded output, so that what was not touched keeps its colours; if it
-		// cannot be (see editedRaw), the plain text is what is written.
-		text, ok := editedRaw(markRe.ReplaceAllString(commandOutputRaw(cmd), ""), was, cmd.OutputText)
-		if !ok {
-			text = strings.ReplaceAll(cmd.OutputText, "\n", "\r\n")
-		}
+	if deriveOutputText(cmd) != cmd.OutputText {
 		cmd.TypedAhead = nil // the frames are about to be replaced
 		ts := cmd.EndTime
 		if len(cmd.OutputFrames) > 0 {
 			ts = cmd.OutputFrames[0].Timestamp
 		}
-		cmd.OutputFrames = replaceOutputText(cmd.OutputFrames, text, ts)
+		cmd.OutputFrames = []TerminalFrame{
+			{Timestamp: ts, Data: strings.ReplaceAll(cmd.OutputText, "\n", "\r\n")},
+		}
 	}
 }
 
@@ -1037,22 +1043,6 @@ func shiftFrameTimestamps(frames []TerminalFrame, shift int64) []TerminalFrame {
 // annotation (created in the editor, with no ID yet) is assigned one here,
 // along with a timestamp anchored to its command's start and a CreatedAt,
 // so it round-trips through future saves like any other.
-// metaLine returns the first line of a recording's bytes if it is the header ({"type":"meta",...}), as it is.
-func metaLine(recording []byte) ([]byte, bool) {
-	line := recording
-	if i := bytes.IndexByte(recording, '\n'); i >= 0 {
-		line = recording[:i]
-	}
-	line = bytes.TrimSpace(line)
-	var head struct {
-		Type string `json:"type"`
-	}
-	if json.Unmarshal(line, &head) != nil || head.Type != "meta" {
-		return nil, false
-	}
-	return append([]byte(nil), line...), true
-}
-
 func RebuildRecording(originalPath string, backupPath string, commands []Command) error {
 	input, err := os.ReadFile(originalPath)
 	if err != nil {
@@ -1134,14 +1124,6 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 		return fmt.Errorf("failed to create new recording: %w", err)
 	}
 	defer func() { _ = file.Close() }()
-
-	// The recording's header - the size it was recorded at - goes first, exactly as it was. Without it a
-	// saved recording is replayed at a size it was not made at.
-	if header, ok := metaLine(input); ok {
-		if _, err := file.Write(append(header, '\n')); err != nil {
-			return fmt.Errorf("failed to write the recording header: %w", err)
-		}
-	}
 
 	encoder := json.NewEncoder(file)
 	if err := writeMetaLine(encoder, meta); err != nil {

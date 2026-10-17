@@ -24,6 +24,11 @@ type RecordingMetaLine struct {
 	// was recorded ("bash"). Either is left out of the file when unknown, as in every recording made before they existed.
 	Env   string `json:"env,omitempty"`
 	Shell string `json:"shell,omitempty"`
+	// CellWidth and CellHeight are the size of one character cell in pixels, when the terminal said (the window's
+	// pixel size over its size in cells). A sixel image is a size in pixels; this is what turns it into the number of
+	// cells it covered, which is what the cursor then moved by. Left out when unknown.
+	CellWidth  int `json:"cell_width,omitempty"`
+	CellHeight int `json:"cell_height,omitempty"`
 }
 
 // NewRecordingMetaLine builds the metadata line for a terminal of the given

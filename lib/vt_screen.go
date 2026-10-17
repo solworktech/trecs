@@ -73,7 +73,13 @@ const (
 // Render, IsBlank), so the two are interchangeable at call sites.
 type VTScreen struct {
 	term  vt10x.Terminal
-	carry string // the start of an escape sequence cut by the end of the last frame (see sanitizeForVT)
+	carry string // the start of an escape sequence cut by the end of the last frame (see sanitizeForVT), or of a graphic
+
+	// Sixel pictures (see vt_images.go).
+	images       [imgIDs]*vtImage
+	nextID       int
+	cellW, cellH int  // a cell in pixels, as it was where the recording was made; 0 = not known
+	imageFill    rune // what a picture's cells render as; 0 = blank
 }
 
 // NewVTScreen creates an empty screen at the smallest allowed size.
@@ -160,9 +166,43 @@ func MeasureSize(frames []TerminalFrame) (cols, rows int) {
 
 // Feed processes one more raw frame of terminal data.
 func (s *VTScreen) Feed(data string) {
-	clean, carry := sanitizeForVT(s.carry, data)
-	s.carry = carry
-	_, _ = s.term.Write([]byte(clean))
+	data = s.carry + data
+	s.carry = ""
+	for len(data) > 0 {
+		i := strings.Index(data, "\x1bP")
+		if i < 0 {
+			s.feedText(data, true)
+			return
+		}
+		s.feedText(data[:i], false)
+		rest := data[i+2:]
+		end := strings.Index(rest, "\x1b\\")
+		if end < 0 {
+			if len(rest) <= 2*MaxSixelBytes { // the rest of it comes in the next frame
+				s.carry = data[i:]
+			}
+			return
+		}
+		if body := rest[:end]; IsSixel(body) {
+			s.placeSixel(body)
+		}
+		// any other device control string is not for the screen
+		data = rest[end+2:]
+	}
+}
+
+// feedText gives the emulator text with no graphic in it. last: it is the end of the data, where a cut escape
+// sequence is kept for the next frame (elsewhere it cannot be one: a graphic follows).
+func (s *VTScreen) feedText(text string, last bool) {
+	clean, carry := sanitizeForVT("", text)
+	if last {
+		s.carry = carry
+	} else {
+		clean += carry
+	}
+	if clean != "" {
+		_, _ = s.term.Write([]byte(clean))
+	}
 }
 
 // IsBlank reports whether nothing visible is on the screen: every cell is an
@@ -355,6 +395,11 @@ func (s *VTScreen) Render() string {
 			ch := g.Char
 			if ch == 0 {
 				ch = ' '
+			} else if isPlaceholder(ch) { // a picture's cell
+				ch = ' '
+				if s.imageFill != 0 {
+					ch = s.imageFill
+				}
 			}
 			if ch == '[' {
 				out.WriteString("[[")

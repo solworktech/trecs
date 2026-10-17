@@ -163,11 +163,11 @@ func writeMerged(output string, meta RecordingMeta, annotations []Annotation, fr
 
 // writeMetaLine writes the header line for meta - nothing, if the recording had none to carry (no size, no environment).
 func writeMetaLine(enc *json.Encoder, meta RecordingMeta) error {
-	//nolint
-	if !(meta.Width > 0 && meta.Height > 0) && meta.Env == "" && meta.Shell == "" {
+	if !(meta.Width > 0 && meta.Height > 0) && meta.Env == "" && meta.Shell == "" && meta.CellWidth == 0 {
 		return nil
 	}
 	line := NewRecordingMetaLine(meta.Width, meta.Height)
 	line.Env, line.Shell = meta.Env, meta.Shell
+	line.CellWidth, line.CellHeight = meta.CellWidth, meta.CellHeight
 	return enc.Encode(line)
 }

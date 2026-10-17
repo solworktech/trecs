@@ -326,7 +326,7 @@ func (em *EditorMode) jumpToTime(ts int64) {
 		started = true
 	}
 	if started {
-		em.playbackView.SetText(em.display.Render())
+		em.playbackView.SetText(em.renderDisplay())
 		em.playbackView.ScrollToEnd()
 	}
 	em.currentCmdIdx = host
