@@ -278,9 +278,7 @@ func DecodeSixel(dcs string) (*SixelImage, error) {
 	data, _ := sixelBody(dcs)
 	img := &SixelImage{W: w, H: h, Pix: make([]byte, w*h*4)}
 	var pal [256][3]byte
-	for i, c := range sixelDefaultPalette {
-		pal[i] = c
-	}
+	copy(pal[:], sixelDefaultPalette[:])
 	cur := 0
 	p := &sixelParser{
 		onDefine: func(n int, r, g, b byte) {

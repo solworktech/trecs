@@ -146,7 +146,7 @@ func TestSixelWrittenOverIsSplit(t *testing.T) {
 }
 
 func TestSixelCutAcrossFramesAndOtherDeviceControlStrings(t *testing.T) {
-	s := newImgScreen(80, 24)
+	var s *VTScreen
 	whole := "hi" + dcs(16, 16) + "!"
 	for _, cut := range []int{1, 3, 5, 9, 20, len(whole) - 3, len(whole) - 1} {
 		s = newImgScreen(80, 24)
@@ -208,14 +208,14 @@ func TestTheSamePictureSharesAnIDAndFifteenDistinctOnesFit(t *testing.T) {
 		t.Errorf("the same picture on %d ids", len(ids))
 	}
 	s = newImgScreen(80, 100)
-	for i := 0; i < imgIDs; i++ {
+	for i := 0; rune(i) < imgIDs; i++ {
 		s.Feed(dcs(8+i, 16))
 	}
-	if n := len(s.ImagePlacements()); n != imgIDs {
+	if n := len(s.ImagePlacements()); n != int(imgIDs) {
 		t.Errorf("%d of %d distinct pictures", n, imgIDs)
 	}
 	s.Feed(dcs(100, 16)) // one more than there are ids: the oldest's place is taken, the screen does not break
-	if n := len(s.ImagePlacements()); n < imgIDs {
+	if n := len(s.ImagePlacements()); n < int(imgIDs) {
 		t.Errorf("%d", n)
 	}
 }
@@ -262,7 +262,7 @@ func TestARecordingWithAGraphicLoadsAndKeepsTheCellSize(t *testing.T) {
 		if err := tp.loadFrames(); err != nil || len(tp.frames) != 1 {
 			t.Errorf("player: %v, %d frames", err, len(tp.frames))
 		}
-		f.Close()
+		_ = f.Close()
 	}
 
 	// merging keeps the size of a cell

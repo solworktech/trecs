@@ -71,47 +71,6 @@ func setMarkedCommandLine(outputFrames []TerminalFrame, text string) {
 	}
 }
 
-// replaceOutputText rewrites a command's output - raw terminal output, newlines as "\r\n" - without losing the
-// marks around it.
-//
-// With marks, a command's frames carry more than its output: the C mark that says it started (and with it the
-// command line itself), and the D mark that says it ended. Those are how a recording read back knows where the
-// command's output stops and the next prompt begins. So the marks stay, in their order - the C mark first and
-// whatever follows it after the output - and everything else becomes the one frame of output. (Replacing all of the
-// frames, as is done for a recording without marks, takes the marks with them: the command then has no end, and
-// read back its output is taken for part of what was typed.)
-func replaceOutputText(old []TerminalFrame, raw string, fallbackTS int64) []TerminalFrame {
-	var head, tail []TerminalFrame // marks up to and including the first C; marks after it
-	seenC, haveText := false, false
-	textFrame := TerminalFrame{Timestamp: fallbackTS, Data: raw}
-	for _, p := range splitAtMarks(old) {
-		if p.kind == 0 { // the output as it was: it appears when the first of it did
-			if !haveText {
-				textFrame.Timestamp, textFrame.Width, textFrame.Height = p.frame.Timestamp, p.frame.Width, p.frame.Height
-				haveText = true
-			}
-			continue
-		}
-		if !seenC {
-			head = append(head, p.asFrame())
-			seenC = p.kind == 'C'
-		} else {
-			tail = append(tail, p.asFrame())
-		}
-	}
-	if !seenC { // no C: nothing starts the output, so any marks there come after it
-		head, tail = nil, head
-	}
-	if !haveText && len(head) > 0 {
-		textFrame.Timestamp = head[len(head)-1].Timestamp
-	}
-	out := head
-	if raw != "" {
-		out = append(out, textFrame)
-	}
-	return append(out, tail...)
-}
-
 // commandInputText is the command's typed text: the shell's own report of it
 // when there is one, else read off the line.
 func commandInputText(cmd *Command) string {

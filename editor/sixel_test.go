@@ -55,8 +55,8 @@ func decodeDrawn(t *testing.T, written string) (img *libtrecs.SixelImage, row, c
 	if m == nil {
 		t.Fatalf("no picture in %q", written)
 	}
-	fmt.Sscan(m[1], &row)
-	fmt.Sscan(m[2], &col)
+	_, _ = fmt.Sscan(m[1], &row)
+	_, _ = fmt.Sscan(m[2], &col)
 	img, err := libtrecs.DecodeSixel(m[3])
 	if err != nil {
 		t.Fatal(err)

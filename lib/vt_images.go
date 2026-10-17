@@ -20,8 +20,8 @@ import (
 // most 63 x 63 cells - a bigger picture is shown at the size that fits, the cursor moving as far as it can).
 const (
 	imgBase   rune = 0x100000 // plane 16, private use B: not the Nerd Font icons' (plane 15)
-	imgIDs         = 15
-	imgMaxBox      = 63
+	imgIDs    rune = 15
+	imgMaxBox rune = 63
 
 	// Until the recording says what the terminal's cells were (RecordingMeta.CellWidth), these are taken: a common size
 	// of a terminal's cell.
@@ -92,8 +92,8 @@ func (s *VTScreen) placeSixel(dcs string) {
 	}
 	s.term.Unlock()
 
-	cols = min(cols, imgMaxBox, max(termCols-cur.X, 1))
-	rows = min(rows, imgMaxBox)
+	cols = min(cols, int(imgMaxBox), max(termCols-cur.X, 1))
+	rows = min(rows, int(imgMaxBox))
 
 	// the same picture again shares the id of its twin; a new one takes a free id (or, when there is none, the oldest's)
 	id := -1
@@ -104,7 +104,7 @@ func (s *VTScreen) placeSixel(dcs string) {
 		}
 	}
 	if id < 0 {
-		for i := 0; i < imgIDs; i++ {
+		for i := 0; rune(i) < imgIDs; i++ {
 			if !used[i] {
 				id = i
 				break
@@ -112,7 +112,7 @@ func (s *VTScreen) placeSixel(dcs string) {
 		}
 	}
 	if id < 0 {
-		id = s.nextID % imgIDs
+		id = s.nextID % int(imgIDs)
 		s.nextID++
 	}
 	s.images[id] = &vtImage{dcs: dcs, w: w, h: h, cols: cols, rows: rows}
