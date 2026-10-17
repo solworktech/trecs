@@ -249,7 +249,7 @@ func newSixelHarness(t *testing.T, gfx termGraphics, out *syncBuf) *harness {
 	t.Cleanup(func() {
 		h.em.app.Stop()
 		select {
-		case <-h.done:
+		case err := <-h.done:
 			if err != nil {
 				t.Errorf("the editor stopped with an error: %v", err)
 			}
@@ -340,7 +340,13 @@ func TestThePicturesAreNotDrawnWhenTheViewIsNarrowerThanTheRecordedScreen(t *tes
 	_ = h.em.app.SetScreen(h.sim)
 	h.sim.SetSize(80, 45) // the recording is 100 wide: the lines wrap
 	go func() { h.done <- h.em.Run() }()
-	t.Cleanup(func() { h.em.app.Stop(); <-h.done })
+	t.Cleanup(func() {
+		h.em.app.Stop()
+		err := <-h.done
+		if err != nil {
+			t.Errorf("error on cleanup: %v", err)
+		}
+	})
 	h.waitFor("the shaded cells", func() bool { return strings.Contains(h.screen(), "▒") }, 8*time.Second)
 	if out.String() != "" {
 		t.Errorf("drawn over wrapped lines: %q", out.String())
