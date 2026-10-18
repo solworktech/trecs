@@ -133,3 +133,56 @@ func TestDCSFilterEdges(t *testing.T) {
 		t.Errorf("%q", got)
 	}
 }
+
+const (
+	testImage    = "\x1b]1337;File=inline=1;width=2;height=1:iVBORw0KGgo=\a"
+	testImageST  = "\x1b]1337;File=inline=1:iVBORw0KGgo=\x1b\\"
+	testDownload = "\x1b]1337;File=name=YQ==;size=3:YWJj\a" // not inline: a file for the terminal to save
+	testOtherOSC = "\x1b]1337;SetUserVar=a=YQ==\a\x1b]0;a title\a"
+)
+
+func TestDCSFilterKeepsInlineImages(t *testing.T) {
+	in := "a" + testImage + "b" + testDownload + "c" + testImageST + "d" + testOtherOSC + "e" + testSixel
+	got, _ := run(newDCSFilter(), in)
+	want := "a" + testImage + "bc" + testImageST + "d" + testOtherOSC + "e" + testSixel
+	if got != want {
+		t.Errorf("got %q\nwant %q", got, want)
+	}
+}
+
+func TestDCSFilterGivesTheSameForImagesWhereverTheOutputIsCut(t *testing.T) {
+	in := "x\x1b[1mhi" + testImage + testQuery + "mid" + testImageST + testDownload + "end" + testSixel + "\x1b"
+	want, _ := run(newDCSFilter(), in)
+	if strings.Contains(want, "YWJj") || strings.Contains(want, "544e") {
+		t.Fatalf("not filtered: %q", want)
+	}
+	for n := 1; n <= len(in); n++ {
+		if got, _ := run(newDCSFilter(), chunked(in, n)...); got != want {
+			t.Fatalf("cut every %d: got %q\nwant %q", n, got, want)
+		}
+	}
+	r := rand.New(rand.NewSource(7))
+	for i := 0; i < 200; i++ {
+		sizes := []int{1 + r.Intn(9), 1 + r.Intn(30), 1 + r.Intn(5)}
+		if got, _ := run(newDCSFilter(), chunked(in, sizes...)...); got != want {
+			t.Fatalf("cut %v: got %q\nwant %q", sizes, got, want)
+		}
+	}
+}
+
+func TestDCSFilterHoldsAnImageUntilItIsWholeAndDropsABigOneWithAMark(t *testing.T) {
+	f := newDCSFilter()
+	if got := f.Filter(testImage[:20]); got != "" || !f.holding() {
+		t.Errorf("part of an image was output: %q", got)
+	}
+	if got := f.Filter(testImage[20:]); got != testImage || f.holding() {
+		t.Errorf("got %q", got)
+	}
+	big := "\x1b]1337;File=inline=1:" + strings.Repeat("A", 100) + "\a"
+	for _, sizes := range [][]int{{1000}, {7}, {30, 1}} {
+		got, _ := run(newDCSFilterMax(50), chunked("a"+big+"b", sizes...)...)
+		if got != "a"+markSixelDropped+"b" {
+			t.Errorf("cut %v: %q", sizes, got)
+		}
+	}
+}

@@ -76,8 +76,8 @@ type VTScreen struct {
 	carry string // the start of an escape sequence cut by the end of the last frame (see sanitizeForVT), or of a graphic
 
 	// Sixel pictures (see vt_images.go).
-	images       [imgIDs]*vtImage
-	nextID       int
+	images       []*vtImage
+	nextSeq      int
 	cellW, cellH int  // a cell in pixels, as it was where the recording was made; 0 = not known
 	imageFill    rune // what a picture's cells render as; 0 = blank
 }
@@ -169,13 +169,48 @@ func (s *VTScreen) Feed(data string) {
 	data = s.carry + data
 	s.carry = ""
 	for len(data) > 0 {
-		i := strings.Index(data, "\x1bP")
+		i, osc := nextGraphic(data)
 		if i < 0 {
+			// the end may be the start of an inline image, cut by the frame: keep it for the next
+			start := "\x1b]" + itermPrefix
+			for k := min(len(start)-1, len(data)); k >= 1; k-- {
+				if strings.HasSuffix(data, start[:k]) {
+					s.feedText(data[:len(data)-k], true)
+					s.carry += data[len(data)-k:]
+					return
+				}
+			}
 			s.feedText(data, true)
 			return
 		}
 		s.feedText(data[:i], false)
 		rest := data[i+2:]
+		var body string
+		if osc { // an inline image: up to BEL or ST
+			end, n := -1, 0
+			for j := 0; j < len(rest); j++ {
+				if rest[j] == 0x07 {
+					end, n = j, 1
+					break
+				}
+				if rest[j] == 0x1b && j+1 < len(rest) && rest[j+1] == '\\' {
+					end, n = j, 2
+					break
+				}
+			}
+			if end < 0 {
+				if len(rest) <= 2*MaxInlineImageBytes { // the rest of it comes in the next frame
+					s.carry = data[i:]
+				}
+				return
+			}
+			body = rest[:end]
+			if ITermShown(body) {
+				s.placePicture(body, ITermMovesCursor(body))
+			}
+			data = rest[end+n:]
+			continue
+		}
 		end := strings.Index(rest, "\x1b\\")
 		if end < 0 {
 			if len(rest) <= 2*MaxSixelBytes { // the rest of it comes in the next frame
@@ -184,11 +219,21 @@ func (s *VTScreen) Feed(data string) {
 			return
 		}
 		if body := rest[:end]; IsSixel(body) {
-			s.placeSixel(body)
+			s.placePicture(body, true)
 		}
 		// any other device control string is not for the screen
 		data = rest[end+2:]
 	}
+}
+
+// nextGraphic finds the first place in data where a picture begins: a Device Control String ("ESC P"), or an inline image
+// ("ESC ] 1337 ; File ="). osc says which; the index is of the ESC, and what follows the two bytes after it is the contents.
+func nextGraphic(data string) (at int, osc bool) {
+	at = strings.Index(data, "\x1bP")
+	if j := strings.Index(data, "\x1b]"+itermPrefix); j >= 0 && (at < 0 || j < at) {
+		return j, true
+	}
+	return at, false
 }
 
 // feedText gives the emulator text with no graphic in it. last: it is the end of the data, where a cut escape

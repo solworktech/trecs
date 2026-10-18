@@ -135,8 +135,10 @@ func (p *sixelPainter) sixelFor(r imageRect) string {
 	img, ok := p.decoded[r.dcs]
 	if !ok {
 		var err error
-		if img, err = libtrecs.DecodeSixel(r.dcs); err != nil {
+		if img, err = libtrecs.DecodePicture(r.dcs); err != nil {
 			img = &libtrecs.SixelImage{}
+		} else if img.W != r.pxW || img.H != r.pxH {
+			img = img.Resize(r.pxW, r.pxH) // an inline image is shown at the size its arguments give, not its file's
 		}
 		if len(p.decoded) > 16 {
 			p.decoded = map[string]*libtrecs.SixelImage{}

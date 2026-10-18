@@ -179,20 +179,35 @@ func TestSixelThatIsNotValidOrTooBigLeavesTheScreenAlone(t *testing.T) {
 	}
 }
 
-func TestSixelBoxIsLimitedToTheScreenAndTo63(t *testing.T) {
+func TestSixelBoxIsLimitedToTheRoomOnTheScreenAndToTheCellCap(t *testing.T) {
 	s := newImgScreen(80, 24)
 	s.Feed("\x1b[1;75H" + dcs(800, 16)) // 100 cells wide, from column 75 of 80
 	if p := s.ImagePlacements()[0]; p.Col != 74 || p.Cols != 6 {
 		t.Errorf("%+v", p)
 	}
 	s = newImgScreen(200, 150)
-	s.Feed(dcs(2000, 1600))
-	if p := s.ImagePlacements()[0]; p.Cols != 63 || p.Rows != 63 {
-		t.Errorf("%dx%d", p.Cols, p.Rows)
+	s.Feed(dcs(2800, 2800)) // 350 x 175 cells: the width is the screen's, the height what the cap leaves
+	p := s.ImagePlacements()
+	if len(p) != 1 || p[0].BoxCols != 200 || p[0].BoxRows != imgMaxCells/200 {
+		t.Errorf("%+v", p)
 	}
 }
 
-func TestTheSamePictureSharesAnIDAndFifteenDistinctOnesFit(t *testing.T) {
+// A picture as large as a terminal window - the screenshot that showed that 63 x 63 cells was too few.
+func TestAPictureAsLargeAsTheWindowKeepsItsWholeWidth(t *testing.T) {
+	s := newImgScreen(172, 38)
+	s.SetCellSize(11, 25)
+	s.Feed("$ show\r\n" + dcs(1920, 1173)) // 175 x 47 cells: as wide as the screen, taller than it
+	ps := s.ImagePlacements()
+	if len(ps) != 1 {
+		t.Fatalf("%d placements", len(ps))
+	}
+	if p := ps[0]; p.Col != 0 || p.Cols != 172 || p.BoxRows != 47 || p.Row0 == 0 {
+		t.Errorf("%+v", p) // the top rows have scrolled off, the width is whole
+	}
+}
+
+func TestTheSamePictureSharesItsCellsAndManyDistinctOnesFit(t *testing.T) {
 	s := newImgScreen(80, 100)
 	for i := 0; i < 3; i++ {
 		s.Feed(dcs(8, 16))
@@ -200,24 +215,38 @@ func TestTheSamePictureSharesAnIDAndFifteenDistinctOnesFit(t *testing.T) {
 	if n := len(s.ImagePlacements()); n != 3 {
 		t.Fatalf("three placements, got %d", n)
 	}
-	ids := map[int]bool{}
+	imgs := map[*vtImage]bool{}
 	for _, p := range s.ImagePlacements() {
-		ids[p.imgID] = true
+		imgs[p.img] = true
 	}
-	if len(ids) != 1 {
-		t.Errorf("the same picture on %d ids", len(ids))
+	if len(imgs) != 1 {
+		t.Errorf("the same picture as %d pictures", len(imgs))
 	}
 	s = newImgScreen(80, 100)
-	for i := 0; rune(i) < imgIDs; i++ {
+	for i := 0; i < 60; i++ {
 		s.Feed(dcs(8+i, 16))
 	}
-	if n := len(s.ImagePlacements()); n != int(imgIDs) {
-		t.Errorf("%d of %d distinct pictures", n, imgIDs)
+	if n := len(s.ImagePlacements()); n != 60 {
+		t.Errorf("%d of 60 distinct pictures", n)
 	}
-	s.Feed(dcs(100, 16)) // one more than there are ids: the oldest's place is taken, the screen does not break
-	if n := len(s.ImagePlacements()); n < int(imgIDs) {
-		t.Errorf("%d", n)
+}
+
+func TestWhenThePoolIsFullTheOldestPictureIsReplaced(t *testing.T) {
+	s := newImgScreen(400, 300)
+	for i := 0; i < 7; i++ {
+		s.Feed(dcs(3200+i*8, 2000)) // 400 x 40 cells each (the cap): seven are 112000 cells, the pool has 65534
 	}
+	cells := 0
+	for _, im := range s.images {
+		cells += im.cols * im.rows
+	}
+	if len(s.images) < 1 || cells > imgPool {
+		t.Errorf("%d pictures of %d cells", len(s.images), cells)
+	}
+	if n := len(s.ImagePlacements()); n < 1 {
+		t.Error("the newest picture is not on the screen")
+	}
+	s.Feed("x") // and the screen is still usable
 }
 
 func TestImageFillShowsWhereAPictureIs(t *testing.T) {

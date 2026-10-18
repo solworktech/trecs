@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -15,13 +16,17 @@ import (
 // follow: they scroll off with the text, a cleared line clears them, text written over one replaces it.
 // Placements() reads the grid back and says what is where.
 //
-// A placeholder is  imgBase + id*4096 + row*64 + col:  id is one of imgIDs (a screen holds that many different
-// pictures at once; more, and the oldest is replaced), row and col the cell within the picture's box (a box is at
-// most 63 x 63 cells - a bigger picture is shown at the size that fits, the cursor moving as far as it can).
+// A placeholder is  imgBase + start + row*cols + col:  each picture on the screen owns a run of imgPool code points, as many as it has
+// cells (start is where its run begins), and row and col are the cell within the picture's box. A screen can hold as many pictures as the
+// pool has room for - one picture may take a quarter of it (imgMaxCells cells, a box of 175 x 93, say); a bigger one is shown at the size
+// that fits, the cursor moving as far as it can. Runs are given out afresh as pictures come and go, and the oldest picture is
+// replaced when there is no room.
 const (
-	imgBase   rune = 0x100000 // plane 16, private use B: not the Nerd Font icons' (plane 15)
-	imgIDs    rune = 15
-	imgMaxBox rune = 63
+	imgBase rune = 0x100000 // plane 16, private use B: not the Nerd Font icons' (plane 15)
+	imgPool      = 0xFFFE   // U+100000 to U+10FFFD: the last two code points of the plane are not characters
+
+	// the most cells a picture's box has
+	imgMaxCells = 16384
 
 	// Until the recording says what the terminal's cells were (RecordingMeta.CellWidth), these are taken: a common size
 	// of a terminal's cell.
@@ -36,15 +41,24 @@ type vtImage struct {
 	dcs        string // the graphic: what is between ESC P and the terminator
 	w, h       int    // in pixels
 	cols, rows int    // the cells of its box
+	start      int    // the first of its code points
+	seq        int    // when it was put on the screen: the lower, the older
 }
 
-func placeholder(id, row, col int) rune { return imgBase + rune(id*4096+row*64+col) }
+func (im *vtImage) placeholder(row, col int) rune { return imgBase + rune(im.start+row*im.cols+col) }
 
-func isPlaceholder(r rune) bool { return r >= imgBase && r < imgBase+rune(imgIDs*4096) }
+func isPlaceholder(r rune) bool { return r >= imgBase && r < imgBase+imgPool }
 
-func splitPlaceholder(r rune) (id, row, col int) {
+// imageOf says which picture a placeholder is of, and which cell of its box; nil if that picture is gone.
+func (s *VTScreen) imageOf(r rune) (im *vtImage, row, col int) {
 	v := int(r - imgBase)
-	return v / 4096, (v / 64) % 64, v % 64
+	for _, im := range s.images {
+		if v >= im.start && v < im.start+im.cols*im.rows {
+			v -= im.start
+			return im, v / im.cols, v % im.cols
+		}
+	}
+	return nil, 0, 0
 }
 
 // SetCellSize tells the screen how large a character cell was, in pixels, where the recording was made. It decides how
@@ -69,67 +83,115 @@ func (s *VTScreen) cellSize() (int, int) {
 	return DefaultCellWidth, DefaultCellHeight
 }
 
-// placeSixel puts a graphic where the cursor is: its box of placeholder cells, and the cursor below it.
-func (s *VTScreen) placeSixel(dcs string) {
-	w, h, err := SixelSize(dcs)
+// placePicture puts a graphic, sixel or inline image, where the cursor is: its box of placeholder cells and, if moves, the
+// cursor below it. A picture that does not move the cursor (doNotMoveCursor=1) is clipped at the bottom of the screen
+// rather than scrolling it.
+func (s *VTScreen) placePicture(src string, moves bool) {
+	cw, ch := s.cellSize()
+	s.term.Lock()
+	termCols, termRows := s.term.Size()
+	s.term.Unlock()
+	w, h, err := PictureSize(src, cw, ch, termCols, termRows)
 	if err != nil || w == 0 || h == 0 {
 		return
 	}
-	cw, ch := s.cellSize()
 	cols, rows := (w+cw-1)/cw, (h+ch-1)/ch
 
 	s.term.Lock()
 	cur := s.term.Cursor()
-	termCols, termRows := s.term.Size()
-	used := make([]bool, imgIDs)
+	// which pictures are still on the screen
+	inUse := map[*vtImage]bool{}
 	for y := 0; y < termRows; y++ {
 		for x := 0; x < termCols; x++ {
 			if r := s.term.Cell(x, y).Char; isPlaceholder(r) {
-				id, _, _ := splitPlaceholder(r)
-				used[id] = true
+				if im, _, _ := s.imageOf(r); im != nil {
+					inUse[im] = true
+				}
 			}
 		}
 	}
 	s.term.Unlock()
+	kept := s.images[:0]
+	for _, im := range s.images {
+		if inUse[im] {
+			kept = append(kept, im)
+		}
+	}
+	s.images = kept
 
-	cols = min(cols, int(imgMaxBox), max(termCols-cur.X, 1))
-	rows = min(rows, int(imgMaxBox))
+	cols = min(cols, max(termCols-cur.X, 1))
+	rows = max(min(rows, imgMaxCells/cols), 1)
+	if !moves {
+		rows = max(min(rows, termRows-cur.Y), 1)
+	}
 
-	// the same picture again shares the id of its twin; a new one takes a free id (or, when there is none, the oldest's)
-	id := -1
-	for i, im := range s.images {
-		if im != nil && used[i] && im.dcs == dcs {
-			id = i
+	// the same picture again shares the run of its twin; a new one takes room (or, when there is none, the oldest's)
+	var im *vtImage
+	for _, o := range s.images {
+		if o.dcs == src && o.cols == cols && o.rows == rows && o.w == w && o.h == h {
+			im = o
 			break
 		}
 	}
-	if id < 0 {
-		for i := 0; rune(i) < imgIDs; i++ {
-			if !used[i] {
-				id = i
+	if im == nil {
+		for {
+			if start := s.freeRun(cols * rows); start >= 0 {
+				s.nextSeq++
+				im = &vtImage{dcs: src, w: w, h: h, cols: cols, rows: rows, start: start, seq: s.nextSeq}
+				s.images = append(s.images, im)
 				break
 			}
+			oldest := 0
+			for i, o := range s.images {
+				if o.seq < s.images[oldest].seq {
+					oldest = i
+				}
+			}
+			s.images = append(s.images[:oldest], s.images[oldest+1:]...)
 		}
 	}
-	if id < 0 {
-		id = s.nextID % int(imgIDs)
-		s.nextID++
-	}
-	s.images[id] = &vtImage{dcs: dcs, w: w, h: h, cols: cols, rows: rows}
 
 	var b strings.Builder
-	for r := 0; r < rows; r++ {
-		if r > 0 {
-			b.WriteString("\n")
-			b.WriteString("\x1b[" + strconv.Itoa(cur.X+1) + "G")
+	if moves {
+		for r := 0; r < rows; r++ {
+			if r > 0 {
+				b.WriteString("\n")
+				b.WriteString("\x1b[" + strconv.Itoa(cur.X+1) + "G")
+			}
+			for c := 0; c < cols; c++ {
+				b.WriteRune(im.placeholder(r, c))
+			}
 		}
-		for c := 0; c < cols; c++ {
-			b.WriteRune(placeholder(id, r, c))
+		// the cursor ends below the picture, in the column it began at
+		b.WriteString("\n\x1b[" + strconv.Itoa(cur.X+1) + "G")
+	} else {
+		for r := 0; r < rows; r++ {
+			b.WriteString("\x1b[" + strconv.Itoa(cur.Y+r+1) + ";" + strconv.Itoa(cur.X+1) + "H")
+			for c := 0; c < cols; c++ {
+				b.WriteRune(im.placeholder(r, c))
+			}
 		}
+		b.WriteString("\x1b[" + strconv.Itoa(cur.Y+1) + ";" + strconv.Itoa(cur.X+1) + "H")
 	}
-	// the cursor ends below the picture, in the column it began at
-	b.WriteString("\n\x1b[" + strconv.Itoa(cur.X+1) + "G")
 	_, _ = s.term.Write([]byte(b.String()))
+}
+
+// freeRun finds n code points of the pool that no picture on the screen has; -1 if there are none together.
+func (s *VTScreen) freeRun(n int) int {
+	runs := make([]*vtImage, len(s.images))
+	copy(runs, s.images)
+	sort.Slice(runs, func(i, j int) bool { return runs[i].start < runs[j].start })
+	at := 0
+	for _, o := range runs {
+		if o.start-at >= n {
+			return at
+		}
+		at = o.start + o.cols*o.rows
+	}
+	if imgPool-at >= n {
+		return at
+	}
+	return -1
 }
 
 // ImagePlacement is a rectangle of cells that shows (a part of) a picture.
@@ -145,7 +207,7 @@ type ImagePlacement struct {
 	Col, Row   int
 	Cols, Rows int
 
-	imgID int
+	img *vtImage
 }
 
 // ImagePlacements says which parts of which pictures are on the screen: for each picture the rectangles of cells that
@@ -155,7 +217,10 @@ func (s *VTScreen) ImagePlacements() []ImagePlacement {
 	defer s.term.Unlock()
 	cols, rows := s.term.Size()
 	// a run: consecutive cells of one row that are consecutive cells of one picture's box
-	type run struct{ id, row0, col0, ox, oy, x0, x1 int }
+	type run struct {
+		img                        *vtImage
+		row0, col0, ox, oy, x0, x1 int
+	}
 	var out []ImagePlacement
 	var open []int // the rectangles in out whose last row is the row above
 	for y := 0; y < rows; y++ {
@@ -165,26 +230,26 @@ func (s *VTScreen) ImagePlacements() []ImagePlacement {
 			if !isPlaceholder(r) {
 				continue
 			}
-			id, prow, pcol := splitPlaceholder(r)
-			if s.images[id] == nil {
+			img, prow, pcol := s.imageOf(r)
+			if img == nil {
 				continue
 			}
 			ox, oy := x-pcol, y-prow // where the box begins: cells of the same picture elsewhere have another
 			if n := len(runs); n > 0 {
 				l := &runs[n-1]
-				if l.id == id && l.ox == ox && l.oy == oy && l.x1 == x {
+				if l.img == img && l.ox == ox && l.oy == oy && l.x1 == x {
 					l.x1 = x + 1
 					continue
 				}
 			}
-			runs = append(runs, run{id: id, row0: prow, col0: pcol, ox: ox, oy: oy, x0: x, x1: x + 1})
+			runs = append(runs, run{img: img, row0: prow, col0: pcol, ox: ox, oy: oy, x0: x, x1: x + 1})
 		}
 		var next []int
 		for _, rn := range runs {
 			found := -1
 			for _, i := range open {
 				p := &out[i]
-				if p.imgID == rn.id && p.Col == rn.x0 && p.Cols == rn.x1-rn.x0 && p.Col0 == rn.col0 && p.Row0+p.Rows == rn.row0 {
+				if p.img == rn.img && p.Col == rn.x0 && p.Cols == rn.x1-rn.x0 && p.Col0 == rn.col0 && p.Row0+p.Rows == rn.row0 {
 					found = i
 					break
 				}
@@ -194,10 +259,10 @@ func (s *VTScreen) ImagePlacements() []ImagePlacement {
 				next = append(next, found)
 				continue
 			}
-			im := s.images[rn.id]
+			im := rn.img
 			out = append(out, ImagePlacement{
 				DCS: im.dcs, PxW: im.w, PxH: im.h, BoxCols: im.cols, BoxRows: im.rows,
-				Col0: rn.col0, Row0: rn.row0, Col: rn.x0, Row: y, Cols: rn.x1 - rn.x0, Rows: 1, imgID: rn.id,
+				Col0: rn.col0, Row0: rn.row0, Col: rn.x0, Row: y, Cols: rn.x1 - rn.x0, Rows: 1, img: rn.img,
 			})
 			next = append(next, len(out)-1)
 		}

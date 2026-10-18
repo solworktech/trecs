@@ -1,0 +1,5 @@
+recorder/trecs
+editor/trecs-edit
+dist/
+trecs-edit.1.gz
+trecs.1.gz
