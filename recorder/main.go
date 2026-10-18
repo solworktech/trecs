@@ -20,6 +20,7 @@ type recordExtras struct {
 	humanLike    *bool
 	cols, rows   *int
 	noMarks      *bool
+	noUpload     *bool
 }
 
 func main() {
@@ -49,6 +50,7 @@ func main() {
 		cols:         recordCmd.Int("cols", 0, "Terminal width for -commands-file (default: this terminal's, or 172 when there is none)"),
 		rows:         recordCmd.Int("rows", 0, "Terminal height for -commands-file (default: this terminal's, or 38 when there is none)"),
 		noMarks:      recordCmd.Bool("no-marks", false, "Don't start the shell with prompt marks (OSC 133); bash, zsh and fish get them by default"),
+		noUpload:     recordCmd.Bool("no-upload", false, "Don't ask whether to upload the recording when it ends"),
 	}
 
 	// Play flags
@@ -61,6 +63,9 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "version", "-version", "--version":
+		printVersion()
+
 	case "record":
 		if err := recordCmd.Parse(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to parse record flags: %v\n", err)
@@ -109,10 +114,19 @@ func runRecord(terminal, audio, camera, screen *bool,
 		fmt.Fprintln(os.Stderr, "Error: -human-like only applies with -commands-file")
 		os.Exit(1)
 	}
+	if *uploadAfter && *extras.noUpload {
+		fmt.Fprintln(os.Stderr, "Error: -upload and -no-upload contradict each other")
+		os.Exit(1)
+	}
 	if *extras.commandsFile == "" && (*extras.cols != 0 || *extras.rows != 0) {
 		// A person at the keyboard is typing in a real terminal of its own size;
 		// recording a different one would not match what they see.
 		fmt.Fprintln(os.Stderr, "recorder: -cols and -rows only apply with -commands-file; recording at this terminal's size")
+	}
+
+	if *extras.commandsFile != "" && !confirmScript(*extras.commandsFile, os.Stdin, os.Stderr, stdinIsTerminal()) {
+		fmt.Fprintln(os.Stderr, "Aborted; nothing was run.")
+		os.Exit(1)
 	}
 
 	config := &libtrecs.RecordingConfig{
@@ -200,12 +214,25 @@ func runRecord(terminal, audio, camera, screen *bool,
 		fmt.Printf("Screen: %s\n", metadata.ScreenFile)
 	}
 
-	if *uploadAfter && metadata.TerminalFile != "" {
-		fmt.Println()
-		uploadFiles(cloud.Upload{
-			Name: *sessionName, Visibility: *uploadVisibility,
-			TerminalPath: metadata.TerminalFile, AudioPath: metadata.AudioFile,
-		}, false)
+	if metadata.TerminalFile != "" && !*extras.noUpload {
+		// -upload uploads without asking. Otherwise a person at the keyboard is asked; with nobody to ask (CI, a pipe) nothing is uploaded.
+		if *uploadAfter || (stdinIsTerminal() && askYes("Upload to the Trecs Platform?", os.Stdin, os.Stdout)) {
+			fmt.Println()
+			if _, err := cloud.LoadSession(); errors.Is(err, cloud.ErrNotLoggedIn) && stdinIsTerminal() {
+				runLogin(nil)
+			}
+			uploadFiles(cloud.Upload{
+				Name: *sessionName, Visibility: *uploadVisibility,
+				TerminalPath: metadata.TerminalFile, AudioPath: metadata.AudioFile,
+			}, false)
+		}
+	}
+}
+
+func printVersion() {
+	fmt.Printf("%s %s\n", filepath.Base(os.Args[0]), libtrecs.VersionString())
+	if defaultServer != "" {
+		fmt.Printf("default server: %s\n", defaultServer)
 	}
 }
 
@@ -237,6 +264,7 @@ Usage:
   %[1]s login [options]        Log in to a %[1]s server (saves the session)
   %[1]s logout                 Log out and forget the saved session
   %[1]s upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
+  %[1]s version                Show the version (also -version, --version)
   %[1]s help                   Show this help message
 
 Record Options:
@@ -259,11 +287,17 @@ Record Options:
   -human-like                     With -commands-file: type with human pauses (default: instant)
   -cols, -rows int                Terminal size for -commands-file (default: this terminal's, else 172x38)
   -no-marks                       Don't set up shell integration (prompt marks)
-  -upload                         Upload the recording when it ends (needs a login)
-  -visibility string              Visibility for -upload: private (default), unlisted, public
+  -upload                         Upload the recording when it ends, without asking (needs a login)
+  -no-upload                      Don't ask whether to upload the recording when it ends
+  -visibility string              Visibility for the upload: private (default), unlisted, public
+
+  When it ends, a recording made at a terminal asks "Upload to the Trecs Platform? [Y/n]" (Y, y or
+  Enter uploads it, any other key doesn't). -upload skips the question and uploads; -no-upload skips
+  it and doesn't. With -commands-file, a warning is shown and you are asked to type YES to continue
+  (when standard input is a terminal).
 
 Login Options:
-  -server string                  Server address (default: $TRECS_SERVER, else the last login's)
+  -server string                  Server address (default: the last login's, else $TRECS_SERVER, else the one built in, if any)
   -email string                   Account email (asked for if omitted)
   -password-stdin                 Read the password from standard input
 

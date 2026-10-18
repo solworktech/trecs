@@ -1,4 +1,4 @@
-trecs 1 "Oct 16 2026" trecs "User Manual"
+trecs 1 "Oct 18 2026" trecs "User Manual"
 ========================================
 
 ## DESCRIPTION
@@ -30,6 +30,7 @@ Usage:
   trecs login [options]        Log in to a trecs server (saves the session)
   trecs logout                 Log out and forget the saved session
   trecs upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
+  trecs version                Show the version (also -version, --version)
   trecs help                   Show this help message
 
 Record Options:
@@ -52,11 +53,13 @@ Record Options:
   -human-like                     With -commands-file: type with human pauses (default: instant)
   -cols, -rows int                Terminal size for -commands-file (default: this terminal's, else 172x38)
   -no-marks                       Don't set up shell integration (prompt marks)
-  -upload                         Upload the recording when it ends (needs a login)
-  -visibility string              Visibility for -upload: private (default), unlisted, public
+  -upload                         Upload the recording when it ends, without asking (needs a login)
+  -no-upload                      Don't ask whether to upload the recording when it ends
+  -visibility string              Visibility for the upload: private (default), unlisted, public
 
 Login Options:
-  -server string                  Server address (default: $TRECS_SERVER, else the last login's)
+  -server string                  Server address (default: the last login's, else $TRECS_SERVER,
+                                  else the one built in, if any)
   -email string                   Account email (asked for if omitted)
   -password-stdin                 Read the password from standard input
 
@@ -73,6 +76,23 @@ Upload Options (before the path):
 Play Options:
   -file string                    Terminal recording file to play (required)
   -speed float                    Playback speed multiplier (default: 1.0)
+
+Scripted Recordings (-commands-file):
+  - The commands are typed into a real shell, with your permissions, as if they were a shell
+    script: nothing reviews them. A warning is shown (in yellow) and you must type YES to
+    continue; any other input exits without running anything.
+  - When standard input is not a terminal (CI, a pipe) the warning is shown and the recording
+    goes ahead.
+
+After Recording:
+  - At a terminal you are asked "Upload to the Trecs Platform? [Y/n]". Y, y or Enter uploads the
+    recording (private, unless -visibility is given); any other key does not.
+  - -upload uploads without asking; -no-upload neither asks nor uploads.
+  - When standard input is not a terminal nothing is uploaded unless -upload is given.
+
+Build Options (go build -ldflags "-X ..."):
+  trecs/lib.Version=TAG           The version shown by --version (default: the commit built from)
+  main.defaultServer=URL          The server for login when there is no -server, no saved login and no $TRECS_SERVER
 
 During Recording:
   - Use Ctrl+C to interrupt commands in the shell (works normally)

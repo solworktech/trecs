@@ -43,6 +43,17 @@ go build -o trecs ./recorder
 go build -o trecs-edit ./editor
 ```
 
+Both binaries print their version with `--version`. A release reports its tag; a build from a clone reports the commit it was built from (with `-dirty` if there were uncommitted changes).
+
+Two options are set when building, with `-ldflags`:
+
+```sh
+# the version to report, instead of the commit
+go build -ldflags "-X trecs/lib.Version=v1.2.3" -o trecs ./recorder
+# the server `trecs login` uses when there is no -server, no saved login and no $TRECS_SERVER
+go build -ldflags "-X main.defaultServer=https://trecs.example.com" -o trecs ./recorder
+```
+
 Recording audio (narration) needs [`ffmpeg`](https://ffmpeg.org/) on your `PATH`. Nothing else is needed.
 
 ## Quick start
@@ -61,6 +72,7 @@ trecs play [options]         Play a recording back in the terminal
 trecs login [options]        Log in to a Trecs server (saves the session)
 trecs logout                 Log out and forget the saved session
 trecs upload [options] PATH  Upload a recording
+trecs version                Show the version (also --version)
 trecs help                   Show the help
 ```
 
@@ -97,6 +109,7 @@ trecs record -commands-file setup.txt -name nginx-setup
 trecs record -commands-file setup.txt -human-like -cols 100 -rows 30
 ```
 
+- **Read the file before you run it.** The commands are typed into a real shell with your permissions, exactly as if they were a shell script: nothing reviews them. The recorder says so in a warning and asks you to type `YES` before it starts (anything else exits). When standard input is not a terminal (CI, a pipe) there is nobody to ask: the warning is printed and the recording goes ahead.
 - One command per line. Blank lines and lines starting with `#` are skipped. A line ending in a backslash, or leaving a quote open, is continued by the next one.
 - The recorder waits for the shell's next prompt after each command, so output and prompts come out in the order a person would have seen them.
 - By default each command is entered at once. `-human-like` types with the pauses a person makes, between characters and between commands.
@@ -132,9 +145,11 @@ Recordings can be uploaded to a Trecs platform server, which gives you a link to
 ```sh
 trecs login -server https://trecs.example.com    # or set $TRECS_SERVER
 trecs upload -name "Setting up nginx" -visibility unlisted path/to/session
-trecs record -upload                             # upload as soon as the recording ends
+trecs record -upload                             # upload as soon as the recording ends, without asking
 trecs logout
 ```
+
+When a recording made at a terminal ends, the recorder asks `Upload to the Trecs Platform? [Y/n]`. `Y`, `y` or Enter uploads it (as `private`, unless `-visibility` says otherwise; you are asked to log in first if needed); any other key does not. `-upload` uploads without asking, and `-no-upload` neither asks nor uploads. When standard input is not a terminal there is nobody to ask, so nothing is uploaded unless `-upload` was given.
 
 `login` asks for your email and password; use `-email` to give the email and `-password-stdin` to read the password from standard input (for scripts). The server is remembered, so you only need `-server` the first time. `upload` logs you in if you are not already.
 
@@ -162,8 +177,9 @@ trecs logout
 | `-human-like` | `false` | With `-commands-file`, type like a person |
 | `-cols`, `-rows` | the terminal's | With `-commands-file`, the terminal size |
 | `-no-marks` | `false` | Don't start the shell with prompt marks |
-| `-upload` | `false` | Upload when the recording ends |
-| `-visibility` | `private` | With `-upload`: `private`, `unlisted` or `public` |
+| `-upload` | `false` | Upload when the recording ends, without asking |
+| `-no-upload` | `false` | Don't ask whether to upload the recording when it ends |
+| `-visibility` | `private` | The upload's visibility: `private`, `unlisted` or `public` |
 
 ## The editor: `trecs-edit`
 

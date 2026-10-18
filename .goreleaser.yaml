@@ -15,6 +15,8 @@ builds:
     id: trecs
     main: ./recorder
     binary: trecs
+    ldflags:
+      - -s -w -X trecs/lib.Version={{ .Tag }}
     goos:
       - linux
       - darwin
@@ -27,6 +29,8 @@ builds:
     id: trecs-edit
     main: ./editor
     binary: trecs-edit
+    ldflags:
+      - -s -w -X trecs/lib.Version={{ .Tag }}
     goos:
       - linux
       - darwin

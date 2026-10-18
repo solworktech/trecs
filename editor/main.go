@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	libtrecs "trecs/lib"
@@ -22,6 +23,7 @@ Commands:
                    Join recordings into one, in the order given: each starts
                    where the one before it ended (-gap ms of pause, default 1000,
                    then the screen is cleared). Annotations go with their frames.
+  version          Show the version (also -version, --version)
   help             Show this help
 
 The editor allows you to:
@@ -48,6 +50,9 @@ func main() {
 	switch cmd {
 	case "help", "-h", "-help", "--help":
 		fmt.Print(usage)
+		return
+	case "version", "-version", "--version":
+		fmt.Printf("%s %s\n", filepath.Base(os.Args[0]), libtrecs.VersionString())
 		return
 	case "merge":
 		if err := runMerge(os.Args[2:]); err != nil {

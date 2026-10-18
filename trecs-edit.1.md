@@ -1,4 +1,4 @@
-trecs-edit 1 "Oct 9 2026" trecs-edit "User Manual"
+trecs-edit 1 "Oct 18 2026" trecs-edit "User Manual"
 ======================================================
 
 ## DESCRIPTION
@@ -30,6 +30,7 @@ Commands:
                    Join recordings into one, in the order given: each starts
                    where the one before it ended (-gap ms of pause, default 1000,
                    then the screen is cleared). Annotations go with their frames.
+  version          Show the version (also -version, --version)
   help             Show this help
 ```
 

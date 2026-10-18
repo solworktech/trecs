@@ -41,14 +41,12 @@ func readLine(r *bufio.Reader) (string, error) {
 
 func runLogin(args []string) {
 	fs := flag.NewFlagSet("login", flag.ExitOnError)
-	server := fs.String("server", os.Getenv("TRECS_SERVER"), "Server address, e.g. https://trecs.example.com (default: $TRECS_SERVER, else the server you last logged in to)")
+	server := fs.String("server", "", "Server address, e.g. https://trecs.example.com (default: "+serverDefaultHelp()+")")
 	email := fs.String("email", "", "Account email (asked for if omitted)")
 	passStdin := fs.Bool("password-stdin", false, "Read the password from standard input instead of asking for it")
 	_ = fs.Parse(args)
 
-	if *server == "" {
-		*server = savedServer()
-	}
+	*server = resolveServer(*server, savedServer(), os.Getenv("TRECS_SERVER"), defaultServer)
 	if *server == "" {
 		var err error
 		in := bufio.NewReader(os.Stdin)
