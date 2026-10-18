@@ -56,7 +56,7 @@ func TestSixelTakesItsCellsAndMovesTheCursorPastThem(t *testing.T) {
 	if len(l) < 3 || strings.Index(l[2], "cd") != 2 {
 		t.Errorf("the text after the picture is below it, in its column: %q", l)
 	}
-	if strings.Contains(s.Render(), string(imgBase)) {
+	if strings.Contains(s.Render(), string(rune(imgBase))) {
 		t.Error("a placeholder leaked into the text")
 	}
 	if s.IsBlank() {

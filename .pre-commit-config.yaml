@@ -4,3 +4,12 @@ repos:
     rev: v0.5.9
     hooks:
       - id: go-fmt
+  - repo: local
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint
+        entry: golangci-lint run --fix
+        language: system
+        types: [go]
+        pass_filenames: false
+        require_serial: true

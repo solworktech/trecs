@@ -22,8 +22,8 @@ import (
 // that fits, the cursor moving as far as it can. Runs are given out afresh as pictures come and go, and the oldest picture is
 // replaced when there is no room.
 const (
-	imgBase rune = 0x100000 // plane 16, private use B: not the Nerd Font icons' (plane 15)
-	imgPool      = 0xFFFE   // U+100000 to U+10FFFD: the last two code points of the plane are not characters
+	imgBase = 0x100000 // plane 16, private use B: not the Nerd Font icons' (plane 15)
+	imgPool = 0xFFFE   // U+100000 to U+10FFFD: the last two code points of the plane are not characters
 
 	// the most cells a picture's box has
 	imgMaxCells = 16384
