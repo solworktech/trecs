@@ -779,7 +779,11 @@ func (em *EditorMode) layoutCueButtons() {
 // openCueCardModal opens the modal for the command in focus in the command list. If the command has a card of one kind only,
 // that is the kind it opens on, and what it shows.
 func (em *EditorMode) openCueCardModal() {
-	idx := em.commandList.GetCurrentItem()
+	if r, ok := em.currentListRow(); ok && r.img != "" {
+		em.setStatus("Cue cards go with a command, not an image: choose the command.")
+		return
+	}
+	idx := em.currentListCommand()
 	if idx < 0 || idx >= len(em.commands) {
 		return
 	}

@@ -29,7 +29,7 @@ type EditorMode struct {
 	currentCmdIdx              int
 	rootFlex                   *tview.Flex
 	playbackFlex               *tview.Flex
-	playbackLegend             *tview.TextView
+	playbackLegend             *legendBar
 	playbackSeparator          *tview.Box
 	playbackMargin             *tview.Box
 	playbackView               *tview.TextView
@@ -105,6 +105,14 @@ type EditorMode struct {
 	timedOverlay   *timedOverlay
 	timedModal     *timedModal
 	timedListModal *timedListModal
+
+	// Images (see images.go) and the full help menu (see legend.go). The UI goroutine's.
+	imageOverlay   *imageOverlay
+	imageModal     *imageModal
+	audioBusy      atomic.Bool // the sound is being changed for an image, in the background
+	soundReport    string      // how the last change of the sound went (the UI goroutine's)
+	lastImageDir   string      // where the last image was chosen from
+	help           *helpModal
 	timedLast      int64 // the position of playback when they were last looked at: those since are shown
 	timedShown     bool
 	timedRemaining time.Duration // how long what is up has still to be shown: counted down by the progress clock, while playback is not paused
@@ -113,6 +121,7 @@ type EditorMode struct {
 	cueFinal       bool          // the last command's post card is up, at the end of the recording
 	// buttonFlex      *tview.Flex
 	commandList     *tview.List
+	listRows        []listRow // what each row of the list is: a command, or an image (see images.go)
 	deletedCommands map[int]bool
 	editedCommands  map[int]bool
 }
@@ -166,6 +175,7 @@ func (em *EditorMode) Run() error {
 	em.createCueCardModal() // added as a page of its own when it is opened (Ctrl+A in the command list)
 	em.createTimedModal()
 	em.createTimedListModal() // and this one by Ctrl+A on the playback screen
+	em.createImageModal()     // and this by Ctrl+G, or Ctrl+E on an image in the list of commands
 
 	em.previousPage = "playback"
 
@@ -490,11 +500,7 @@ func (em *EditorMode) toggleFullScreen() {
 }
 
 func (em *EditorMode) createPlaybackView() tview.Primitive {
-	em.playbackLegend = tview.NewTextView().
-		SetDynamicColors(true).
-		SetText("[yellow]Space[white]/[yellow]P[white] Pause/Resume    [yellow]^E[white] Edit Current Command    [yellow]^A[white] Timed Annotations    " +
-			"[yellow]^P[white]/[yellow]^N[white] Prev/Next Command    " +
-			"[yellow]^L[white] Browse Commands    [yellow]^F[white] Full Screen    [yellow]Q[white] Quit")
+	em.playbackLegend = newLegendBar("?", playbackLegendItems()...)
 
 	em.playbackSeparator = newHorizontalRule()
 
@@ -530,8 +536,10 @@ func (em *EditorMode) createPlaybackView() tview.Primitive {
 	// The cue card is a layer over the whole page, centred in it (see cue_cards.go).
 	em.cueOverlay = newCueOverlay()
 	em.timedOverlay = newTimedOverlay()
+	em.imageOverlay = newImageOverlay(em)
 	em.playbackLayers = tview.NewPages().
 		AddPage("base", em.playbackFlex, true, true).
+		AddPage("image", em.imageOverlay, true, false). // an image, over the terminal
 		AddPage("timed", em.timedOverlay, true, false). // a timed annotation, at the bottom left
 		AddPage("card", em.cueOverlay, true, false)
 
@@ -561,11 +569,7 @@ func (em *EditorMode) createEditView() tview.Primitive {
 	em.annotationDurationField.SetFieldTextColor(tcell.ColorWhite)
 	em.annotationDurationField.SetBorder(true).SetTitle(" Annotation Duration (seconds, 0 = off) ")
 
-	legend := tview.NewTextView().
-		SetDynamicColors(true).
-		SetText("[yellow]^S[white] Stage Change & Continue Editing   [yellow]^W[white] Write & Resume Playback   " +
-			"[yellow]^P[white]/[yellow]^N[white] Prev/Next Command   [yellow]^E[white] Open in Editor   " +
-			"[yellow]Tab[white] Toggle Fields   [yellow]^D[white] Delete Command   [yellow]^X[white] Exit Editor")
+	legend := newLegendBar("F1", editLegendItems()...)
 
 	spacer := tview.NewBox()
 
@@ -620,10 +624,7 @@ func (em *EditorMode) createEditView() tview.Primitive {
 // the file with its start time relative to the whole recording, letting the
 // user jump straight to any of them for playback or for editing.
 func (em *EditorMode) createCommandListView() tview.Primitive {
-	legend := tview.NewTextView().
-		SetDynamicColors(true).
-		SetText("[yellow]Up[white]/[yellow]Down[white] Navigate    [yellow]^P[white] Jump to Playback    " +
-			"[yellow]^E[white] Jump to Edit    [yellow]^A[white] Add/Edit cue card    [yellow]Esc[white] Close")
+	legend := newLegendBar("?", commandListLegendItems()...)
 
 	em.commandList = tview.NewList().ShowSecondaryText(false)
 	em.commandList.SetBorder(true).SetTitle(" Commands ")
@@ -643,11 +644,9 @@ func (em *EditorMode) refreshCommandList() {
 		return
 	}
 	em.commandList.Clear()
-	for i, cmd := range em.commands {
-		label := fmt.Sprintf("%s   %s", formatDuration(cmd.StartTime), libtrecs.CollapseCommand(cmd.InputText))
-		if em.deletedCommands[i] {
-			label = "(deleted) " + label
-		}
+	rows, labels := em.commandRows()
+	em.listRows = rows
+	for _, label := range labels {
 		em.commandList.AddItem(label, "", 0, nil)
 	}
 }
@@ -693,6 +692,20 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	if pageName == timedListPage {
 		return em.handleTimedListInput(event)
 	}
+	if pageName == imagePickerPage {
+		return em.handleImagePickerInput(event)
+	}
+	if pageName == imageModalPage {
+		return em.handleImageModalInput(event)
+	}
+	if pageName == helpPage {
+		return em.handleHelpInput(event)
+	}
+	// F1 opens the full help menu from any page; on pages where there is no text to type, so does ?.
+	if event.Key() == tcell.KeyF1 && (pageName == "playback" || pageName == "commandlist" || pageName == "edit") {
+		em.openHelp(pageName)
+		return nil
+	}
 
 	// Ctrl+L toggles the command browser from anywhere (except itself,
 	// where Esc closes it instead). It deliberately leaves an in-progress
@@ -715,15 +728,28 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			em.pages.SwitchToPage(em.previousPage)
 			return nil
 		case tcell.KeyCtrlP:
-			em.cancelAnnotation()
-			em.jumpToCommandForPlayback(em.commandList.GetCurrentItem())
+			if r, ok := em.currentListRow(); ok {
+				em.jumpToListRow(r)
+			}
 			return nil
 		case tcell.KeyCtrlE:
-			em.jumpToCommandForEdit(em.commandList.GetCurrentItem())
+			if r, ok := em.currentListRow(); ok {
+				em.editListRow(r)
+			}
 			return nil
 		case tcell.KeyCtrlA:
 			em.openCueCardModal()
 			return nil
+		case tcell.KeyCtrlD:
+			if r, ok := em.currentListRow(); ok {
+				em.deleteListRow(r)
+			}
+			return nil
+		case tcell.KeyRune:
+			if event.Rune() == '?' {
+				em.openHelp("commandlist")
+				return nil
+			}
 		}
 		return event
 	}
@@ -786,6 +812,15 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		em.openTimedEntry()
 		return nil
 	}
+	// Ctrl+G adds an image at the time playback is at (or edits the one that is on show), on the same terms as Ctrl+A.
+	if event.Key() == imageKey {
+		if em.annotationModalVisible || em.cueActive {
+			em.setStatus("Dismiss what is showing first." + em.currentAnnotationHint())
+			return nil
+		}
+		em.openImageEntry()
+		return nil
+	}
 	// Ctrl+X dismisses what is up: a preview, an annotation that was asked for, or cards that hold playback, or a timed annotation.
 	if event.Key() == tcell.KeyCtrlX {
 		switch {
@@ -822,6 +857,12 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		em.cancelAnnotation()
 		em.jumpToCommandForPlayback(cur + 1)
 		return nil
+	}
+	if event.Key() == tcell.KeyCtrlE && em.imageOverlay.show != nil {
+		if a, ok := em.imageByID(em.imageOverlay.show.ann.ID); ok {
+			em.openImageModalFor(a) // the picture that is on show is what is being looked at
+			return nil
+		}
 	}
 	if event.Key() == tcell.KeyCtrlE {
 		em.cancelAnnotation()
@@ -876,6 +917,9 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 				// a jump to command 0 would.
 				em.jumpToCommandForPlayback(0)
 			}
+			return nil
+		case '?':
+			em.openHelp("playback")
 			return nil
 		case 'q', 'Q':
 			em.quit()
@@ -1390,9 +1434,10 @@ func (em *EditorMode) inputFieldValue(f *tview.InputField, edited string) string
 	}
 	digit := func(r rune) bool { return r >= '0' && r <= '9' }
 	switch {
-	case f == em.annotationDurationField, em.cueModal != nil && f == em.cueModal.duration, em.timedModal != nil && f == em.timedModal.duration:
+	case f == em.annotationDurationField, em.cueModal != nil && f == em.cueModal.duration, em.timedModal != nil && f == em.timedModal.duration,
+		em.imageModal != nil && f == em.imageModal.duration:
 		return keep(digit, 9)
-	case em.timedModal != nil && f == em.timedModal.time:
+	case em.timedModal != nil && f == em.timedModal.time, em.imageModal != nil && f == em.imageModal.time:
 		return keep(func(r rune) bool { return digit(r) || r == ':' }, 8)
 	}
 	return line
@@ -1537,6 +1582,7 @@ func (em *EditorMode) runProgressClock(done <-chan struct{}) {
 				em.progressBar.SetProgress(pos, em.totalDurationMs)
 				em.fireTimed(pos) // the timed annotation that its time has come - which may pause playback
 			}
+			em.updateImage(p.Position()) // the image that is on show at this position - playing, or paused in it
 			em.tickTimed(p.GetPlaybackState() == libtrecs.PlaybackPaused, time.Now())
 		})
 	}

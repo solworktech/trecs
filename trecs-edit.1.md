@@ -10,6 +10,7 @@ The editor allows you to:
 - Pause at any point
 - Edit command input and output
 - Delete commands
+- Show an image over the terminal at a moment of the recording (Ctrl+G)
 - Save edited recordings with automatic timestamp compression
 
 Original recordings are backed up before editing.

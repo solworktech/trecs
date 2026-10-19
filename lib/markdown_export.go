@@ -60,6 +60,11 @@ func MarkdownFromCommands(title string, commands []Command) string {
 				b.WriteString(p + "\n\n")
 			}
 		}
+		for _, a := range e.cmd.Images {
+			if p := mdImage(a); p != "" {
+				b.WriteString(p + "\n\n")
+			}
+		}
 		if isInteractiveOutput(e.cmd.OutputTextRaw) {
 			b.WriteString("_(interactive full-screen session - output not captured)_\n\n")
 		} else if out := CleanOutput(e.cmd.OutputTextRaw); out != "" {
@@ -219,6 +224,15 @@ func mdTimedAnnotation(a Annotation) string {
 		return at + "\n\n" + body
 	}
 	return at + " " + body
+}
+
+// mdImage is an image of the recording as Markdown: a picture, after the time it is at, that is the file kept beside the recording.
+func mdImage(a Annotation) string {
+	if !ValidStoredImageName(a.Image) {
+		return ""
+	}
+	alt := strings.NewReplacer("[", "(", "]", ")", "\n", " ", "\r", " ").Replace(ImageCaption(a.ImageName))
+	return fmt.Sprintf("**[%s]**\n\n![%s](%s/%s)", ClockText(a.Timestamp), alt, ImagesDir, a.Image)
 }
 
 // ClockText is a time in milliseconds as minutes and seconds - 03:07 - and with hours, if there are any: 1:03:07.

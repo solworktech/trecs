@@ -178,6 +178,9 @@ func (c *Client) Logout(ctx context.Context) error {
 type Upload struct {
 	Name, Description, Visibility string
 	TerminalPath, AudioPath       string
+	// ImagePaths are the image files the recording shows (see lib.ImageFiles), each sent under its own name - which is the name the
+	// recording calls it by, and the one the server serves it as.
+	ImagePaths []string
 }
 
 // Recording is what the server returns about an uploaded recording.
@@ -210,10 +213,20 @@ func (c *Client) Upload(ctx context.Context, u Upload) (*Recording, error) {
 		defer func() { _ = audio.Close() }()
 	}
 
+	var images []*os.File
+	for _, p := range u.ImagePaths {
+		f, err := os.Open(p)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = f.Close() }()
+		images = append(images, f)
+	}
+
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 	go func() {
-		pw.CloseWithError(writeParts(mw, u, term, audio))
+		pw.CloseWithError(writeParts(mw, u, term, audio, images))
 	}()
 
 	req, err := c.newRequest(ctx, http.MethodPost, "/v1/recordings", pr, mw.FormDataContentType())
@@ -277,7 +290,7 @@ func (c *Client) UpdateRecording(ctx context.Context, id string, e RecordingEdit
 	return &rec, nil
 }
 
-func writeParts(mw *multipart.Writer, u Upload, term, audio *os.File) error {
+func writeParts(mw *multipart.Writer, u Upload, term, audio *os.File, images []*os.File) error {
 	for _, f := range [][2]string{{"name", u.Name}, {"description", u.Description}, {"visibility", u.Visibility}} {
 		if f[1] == "" {
 			continue // leave it to the server's default
@@ -298,6 +311,15 @@ func writeParts(mw *multipart.Writer, u Upload, term, audio *os.File) error {
 			return err
 		}
 		if _, err := io.Copy(w, p.file); err != nil {
+			return err
+		}
+	}
+	for _, f := range images {
+		w, err := mw.CreateFormFile("image", filepath.Base(f.Name()))
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(w, f); err != nil {
 			return err
 		}
 	}

@@ -229,6 +229,9 @@ type Command struct {
 
 	// TimedAnnotations are those whose time is in this command (see AnnotationKindTimed), each with its own Timestamp.
 	TimedAnnotations []Annotation
+
+	// Images are those whose time is in this command, held as a timed annotation is (see AnnotationKindImage).
+	Images []Annotation
 }
 
 // Annotation is a timestamped note attached to a command. Timestamp is
@@ -267,6 +270,12 @@ type Annotation struct {
 	// missing, which is how a timed annotation was before there was a choice.
 	PausePlayback bool `json:"pausePlayback,omitempty"`
 	ShowInNav     bool `json:"showInNav,omitempty"`
+
+	// For an image (AnnotationKindImage) only - see images.go. Image is the name the file is kept under, in the images directory beside
+	// the recording; ImageName is the name it had when it was added, with no directory, which is what the list of commands shows.
+	// Timestamp is when it is shown and DurationSeconds for how long; Text is its caption.
+	Image     string `json:"image,omitempty"`
+	ImageName string `json:"imageName,omitempty"`
 }
 
 // What a cue card is, and where it goes (see Annotation.Kind).

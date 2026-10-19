@@ -39,6 +39,15 @@ type recordingLine struct {
 	Placement       string `json:"placement,omitempty"`
 	PausePlayback   bool   `json:"pausePlayback,omitempty"`
 	ShowInNav       bool   `json:"showInNav,omitempty"`
+	Image           string `json:"image,omitempty"`
+	ImageName       string `json:"imageName,omitempty"`
+}
+
+// annotationLine is an annotation as it is written to a recording.
+func annotationLine(ann Annotation) recordingLine {
+	return recordingLine{Type: "annotation", ID: ann.ID, Timestamp: ann.Timestamp, Text: ann.Text, Author: ann.Author, CreatedAt: ann.CreatedAt,
+		DurationSeconds: ann.DurationSeconds, Kind: ann.Kind, Placement: ann.Placement, PausePlayback: ann.PausePlayback, ShowInNav: ann.ShowInNav,
+		Image: ann.Image, ImageName: ann.ImageName}
 }
 
 // RecordingMeta carries recording-level metadata captured once at record
@@ -102,6 +111,8 @@ func LoadFrames(filePath string) ([]TerminalFrame, []Annotation, RecordingMeta, 
 				Placement:       raw.Placement,
 				PausePlayback:   raw.PausePlayback,
 				ShowInNav:       raw.ShowInNav,
+				Image:           raw.Image,
+				ImageName:       raw.ImageName,
 			})
 			continue
 		case "meta":
@@ -150,6 +161,17 @@ func attachAnnotations(commands []Command, annotations []Annotation) {
 			} else {
 				break
 			}
+		}
+		if ann.Kind == AnnotationKindImage {
+			// as a timed annotation: with the command its time is in, or the first if it is before them all
+			if best < 0 {
+				if len(commands) == 0 {
+					continue
+				}
+				best = 0
+			}
+			commands[best].Images = append(commands[best].Images, ann)
+			continue
 		}
 		if ann.Kind == AnnotationKindTimed {
 			// at a time, and with the command that time is in: or with the first, if it is before them all
@@ -982,6 +1004,12 @@ func CompressTimestamps(commands []Command, deleted map[int]bool) []Command {
 			if end > start {
 				shift += end - start
 			}
+			// an image shown after its command's last frame, before the next command begins, took time that is not in the command
+			for _, img := range cmd.Images {
+				if img.Timestamp >= end {
+					shift += ImageDurationMs(img)
+				}
+			}
 			continue
 		}
 
@@ -992,6 +1020,7 @@ func CompressTimestamps(commands []Command, deleted map[int]bool) []Command {
 		shifted.InputFrames = shiftFrameTimestamps(cmd.InputFrames, shift)
 		shifted.OutputFrames = shiftFrameTimestamps(cmd.OutputFrames, shift)
 		shifted.TimedAnnotations = shiftAnnotationTimestamps(cmd.TimedAnnotations, shift) // with the command, to the same time of what is left
+		shifted.Images = shiftAnnotationTimestamps(cmd.Images, shift)
 		shifted.StartTime -= shift
 		shifted.EndTime -= shift
 		result = append(result, shifted)
@@ -1053,7 +1082,7 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	}
 
 	var newFrames []TerminalFrame
-	var annotations, cueCards, timed []Annotation
+	var annotations, cueCards, timed, images []Annotation
 	idCounter := int64(0)
 
 	for i := range commands {
@@ -1112,6 +1141,25 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 			a.Kind = AnnotationKindTimed
 			timed = append(timed, *a)
 		}
+		// An image has its own time too, and a file of its own: one without a name for it has nothing to show.
+		for j := range cmd.Images {
+			a := &cmd.Images[j]
+			if !ValidStoredImageName(a.Image) {
+				continue
+			}
+			if a.ID == "" {
+				idCounter++
+				a.ID = fmt.Sprintf("img_%x", time.Now().UnixNano()+idCounter)
+			}
+			if a.CreatedAt == "" {
+				a.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+			}
+			if a.ImageName == "" {
+				a.ImageName = a.Image
+			}
+			a.Kind, a.Text = AnnotationKindImage, ImageCaption(a.ImageName)
+			images = append(images, *a)
+		}
 	}
 
 	// The header (terminal size, where it was recorded) is carried over as it was; the backup is the file as it was.
@@ -1136,10 +1184,11 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	// The cue cards come first of them, then the timed annotations, and the notes after: a reader that does not know of the others
 	// reads each as a note, and the last note of a command is the one it keeps - so the command's own note, if it has one, is the
 	// one it keeps.
-	all := append(append(append([]Annotation{}, cueCards...), timed...), annotations...)
+	//
+	// The images are among the timed annotations: a reader that does not know of them reads each as a note too (its caption is its text).
+	all := append(append(append(append([]Annotation{}, cueCards...), timed...), images...), annotations...)
 	for _, ann := range all {
-		line := recordingLine{Type: "annotation", ID: ann.ID, Timestamp: ann.Timestamp, Text: ann.Text, Author: ann.Author, CreatedAt: ann.CreatedAt, DurationSeconds: ann.DurationSeconds, Kind: ann.Kind, Placement: ann.Placement, PausePlayback: ann.PausePlayback, ShowInNav: ann.ShowInNav}
-		if err := encoder.Encode(line); err != nil {
+		if err := encoder.Encode(annotationLine(ann)); err != nil {
 			return fmt.Errorf("failed to encode annotation: %w", err)
 		}
 	}

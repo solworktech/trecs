@@ -205,6 +205,8 @@ trecs-edit help
 | Ctrl+L | Browse the commands, with their start times, and jump to any of them |
 | Ctrl+E | Edit the current command |
 | Ctrl+A | Timed annotations: list, edit or add |
+| Ctrl+G | Add an image at this moment (or edit the one on show) |
+| `?` | The full help menu of the page (F1 on the edit screen) |
 | Ctrl+T | Show or hide the annotation of the current command |
 | Ctrl+X | Dismiss what is on screen (an annotation, a cue card, a preview) |
 | Ctrl+F | Full screen |
@@ -230,6 +232,22 @@ There are three kinds, all written in Markdown (bold, italics, `code` and links)
 - **Command notes.** A note attached to a command. When playback reaches the command it pauses and the note is shown in a panel for the number of seconds you set (set the duration to 0 to switch the note off), then playback carries on. A note moves with its command when you delete others around it.
 - **Timed annotations** (Ctrl+A on the playback screen). Shown at a moment of your choosing, for a duration, either as a card centred over the terminal or in a box at the bottom left. For each one you choose whether to pause playback while it is shown, and whether to show it in the player's command list ("show in nav menu"), where its first line appears under its command.
 - **Cue cards.** A card shown centred over the terminal *before* a command (an intro) or *after* it (a post): a title card at the start, a "what we just did" at the end. Add them from the command list with Ctrl+A.
+
+### Images
+
+Ctrl+G on the playback screen (**Add Image**) shows a picture over the terminal at a moment of the recording, for a time you choose, as in a slide between two commands. A dialog asks for:
+
+- the **time** (`MM:SS` or seconds) the image comes up at, which starts as the position of playback;
+- the **file**, typed or picked with Ctrl+O (a picker lists the folders and the PNG, JPEG, GIF and WebP files in them);
+- the **duration** to show it, from 1 to 600 seconds (5 is proposed).
+
+The recording makes room for it: everything from that moment on is later by the duration, so nothing is covered up - the commands, annotations and the sound after it all move together. The picture is copied into an `images/` folder beside the recording, named after its content (`img-<12 hex>.png`), so the recording does not depend on where the file was; it can be at most 2 MB, and the same picture used twice is stored once. In the list of commands (Ctrl+L) the image is a row of its own under the command it is in, `display image: <file name>` (the name only, not the path), and it can be treated as a command is: Ctrl+E edits it (time, file, duration), Ctrl+D deletes it, Ctrl+P plays from it. Ctrl+E while one is on show edits it as well. Changing or deleting an image closes up the time it made, in the picture and in the sound.
+
+The sound of a recording that has one is changed to match, with `ffmpeg`: silence is put in for the image's duration, and taken out again when an image is shortened or deleted. The audio file is kept beside the original as `<file>.backup`. Without `ffmpeg` the recording is still changed and the editor says that the sound is not, so it will be out of step after the image.
+
+The editor draws the picture where the terminal supports sixel (see below); elsewhere, and for WebP, it shows a card with the file name and size. `trecs upload` sends the images with the recording, and the web player shows them over the terminal for the same moments (the list of commands there has the same `display image:` rows). The Markdown export puts `![display image: name](images/<file>)` at the image's moment.
+
+On a narrow terminal the key line at the top of a page shows only the keys that fit, most useful first, and always ends with `? full help menu`.
 
 ### Pictures (sixel and inline images)
 

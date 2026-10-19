@@ -150,7 +150,30 @@ func runUpload(args []string) {
 	if *audio == "" {
 		*audio = sessionAudio
 	}
-	uploadFiles(cloud.Upload{Name: *name, Description: *description, Visibility: *visibility, TerminalPath: terminal, AudioPath: *audio}, fromAnnotations)
+	// the pictures the recording shows go with it: they are files beside it, and the server serves them to the player
+	images, missing, err := libtrecs.ImageFiles(terminal)
+	if err != nil {
+		fail("%v", err)
+	}
+	if len(missing) > 0 {
+		fail("the recording shows %s, which %s not in %s: put %s back, or delete the image in the editor",
+			strings.Join(missing, ", "), pluralIs(len(missing)), libtrecs.ImagesPath(terminal), pluralThem(len(missing)))
+	}
+	uploadFiles(cloud.Upload{Name: *name, Description: *description, Visibility: *visibility, TerminalPath: terminal, AudioPath: *audio, ImagePaths: images}, fromAnnotations)
+}
+
+func pluralIs(n int) string {
+	if n == 1 {
+		return "is"
+	}
+	return "are"
+}
+
+func pluralThem(n int) string {
+	if n == 1 {
+		return "it"
+	}
+	return "them"
 }
 
 // uploadFiles sends one recording to the server of the saved session and

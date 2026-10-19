@@ -112,6 +112,17 @@ func newSixelPainter(g termGraphics) *sixelPainter {
 	return &sixelPainter{gfx: g, decoded: map[string]*libtrecs.SixelImage{}, encoded: map[imageRect]string{}}
 }
 
+// preload keeps a picture that has been decoded already, for rectangles that name it by key instead of carrying the picture.
+func (p *sixelPainter) preload(key string, img *libtrecs.SixelImage) {
+	if _, ok := p.decoded[key]; ok {
+		return
+	}
+	if len(p.decoded) > 16 {
+		p.decoded = map[string]*libtrecs.SixelImage{}
+	}
+	p.decoded[key] = img
+}
+
 // canDraw: pictures are drawn at all (the terminal draws them and its cell size is known).
 func (p *sixelPainter) canDraw() bool { return p != nil && p.gfx.sixel }
 
@@ -252,6 +263,9 @@ func (em *EditorMode) picturesVisible() bool {
 
 // pictureRects works out where on the screen the pictures of the emulated screen are drawn.
 func (em *EditorMode) pictureRects(screen tcell.Screen) []imageRect {
+	if r, ok := em.shownImageRect(); ok && em.sixel.canDraw() {
+		return []imageRect{r} // an image of the recording covers the terminal, and the pictures in it
+	}
 	vt, ok := em.display.(*libtrecs.VTScreen)
 	if !ok || !em.sixel.canDraw() || !em.picturesVisible() {
 		return nil

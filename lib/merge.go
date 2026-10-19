@@ -45,6 +45,7 @@ func MergeRecordings(inputs []string, output string, gapMs int64, warnf func(for
 
 	var frames []TerminalFrame
 	var annotations []Annotation
+	var imageFiles []string // the images the inputs show, as paths: the output keeps its own copies beside it
 	var meta RecordingMeta
 	metaFrom := ""
 	marked := map[bool][]string{} // which recordings have prompt marks (OSC 133), and which have not
@@ -86,6 +87,11 @@ func MergeRecordings(inputs []string, output string, gapMs int64, warnf func(for
 			last = max(last, f.Timestamp)
 			frames = append(frames, f)
 		}
+		for _, name := range ReferencedImages(as) {
+			if p, err := ImageFilePath(in, name); err == nil {
+				imageFiles = append(imageFiles, p)
+			}
+		}
 		for _, a := range as {
 			a.Timestamp += offset
 			last = max(last, a.Timestamp)
@@ -101,7 +107,27 @@ func MergeRecordings(inputs []string, output string, gapMs int64, warnf func(for
 	// the frames of a recording are in time order, and so are what follows them: a stable sort only keeps what has the same time in the
 	// order it was in
 	sort.SliceStable(frames, func(a, b int) bool { return frames[a].Timestamp < frames[b].Timestamp })
-	return writeMerged(output, meta, annotations, frames)
+	if err := writeMerged(output, meta, annotations, frames); err != nil {
+		return err
+	}
+	// An image is named by what is in it, so the same picture in two of the recordings is one file; one that is not there is
+	// told of, and the merged recording shows nothing in its place.
+	for _, src := range imageFiles {
+		data, err := os.ReadFile(src)
+		if err != nil {
+			warnf("the image %s is not there to be copied: %v", src, err)
+			continue
+		}
+		info, err := InspectImage(src, data)
+		if err != nil || info.Stored != filepath.Base(src) {
+			warnf("the image %s is not what its name says it is; not copied", src)
+			continue
+		}
+		if err := SaveImage(output, data, info); err != nil {
+			return fmt.Errorf("cannot keep the image %s beside %s: %w", filepath.Base(src), output, err)
+		}
+	}
+	return nil
 }
 
 // freshID is id, or - if another annotation has it - id with the number of the recording it is from, and a count if that is taken too.
@@ -139,8 +165,7 @@ func writeMerged(output string, meta RecordingMeta, annotations []Annotation, fr
 		return err
 	}
 	for _, a := range annotations {
-		line := recordingLine{Type: "annotation", ID: a.ID, Timestamp: a.Timestamp, Text: a.Text, Author: a.Author, CreatedAt: a.CreatedAt, DurationSeconds: a.DurationSeconds, Kind: a.Kind, Placement: a.Placement, PausePlayback: a.PausePlayback, ShowInNav: a.ShowInNav}
-		if err = enc.Encode(line); err != nil {
+		if err = enc.Encode(annotationLine(a)); err != nil {
 			return err
 		}
 	}
