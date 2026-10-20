@@ -15,7 +15,10 @@ const usage = `Trecs recording editor - edit terminal recordings
 Usage: editor <command> [options]
 
 Commands:
-  view   <file>    View and edit recording
+  view   <file> [-audio FILE]
+                   View and edit recording. Its sound - audio.opus, .mp3, .m4a,
+                   .ogg beside it, or the file given - is played along with it
+                   (needs ffmpeg), and follows every pause and jump
   export <file>    Export the recording's commands and outputs as Markdown
                    (written next to it, as <file>.md; -title sets the heading)
   info   <file>    Output recording's commands
@@ -67,6 +70,7 @@ func main() {
 
 	flags := flag.NewFlagSet(cmd, flag.ExitOnError)
 	file := flags.String("file", "", "Terminal recording file (or give it as the first argument)")
+	audio := flags.String("audio", "", "view: the recording's sound, played along with it by ffmpeg (default: audio.opus - or .mp3, .m4a, .ogg... - beside the recording)")
 	title := flags.String("title", "", "export: the document's heading (default: \"Terminal recording\")")
 	args := os.Args[2:]
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") { // `editor view recording.jsonl`, as the usage says
@@ -92,7 +96,13 @@ func main() {
 
 	switch cmd {
 	case "view":
-		if err := runEditor(*file, commands); err != nil {
+		sound := *audio
+		if sound == "" {
+			sound = recordingAudio(*file)
+		} else if fi, err := os.Stat(sound); err != nil || fi.IsDir() {
+			fatalf("cannot read the audio file: %s", sound)
+		}
+		if err := runEditor(*file, commands, sound); err != nil {
 			fatalf("%v", err)
 		}
 	case "export":
@@ -118,11 +128,12 @@ func showInfo(commands []libtrecs.Command) error {
 }
 
 // runEditor opens the recording in editor mode
-func runEditor(filePath string, commands []libtrecs.Command) error {
+func runEditor(filePath string, commands []libtrecs.Command, audio string) error {
 	// Create player (don't start playback here - editor.Run() does that)
 	player := libtrecs.NewTerminalPlayer()
 	// Launch editor
 	editor := NewEditorMode(player, commands, filePath)
+	editor.SetAudio(audio)
 	if err := editor.Run(); err != nil {
 		return fmt.Errorf("editor error: %w", err)
 	}

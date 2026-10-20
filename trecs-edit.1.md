@@ -23,7 +23,10 @@ Trecs recording editor - edit terminal recordings
 Usage: editor <command> [options]
 
 Commands:
-  view   <file>    View and edit recording
+  view   <file> [-audio FILE]
+                   View and edit recording. Its sound - audio.opus, .mp3, .m4a,
+                   .ogg beside it, or the file given - is played along with it
+                   (needs ffmpeg), and follows every pause and jump
   export <file>    Export the recording's commands and outputs as Markdown
                    (written next to it, as <file>.md; -title sets the heading)
   info   <file>    Output recording's commands
@@ -40,6 +43,10 @@ Commands:
 Edit recording:
 
 $ trecs-edit view -file /path/to/terminal.jsonl 
+
+Play the recording with its narration:
+
+$ trecs-edit view /path/to/terminal.jsonl -audio /path/to/narration.mp3
 
 Export commands and output as Markdown:
 

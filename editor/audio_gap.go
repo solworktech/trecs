@@ -44,6 +44,14 @@ func audioEditsForChange(old, now libtrecs.Annotation) []audioEdit {
 	return []audioEdit{{remove: true, at: old.Timestamp, dur: oldD}, {at: now.Timestamp, dur: newD}}
 }
 
+// audioFile is the sound of this session: the one given to the editor, or else the one beside the recording.
+func (em *EditorMode) audioFile() string {
+	if em.sound != nil {
+		return em.sound.file
+	}
+	return recordingAudio(em.filePath)
+}
+
 // recordingAudio is the sound file beside a recording, "" if there is none.
 func recordingAudio(recordingPath string) string {
 	_, audio, err := cloud.ResolveSessionFiles(recordingPath)
@@ -56,7 +64,7 @@ func recordingAudio(recordingPath string) string {
 // changeSound does the changes to the sound of the recording - it takes a while, so not on the UI goroutine: the status line says so, and
 // then how it went. Another change of an image waits until it is done (audioBusy), as the sound would be changed twice at once.
 func (em *EditorMode) changeSound(status string, edits []audioEdit) {
-	file := recordingAudio(em.filePath)
+	file := em.audioFile()
 	if len(edits) == 0 || file == "" {
 		em.setStatus(status)
 		return
@@ -68,6 +76,9 @@ func (em *EditorMode) changeSound(status string, edits []audioEdit) {
 		msg := runAudioEdits(file, edits)
 		em.app.QueueUpdateDraw(func() {
 			em.soundReport = msg
+			if ap, ok := em.player.(*audioPlayer); ok {
+				ap.resync() // what is heard is the file as it was
+			}
 			em.audioBusy.Store(false)
 			em.setStatus(status + msg)
 		})

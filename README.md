@@ -60,7 +60,7 @@ Recording audio (narration) needs [`ffmpeg`](https://ffmpeg.org/) on your `PATH`
 
 ```sh
 trecs record                       # work as usual; type `exit` or press Ctrl+D to finish
-trecs-edit view <recording>        # play it back, fix it, annotate it
+trecs-edit view   <file> [-audio FILE] # View and edit a recording, with its sound
 trecs upload <recording>           # get a link to share (asks you to log in first)
 ```
 
@@ -198,7 +198,9 @@ trecs-edit help
 ### Viewing and editing
 
 `trecs-edit view` plays the recording in a full-screen terminal interface. Pause anywhere, and step from command to command or pick one from the list.
-
+ 
+If the recording has a sound (`audio.opus`, or `.mp3`, `.m4a`, `.ogg`, beside it) it is played along with it, or give the file: `trecs-edit view terminal.jsonl -audio narration.mp3`. It is played by `ffmpeg`, which must be on your `PATH`, and follows the recording as it does in the web player: it stops when you pause, and starts again from the right place when you resume, jump to a command, or step to the next or previous one. If `ffmpeg` is missing or has no audio output, the status line says so and the recording plays without sound. (The output is PulseAudio/PipeWire or ALSA on Linux, AudioToolbox on macOS, sndio or OSS on the BSDs; `TRECS_AUDIO_DEVICE=alsa` picks one.) Deleting a command closes the gap it leaves, which moves everything after it earlier; the sound is not cut to match, so after such a save it is out of step with the recording.
+ 
 | Key | Action |
 |-----|--------|
 | Space or `P` | Pause / resume |

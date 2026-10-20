@@ -109,6 +109,7 @@ type EditorMode struct {
 	// Images (see images.go) and the full help menu (see legend.go). The UI goroutine's.
 	imageOverlay   *imageOverlay
 	imageModal     *imageModal
+	sound          *soundOut   // plays the sound of the recording, if it has one (see audio_playback.go)
 	audioBusy      atomic.Bool // the sound is being changed for an image, in the background
 	soundReport    string      // how the last change of the sound went (the UI goroutine's)
 	lastImageDir   string      // where the last image was chosen from
@@ -147,6 +148,24 @@ func NewEditorMode(player libtrecs.TerminalPlayer, commands []libtrecs.Command, 
 		debugLog:        logFile,
 		openURL:         openInBrowser,
 	}
+}
+
+// SetAudio gives the recording a sound to play along with it (nothing is played for "").
+func (em *EditorMode) SetAudio(file string) {
+	if file != "" {
+		em.sound = newSoundOut(file)
+	}
+}
+
+// withSound is the player, with the sound kept where it is, if there is a sound.
+func (em *EditorMode) withSound(p libtrecs.TerminalPlayer) libtrecs.TerminalPlayer {
+	if em.sound == nil {
+		return p
+	}
+	if ap, ok := p.(*audioPlayer); ok {
+		return ap
+	}
+	return newAudioPlayer(p, em.sound, em.filePath)
 }
 
 // debugf writes a timestamped line to the debug log, if one is open.
@@ -207,6 +226,10 @@ func (em *EditorMode) Run() error {
 	em.measureDisplaySize()
 	em.display = em.newDisplay()
 
+	if em.sound != nil {
+		em.sound.onError = func(msg string) { em.app.QueueUpdateDraw(func() { em.setStatus(msg) }) }
+	}
+	em.player = em.withSound(em.player)
 	em.player.SetFrameCallback(em.makeFrameCallback())
 
 	// Start playback without raw mode / stdout writes - tview owns the terminal
@@ -1301,12 +1324,12 @@ func (em *EditorMode) reloadFromDisk(targetIdx int, backupPath string) {
 	em.currentCmdIdx = -1
 	em.currentCmd = nil
 
-	em.player = newPlayer
-	if err := newPlayer.PlayWithoutRawMode(em.filePath); err != nil {
+	em.player = em.withSound(newPlayer)
+	if err := em.player.PlayWithoutRawMode(em.filePath); err != nil {
 		em.setStatus(fmt.Sprintf("Saved, but failed to restart playback: %v", err))
 		return
 	}
-	em.totalDurationMs = newPlayer.GetTotalDurationMs()
+	em.totalDurationMs = em.player.GetTotalDurationMs()
 
 	if targetIdx >= 0 && targetIdx < len(newCommands) {
 		cmd := newCommands[targetIdx]
@@ -1314,7 +1337,7 @@ func (em *EditorMode) reloadFromDisk(targetIdx int, backupPath string) {
 		if cmd.HasPrompt {
 			seekTarget = cmd.PromptFrame.Timestamp
 		}
-		newPlayer.SeekToFrame(cmd.FirstRawFrameIndex)
+		em.player.SeekToFrame(cmd.FirstRawFrameIndex)
 		em.currentCmdIdx = targetIdx
 		em.progressBar.SetProgress(seekTarget, em.totalDurationMs)
 		em.resetTimed(seekTarget)

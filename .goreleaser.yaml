@@ -93,6 +93,15 @@ nfpms:
     vendor: Solworktech
     bindir: /usr/bin
     section: utils
+    # ffmpeg plays the sound of a recording in `trecs-edit view` (and nothing else needs it): recommended where the format has
+    # "recommends" (deb, rpm), required where it does not (archlinux, which has no weak dependencies in nfpm).
+    recommends:
+      - ffmpeg
+    overrides:
+      archlinux:
+        recommends: []
+        dependencies:
+          - ffmpeg
     contents:
       - src: ./LICENSE
         dst: /usr/share/doc/{{ .PackageName }}/copyright
