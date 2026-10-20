@@ -138,10 +138,12 @@ func TestUploadSendsTheCookieTheFieldsAndTheFiles(t *testing.T) {
 	termBody := `{"timestamp":1,"data":"x"}` + "\n" + strings.Repeat(`{"timestamp":2,"data":"y"}`+"\n", 5000)
 	_ = os.WriteFile(termPath, []byte(termBody), 0o644)
 	_ = os.WriteFile(audioPath, []byte("ID3-audio"), 0o644)
+	mdPath := filepath.Join(dir, "hand-made.md")
+	_ = os.WriteFile(mdPath, []byte("# Hand-made\n"), 0o644)
 
 	var got struct {
-		cookie, name, desc, vis, term, audio string
-		hasDesc                              bool
+		cookie, name, desc, vis, term, audio, markdown string
+		hasDesc                                        bool
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" || r.URL.Path != "/v1/recordings" {
@@ -158,7 +160,7 @@ func TestUploadSendsTheCookieTheFieldsAndTheFiles(t *testing.T) {
 		}
 		got.name, got.vis = r.FormValue("name"), r.FormValue("visibility")
 		_, got.hasDesc = r.MultipartForm.Value["description"]
-		for field, dst := range map[string]*string{"terminal": &got.term, "audio": &got.audio} {
+		for field, dst := range map[string]*string{"terminal": &got.term, "audio": &got.audio, "markdown": &got.markdown} {
 			if f, _, err := r.FormFile(field); err == nil {
 				b, _ := io.ReadAll(f)
 				*dst = string(b)
@@ -170,9 +172,12 @@ func TestUploadSendsTheCookieTheFieldsAndTheFiles(t *testing.T) {
 	defer srv.Close()
 
 	c := FromSession(&Session{Server: srv.URL, Cookies: []Cookie{{Name: "trecs_session", Value: "tok123"}}})
-	rec, err := c.Upload(context.Background(), Upload{Name: "My demo", Visibility: "unlisted", TerminalPath: termPath, AudioPath: audioPath})
+	rec, err := c.Upload(context.Background(), Upload{Name: "My demo", Visibility: "unlisted", TerminalPath: termPath, AudioPath: audioPath, MarkdownPath: mdPath})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if got.markdown != "# Hand-made\n" {
+		t.Errorf("markdown part = %q", got.markdown)
 	}
 	if rec.ID != "abc" || rec.DurationMs != 1234 || *rec.Cols != 150 || rec.Description != "ls\ndf" {
 		t.Errorf("rec = %+v", rec)
@@ -187,8 +192,8 @@ func TestUploadSendsTheCookieTheFieldsAndTheFiles(t *testing.T) {
 		t.Errorf("files not delivered intact: terminal %d bytes (want %d), audio %q", len(got.term), len(termBody), got.audio)
 	}
 	// without audio: just the terminal
-	got.audio = ""
-	if _, err := c.Upload(context.Background(), Upload{TerminalPath: termPath}); err != nil || got.audio != "" || got.term != termBody {
+	got.audio, got.markdown = "", ""
+	if _, err := c.Upload(context.Background(), Upload{TerminalPath: termPath}); err != nil || got.audio != "" || got.markdown != "" || got.term != termBody {
 		t.Errorf("no-audio upload: err=%v audio=%q", err, got.audio)
 	}
 }

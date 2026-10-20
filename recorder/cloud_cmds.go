@@ -130,9 +130,10 @@ func runUpload(args []string) {
 	fs.BoolVar(&fromCommands, "cad", false, "Short for -commands-as-description")
 	visibility := fs.String("visibility", "", "private, unlisted or public (default: private - recordings often show secrets)")
 	audio := fs.String("audio", "", "Audio file to attach (default: audio.opus - or .mp3, .m4a, .ogg - beside the recording, if there is one)")
+	markdown := fs.String("markdown", "", "Markdown file to keep as the recording's Markdown export (default: made from the recording)")
 	_ = fs.Parse(args)
 	if fs.NArg() != 1 {
-		fail("usage: %s upload [-name N] [-description D | -annotations-as-description | -commands-as-description] [-visibility private|unlisted|public] [-audio FILE] <session directory | terminal.jsonl>\n(options go before the path)", os.Args[0])
+		fail("usage: %s upload [-name N] [-description D | -annotations-as-description | -commands-as-description] [-visibility private|unlisted|public] [-audio FILE] [-markdown FILE] <session directory | terminal.jsonl>\n(options go before the path)", os.Args[0])
 	}
 	chosen := 0
 	for _, on := range []bool{*description != "", fromAnnotations, fromCommands} {
@@ -142,6 +143,11 @@ func runUpload(args []string) {
 	}
 	if chosen > 1 {
 		fail("choose one of -description, -annotations-as-description (-aad) and -commands-as-description (-cad)")
+	}
+	if *markdown != "" {
+		if fi, err := os.Stat(*markdown); err != nil || fi.IsDir() {
+			fail("-markdown %s: not a readable file", *markdown)
+		}
 	}
 	terminal, sessionAudio, err := cloud.ResolveSessionFiles(fs.Arg(0))
 	if err != nil {
@@ -159,7 +165,7 @@ func runUpload(args []string) {
 		fail("the recording shows %s, which %s not in %s: put %s back, or delete the image in the editor",
 			strings.Join(missing, ", "), pluralIs(len(missing)), libtrecs.ImagesPath(terminal), pluralThem(len(missing)))
 	}
-	uploadFiles(cloud.Upload{Name: *name, Description: *description, Visibility: *visibility, TerminalPath: terminal, AudioPath: *audio, ImagePaths: images}, fromAnnotations)
+	uploadFiles(cloud.Upload{Name: *name, Description: *description, Visibility: *visibility, TerminalPath: terminal, AudioPath: *audio, MarkdownPath: *markdown, ImagePaths: images}, fromAnnotations)
 }
 
 func pluralIs(n int) string {

@@ -72,6 +72,8 @@ Upload Options (before the path):
                                   default)
   -visibility string              private (default), unlisted or public
   -audio string                   Audio file (default: audio.opus, or .mp3 .m4a .ogg, beside the recording)
+  -markdown string                Markdown file the server keeps as the recording's Markdown export,
+                                  instead of making one from the recording (default: made from it)
 
 Play Options:
   -file string                    Terminal recording file to play (required)

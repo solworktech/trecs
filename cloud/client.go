@@ -178,6 +178,9 @@ func (c *Client) Logout(ctx context.Context) error {
 type Upload struct {
 	Name, Description, Visibility string
 	TerminalPath, AudioPath       string
+	// MarkdownPath, when set, is a Markdown file the server keeps and serves as the recording's Markdown export, instead of
+	// making one from the recording's content.
+	MarkdownPath string
 	// ImagePaths are the image files the recording shows (see lib.ImageFiles), each sent under its own name - which is the name the
 	// recording calls it by, and the one the server serves it as.
 	ImagePaths []string
@@ -213,6 +216,14 @@ func (c *Client) Upload(ctx context.Context, u Upload) (*Recording, error) {
 		defer func() { _ = audio.Close() }()
 	}
 
+	var markdown *os.File
+	if u.MarkdownPath != "" {
+		if markdown, err = os.Open(u.MarkdownPath); err != nil {
+			return nil, err
+		}
+		defer func() { _ = markdown.Close() }()
+	}
+
 	var images []*os.File
 	for _, p := range u.ImagePaths {
 		f, err := os.Open(p)
@@ -226,7 +237,7 @@ func (c *Client) Upload(ctx context.Context, u Upload) (*Recording, error) {
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 	go func() {
-		pw.CloseWithError(writeParts(mw, u, term, audio, images))
+		pw.CloseWithError(writeParts(mw, u, term, audio, markdown, images))
 	}()
 
 	req, err := c.newRequest(ctx, http.MethodPost, "/v1/recordings", pr, mw.FormDataContentType())
@@ -290,7 +301,7 @@ func (c *Client) UpdateRecording(ctx context.Context, id string, e RecordingEdit
 	return &rec, nil
 }
 
-func writeParts(mw *multipart.Writer, u Upload, term, audio *os.File, images []*os.File) error {
+func writeParts(mw *multipart.Writer, u Upload, term, audio, markdown *os.File, images []*os.File) error {
 	for _, f := range [][2]string{{"name", u.Name}, {"description", u.Description}, {"visibility", u.Visibility}} {
 		if f[1] == "" {
 			continue // leave it to the server's default
@@ -302,7 +313,7 @@ func writeParts(mw *multipart.Writer, u Upload, term, audio *os.File, images []*
 	for _, p := range []struct {
 		field string
 		file  *os.File
-	}{{"terminal", term}, {"audio", audio}} {
+	}{{"terminal", term}, {"audio", audio}, {"markdown", markdown}} {
 		if p.file == nil {
 			continue
 		}

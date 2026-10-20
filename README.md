@@ -161,6 +161,7 @@ When a recording made at a terminal ends, the recorder asks `Upload to the Trecs
 | `-annotations-as-description`, `-aad` | Describe it with its "show in nav menu" annotations, each linking to its moment |
 | `-visibility` | `private` (the default), `unlisted` or `public` |
 | `-audio` | The audio file (default: `audio.opus`, or `.mp3`, `.m4a`, `.ogg`, beside the recording) |
+| `-markdown` | A Markdown file the server keeps as the recording's Markdown export (and the player's "export as Markdown" gives), instead of one made from the recording's commands. Nothing is looked for beside the recording: it is only sent when named. At most 2 MB, UTF-8 text. |
 
 `PATH` is a session directory or a `terminal.jsonl`. `record -upload` takes `-visibility` too.
 
