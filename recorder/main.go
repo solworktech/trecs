@@ -88,6 +88,13 @@ func main() {
 		}
 		runUpload(os.Args[2:])
 
+	case "update":
+		_, err := cloud.LoadSession()
+		if errors.Is(err, cloud.ErrNotLoggedIn) {
+			runLogin(make([]string, 0))
+		}
+		runUpdate(os.Args[2:])
+
 	case "play":
 		if err := playCmd.Parse(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to parse play flags: %v\n", err)
@@ -264,6 +271,9 @@ Usage:
   %[1]s login [options]        Log in to a %[1]s server (saves the session)
   %[1]s logout                 Log out and forget the saved session
   %[1]s upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
+  %[1]s update [options] ID [PATH]
+                               Change an uploaded recording: its terminal file, audio, Markdown, name,
+                               description or visibility (ID is the one in its link, or the link)
   %[1]s version                Show the version (also -version, --version)
   %[1]s help                   Show this help message
 

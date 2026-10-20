@@ -168,6 +168,122 @@ func runUpload(args []string) {
 	uploadFiles(cloud.Upload{Name: *name, Description: *description, Visibility: *visibility, TerminalPath: terminal, AudioPath: *audio, MarkdownPath: *markdown, ImagePaths: images}, fromAnnotations)
 }
 
+// runUpdate is `update [options] ID [PATH]`: the options of upload, applied to a recording that is already uploaded, which
+// the id in its link names. What is not given is left as it is: with a PATH its terminal file (and the pictures it shows) and
+// the audio beside it are sent again, -audio and -markdown replace those, and a name, description or visibility changes alone.
+func runUpdate(args []string) {
+	fs := flag.NewFlagSet("update", flag.ExitOnError)
+	name := fs.String("name", "", "A new title")
+	description := fs.String("description", "", "A new description (Markdown)")
+	var fromAnnotations, fromCommands bool
+	fs.BoolVar(&fromAnnotations, "annotations-as-description", false, "Describe the recording with its annotations marked \"show in nav menu\", each linking to its moment (needs PATH)")
+	fs.BoolVar(&fromAnnotations, "aad", false, "Short for -annotations-as-description")
+	fs.BoolVar(&fromCommands, "commands-as-description", false, "Describe the recording with the list of commands typed in it (needs PATH)")
+	fs.BoolVar(&fromCommands, "cad", false, "Short for -commands-as-description")
+	visibility := fs.String("visibility", "", "private, unlisted or public")
+	audio := fs.String("audio", "", "Audio file to send (default, with PATH: audio.opus - or .mp3, .m4a, .ogg - beside the recording, if there is one)")
+	markdown := fs.String("markdown", "", "Markdown file to keep as the recording's Markdown export")
+	_ = fs.Parse(args)
+	if fs.NArg() < 1 || fs.NArg() > 2 {
+		fail("usage: %s update [-name N] [-description D | -annotations-as-description | -commands-as-description] [-visibility private|unlisted|public] [-audio FILE] [-markdown FILE] <recording id or link> [session directory | terminal.jsonl]\n(options go before the id)", os.Args[0])
+	}
+	id, err := cloud.RecordingID(fs.Arg(0))
+	if err != nil {
+		fail("%v", err)
+	}
+	chosen := 0
+	for _, on := range []bool{*description != "", fromAnnotations, fromCommands} {
+		if on {
+			chosen++
+		}
+	}
+	if chosen > 1 {
+		fail("choose one of -description, -annotations-as-description (-aad) and -commands-as-description (-cad)")
+	}
+	if *visibility != "" && !visibilities[*visibility] {
+		fail("visibility must be private, unlisted or public, not %q", *visibility)
+	}
+	for flagName, file := range map[string]string{"-markdown": *markdown, "-audio": *audio} {
+		if file == "" {
+			continue
+		}
+		if fi, err := os.Stat(file); err != nil || fi.IsDir() {
+			fail("%s %s: not a readable file", flagName, file)
+		}
+	}
+
+	u := cloud.Upload{Name: *name, Description: *description, Visibility: *visibility, AudioPath: *audio, MarkdownPath: *markdown, CommandsAsDescription: fromCommands}
+	if fs.NArg() == 2 {
+		terminal, sessionAudio, err := cloud.ResolveSessionFiles(fs.Arg(1))
+		if err != nil {
+			fail("%v", err)
+		}
+		if u.AudioPath == "" {
+			u.AudioPath = sessionAudio
+		}
+		images, missing, err := libtrecs.ImageFiles(terminal)
+		if err != nil {
+			fail("%v", err)
+		}
+		if len(missing) > 0 {
+			fail("the recording shows %s, which %s not in %s: put %s back, or delete the image in the editor",
+				strings.Join(missing, ", "), pluralIs(len(missing)), libtrecs.ImagesPath(terminal), pluralThem(len(missing)))
+		}
+		u.TerminalPath, u.ImagePaths = terminal, images
+	} else if fromAnnotations || fromCommands {
+		fail("-annotations-as-description and -commands-as-description describe the recording from a session: give its directory or terminal.jsonl after the id")
+	}
+	if u.Name == "" && u.Description == "" && !fromAnnotations && u.Visibility == "" && u.TerminalPath == "" && u.AudioPath == "" && u.MarkdownPath == "" {
+		fail("nothing to change: give a name, description or visibility, a file (-audio, -markdown), or the session to send again")
+	}
+
+	session, err := cloud.LoadSession()
+	if err != nil {
+		fail("%v", err)
+	}
+	watchURL := session.Server + "/watch/" + id
+	if fromAnnotations { // the links need the id, which is known
+		_, annotations, _, err := libtrecs.LoadFrames(u.TerminalPath)
+		if err != nil {
+			fail("%v", err)
+		}
+		desc, used, total := libtrecs.AnnotationDescription(annotations, watchURL, descriptionMaxChars)
+		switch {
+		case total == 0:
+			fmt.Fprintln(os.Stderr, "No annotation is marked \"show in nav menu\": the description is left as it is.")
+		case used == 0:
+			fmt.Fprintf(os.Stderr, "The first annotation alone is longer than the %d characters a description may have: the description is left as it is.\n", descriptionMaxChars)
+		default:
+			u.Description = desc
+			if used < total {
+				fmt.Fprintf(os.Stderr, "Only the first %d of %d annotations fit in the %d characters a description may have.\n", used, total, descriptionMaxChars)
+			}
+		}
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	fmt.Printf("Updating %s on %s ...\n", id, session.Server)
+	start := time.Now()
+	rec, err := cloud.FromSession(session).Revise(ctx, id, u)
+	if err != nil {
+		fail("update failed: %v\nThe recording is as it was; the local files are untouched.", err)
+	}
+	var sent []string
+	for _, p := range []struct {
+		what string
+		on   bool
+	}{{"name", u.Name != ""}, {"description", u.Description != "" || fromCommands}, {"visibility", u.Visibility != ""},
+		{"terminal", u.TerminalPath != ""}, {"audio", u.AudioPath != ""}, {"Markdown", u.MarkdownPath != ""}} {
+		if p.on {
+			sent = append(sent, p.what)
+		}
+	}
+	secs := rec.DurationMs / 1000
+	fmt.Printf("Updated \"%s\" (%d:%02d, %s): %s, in %v\n", rec.Name, secs/60, secs%60, rec.Visibility, strings.Join(sent, ", "), time.Since(start).Round(time.Millisecond))
+	fmt.Printf("Watch: %s\n", watchURL)
+}
+
 func pluralIs(n int) string {
 	if n == 1 {
 		return "is"

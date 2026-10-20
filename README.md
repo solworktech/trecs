@@ -72,6 +72,8 @@ trecs play [options]         Play a recording back in the terminal
 trecs login [options]        Log in to a Trecs server (saves the session)
 trecs logout                 Log out and forget the saved session
 trecs upload [options] PATH  Upload a recording
+trecs update [options] ID [PATH]
+                             Change a recording you uploaded
 trecs version                Show the version (also --version)
 trecs help                   Show the help
 ```
@@ -164,6 +166,18 @@ When a recording made at a terminal ends, the recorder asks `Upload to the Trecs
 | `-markdown` | A Markdown file the server keeps as the recording's Markdown export (and the player's "export as Markdown" gives), instead of one made from the recording's commands. Nothing is looked for beside the recording: it is only sent when named. At most 2 MB, UTF-8 text. |
 
 `PATH` is a session directory or a `terminal.jsonl`. `record -upload` takes `-visibility` too.
+
+### Updating an uploaded recording
+
+Edited the recording, re-recorded the narration, or want a better title? `update` takes the options of `upload` and applies them to a recording that is already there, which you name by the id in its link (or by the link itself). The link, views, likes, comments, channels and tags are kept.
+
+```sh
+trecs update -name "Setting up nginx, 2nd take" 0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d
+trecs update -audio narration.mp3 https://trecs.example.com/watch/0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d
+trecs update -aad -markdown notes.md 0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d path/to/session   # send the session again too
+```
+
+Only what you give is changed. With a `PATH`, the recording's terminal file (and the pictures it shows) is sent again and replaces the one on the server, with its duration, size and searchable commands; the audio beside it goes too, unless `-audio` names another. Without one, `-name`, `-description`, `-visibility`, `-audio` and `-markdown` change just those. `-commands-as-description` and `-annotations-as-description` describe the recording from the session, so they need the `PATH`; without any of the three description options the description stays as it is. A thumbnail moment past the end of a shorter new recording is handed back to the player. Only the author can update a recording.
 
 ### Recorder options
 

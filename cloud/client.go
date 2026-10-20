@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -181,6 +183,8 @@ type Upload struct {
 	// MarkdownPath, when set, is a Markdown file the server keeps and serves as the recording's Markdown export, instead of
 	// making one from the recording's content.
 	MarkdownPath string
+	// CommandsAsDescription (a revision only) makes the server describe the recording with the commands typed in the new terminal file.
+	CommandsAsDescription bool
 	// ImagePaths are the image files the recording shows (see lib.ImageFiles), each sent under its own name - which is the name the
 	// recording calls it by, and the one the server serves it as.
 	ImagePaths []string
@@ -200,27 +204,51 @@ type Recording struct {
 // Upload sends a recording. The files are streamed, not read into memory:
 // recordings with audio can be large.
 func (c *Client) Upload(ctx context.Context, u Upload) (*Recording, error) {
+	if u.TerminalPath == "" {
+		return nil, errors.New("a recording to upload is required")
+	}
+	return c.send(ctx, http.MethodPost, "/v1/recordings", u, "upload")
+}
+
+// Revise changes a recording that was uploaded, by sending the parts given again: what is empty in u (a path, the name, the
+// description, the visibility) is left as it is. The recording is named by its public id, the one in its link.
+func (c *Client) Revise(ctx context.Context, id string, u Upload) (*Recording, error) {
+	if strings.TrimSpace(id) == "" {
+		return nil, errors.New("the recording's id is required")
+	}
+	return c.send(ctx, http.MethodPatch, "/v1/recordings/"+url.PathEscape(id), u, "change")
+}
+
+// send is Upload and Revise: the multipart request, streamed.
+func (c *Client) send(ctx context.Context, method, path string, u Upload, what string) (*Recording, error) {
 	if len(c.Cookies) == 0 {
 		return nil, ErrNotLoggedIn
 	}
-	term, err := os.Open(u.TerminalPath)
+	open := func(p string) (*os.File, error) {
+		if p == "" {
+			return nil, nil
+		}
+		return os.Open(p)
+	}
+	term, err := open(u.TerminalPath)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = term.Close() }()
-	var audio *os.File
-	if u.AudioPath != "" {
-		if audio, err = os.Open(u.AudioPath); err != nil {
-			return nil, err
-		}
+	if term != nil {
+		defer func() { _ = term.Close() }()
+	}
+	audio, err := open(u.AudioPath)
+	if err != nil {
+		return nil, err
+	}
+	if audio != nil {
 		defer func() { _ = audio.Close() }()
 	}
-
-	var markdown *os.File
-	if u.MarkdownPath != "" {
-		if markdown, err = os.Open(u.MarkdownPath); err != nil {
-			return nil, err
-		}
+	markdown, err := open(u.MarkdownPath)
+	if err != nil {
+		return nil, err
+	}
+	if markdown != nil {
 		defer func() { _ = markdown.Close() }()
 	}
 
@@ -240,7 +268,7 @@ func (c *Client) Upload(ctx context.Context, u Upload) (*Recording, error) {
 		pw.CloseWithError(writeParts(mw, u, term, audio, markdown, images))
 	}()
 
-	req, err := c.newRequest(ctx, http.MethodPost, "/v1/recordings", pr, mw.FormDataContentType())
+	req, err := c.newRequest(ctx, method, path, pr, mw.FormDataContentType())
 	if err != nil {
 		_ = pr.Close()
 		return nil, err
@@ -253,9 +281,29 @@ func (c *Client) Upload(ctx context.Context, u Upload) (*Recording, error) {
 	defer func() { _ = resp.Body.Close() }()
 	var rec Recording
 	if err := json.NewDecoder(resp.Body).Decode(&rec); err != nil {
-		return nil, fmt.Errorf("the upload succeeded but the server's answer was not understood: %w", err)
+		return nil, fmt.Errorf("the %s succeeded but the server's answer was not understood: %w", what, err)
 	}
 	return &rec, nil
+}
+
+var publicIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// RecordingID is the public id of a recording, from what a person has at hand: the id itself, or the link to watch it
+// (https://server/watch/<id>, with or without a query or a time).
+func RecordingID(arg string) (string, error) {
+	arg = strings.TrimSpace(arg)
+	id := arg
+	if strings.Contains(arg, "/") {
+		u, err := url.Parse(arg)
+		if err != nil {
+			return "", fmt.Errorf("%q is not a recording id or link", arg)
+		}
+		id = path.Base(strings.TrimRight(u.Path, "/"))
+	}
+	if !publicIDPattern.MatchString(id) {
+		return "", fmt.Errorf("%q is not a recording id (the xxxxxxxx-xxxx-... of its link) or the link itself", arg)
+	}
+	return strings.ToLower(id), nil
 }
 
 // RecordingEdit is the complete new state of a recording's editable fields: the server replaces them all (PUT), so
@@ -307,6 +355,11 @@ func writeParts(mw *multipart.Writer, u Upload, term, audio, markdown *os.File, 
 			continue // leave it to the server's default
 		}
 		if err := mw.WriteField(f[0], f[1]); err != nil {
+			return err
+		}
+	}
+	if u.CommandsAsDescription {
+		if err := mw.WriteField("commands_as_description", "true"); err != nil {
 			return err
 		}
 	}

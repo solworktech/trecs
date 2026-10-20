@@ -30,6 +30,9 @@ Usage:
   trecs login [options]        Log in to a trecs server (saves the session)
   trecs logout                 Log out and forget the saved session
   trecs upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
+  trecs update [options] ID [PATH]
+                               Change an uploaded recording: its terminal file, audio, Markdown, name,
+                               description or visibility (ID is the one in its link, or the link)
   trecs version                Show the version (also -version, --version)
   trecs help                   Show this help message
 
@@ -115,6 +118,10 @@ $ trecs record -name my-session
 Record terminal and audio:
 
 $ trecs record -audio
+
+Replace the narration of an uploaded recording, and rename it (the id is the one in its link):
+
+$ trecs update -name "Better title" -audio narration.mp3 0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d
 
 Play back a recording at 2x speed:
 
