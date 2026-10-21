@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -86,13 +87,25 @@ func runLogin(args []string) {
 	defer cancel()
 	session, err := client.Login(ctx, strings.TrimSpace(*email), password)
 	if err != nil {
-		fail("login failed: %v", err)
+		fail("login failed: %v%s", err, loginHint(err, *server))
 	}
 	if err := session.Save(); err != nil {
 		fail("logged in, but could not save the session: %v", err)
 	}
 	path, _ := cloud.SessionPath()
 	fmt.Printf("Logged in to %s as %s.\nSession saved to %s\n", session.Server, session.Email, path)
+}
+
+// loginHint is what is added to a refused login. The server answers a wrong password, an unknown address and an account that has no
+// password alike (so that it does not say which addresses have accounts), so the hint covers all three: an account made with GitHub
+// has no password until its owner sets one, by the link that forgot-password mails, and the recorder cannot log in without it.
+func loginHint(err error, server string) string {
+	var ae *cloud.APIError
+	if !errors.As(err, &ae) || ae.Status != http.StatusUnauthorized {
+		return ""
+	}
+	return "\nIf the account was made with GitHub it has no password yet:\nSet one at " + strings.TrimRight(server, "/") +
+		"/forgot-password (a link to set the password will be sent over email), then run this again."
 }
 
 func runLogout() {

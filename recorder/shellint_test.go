@@ -220,6 +220,45 @@ func TestTerminalQueries(t *testing.T) {
 	}
 }
 
+// fish also asks for the terminal's background colour (OSC 11) and for terminfo capabilities (XTGETTCAP, a DCS), and the real terminal
+// answers both: with nobody reading them the tty prints the answers as ^[]11;rgb:... on the screen, and what is left over comes out
+// at the person's own prompt after the recording. So those questions must not be passed on either - and what is not a question must.
+func TestOSCAndDCSQueriesAreNotPassedToARealTerminal(t *testing.T) {
+	for name, q := range map[string]string{
+		"background, ST":      "\x1b]11;?\x1b\\",
+		"background, BEL":     "\x1b]11;?\x07",
+		"foreground":          "\x1b]10;?\x1b\\",
+		"palette":             "\x1b]4;1;?\x1b\\",
+		"clipboard read":      "\x1b]52;c;?\x07",
+		"XTGETTCAP indn":      "\x1bP+q696E646E\x1b\\",
+		"XTGETTCAP two names": "\x1bP+q696E646E;71756572792D6F732D6E616D65\x1b\\",
+		"DECRQSS":             "\x1bP$qm\x1b\\",
+		"private status":      "\x1b[?996n",
+		"window size report":  "\x1b[18t",
+		"kitty graphics":      "\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\",
+	} {
+		if got := string(terminalQueryRe.ReplaceAll([]byte("a"+q+"b"), nil)); got != "ab" {
+			t.Errorf("%s: %q should be taken out, left %q", name, q, got)
+		}
+	}
+	for name, keep := range map[string]string{
+		"set the title":      "\x1b]0;my title\x07",
+		"set the background": "\x1b]11;rgb:11/22/33\x1b\\",
+		"a hyperlink":        "\x1b]8;;https://example.com/?\x1b\\",
+		"prompt mark":        "\x1b]133;A\x1b\\",
+		"scroll up":          "\x1b[3S",
+		"resize the window":  "\x1b[8;24;80t",
+		"colours":            "\x1b[31;1mred\x1b[m",
+		"a sixel":            "\x1bPq#0;2;0;0;0\x1b\\",
+		"a kitty picture":    "\x1b_Ga=T,f=100;AAAA\x1b\\",
+		"a plain DCS":        "\x1bP1$r0m\x1b\\",
+	} {
+		if got := string(terminalQueryRe.ReplaceAll([]byte(keep), nil)); got != keep {
+			t.Errorf("%s: %q is not a question and must be passed on, left %q", name, keep, got)
+		}
+	}
+}
+
 func TestDetectShellWalksUpToTheShellYouAreIn(t *testing.T) {
 	// recorder <- sudo <- fish <- (a terminal emulator)
 	exe := map[int]string{os.Getppid(): "/usr/bin/sudo", 500: "/usr/bin/fish", 400: "/usr/bin/kitty"}

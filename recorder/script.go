@@ -58,7 +58,8 @@ func readScript(path string) ([]string, error) {
 func keystrokes(line string) string { return strings.ReplaceAll(line, "\t", "\x16\t") }
 
 // A shell asks its terminal what it is (fish: primary device attributes, the
-// terminal's version, whether it speaks the kitty keyboard protocol) and waits for
+// terminal's version, whether it speaks the kitty keyboard protocol, its background
+// colour, its terminfo capabilities) and waits for
 // the answers - two seconds, then it prints a warning that ends up in the
 // recording. A scripted session has no terminal to answer, and forwarding the
 // questions to the real one would leave its replies in a stdin nobody reads, so
@@ -67,7 +68,16 @@ func keystrokes(line string) string { return strings.ReplaceAll(line, "\t", "\x1
 // are still in the recording, as they are in one made by hand.
 var (
 	deviceAttributesQuery = regexp.MustCompile("\x1b\\[0?c")
-	terminalQueryRe       = regexp.MustCompile("\x1b\\[(?:[>=]?0?c|>0?q|\\?u|[56]n|\\?[0-9;]*\\$p)")
+	terminalQueryRe       = regexp.MustCompile(
+		// CSI: device attributes, XTVERSION, the kitty keyboard flags, status and cursor reports (5n, 6n, ?996n...), mode queries
+		// (DECRQM), window reports (14t, 16t, 18t...), graphics-size queries
+		"\x1b\\[(?:[>=]?0?c|>0?q|\\?u|\\??[0-9;]*n|\\??[0-9;]*\\$p|(?:1[4-689]|2[01])t|\\?[0-9;]*S)" +
+			// OSC asking for a colour or a setting (background 11;?, foreground 10;?, palette 4;n;?, clipboard 52;c;?), ended by BEL or ST
+			"|\x1b\\][0-9]+(?:;[0-9A-Za-z:,/]*)*;\\?(?:\x07|\x1b\\\\)" +
+			// DCS asking for a terminfo capability (XTGETTCAP, ESC P + q) or a setting (DECRQSS, ESC P $ q)
+			"|\x1bP[+$]q[^\x1b\x07]*\x1b\\\\" +
+			// a kitty graphics query
+			"|\x1b_G[^\x1b]*a=q[^\x1b]*\x1b\\\\")
 )
 
 const deviceAttributesReply = "\x1b[?62;22c"
