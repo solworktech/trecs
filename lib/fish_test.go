@@ -171,3 +171,34 @@ func TestCurlOutputSurvivesTypedAheadKeystrokesAndFishsFreshLineMarker(t *testin
 		}
 	}
 }
+
+// The terminal's output is cut into frames wherever a read ended. fish draws its command line with colours, and a sequence cut between
+// two frames - "ESC [" ending one, "m" starting the next - left its final byte in the command as typed text: "mm" for a command that
+// was never typed.
+func TestAnEscapeSequenceCutBetweenFramesIsNotTypedText(t *testing.T) {
+	prompt := TerminalFrame{Data: "\x1b]0;x\x07root@h ~# "}
+	for name, frames := range map[string][]string{
+		"CSI cut before its final byte": {"ls", "\x1b[", "m", "\x1b[", "m"},
+		"CSI cut inside its parameters": {"ls\x1b[3", "1;1", "m -l\x1b[0", "m"},
+		"cut after the ESC":             {"ls\x1b", "[m", "\x1b", "[m"},
+		"OSC cut before its end":        {"ls\x1b]7;file://h/tmp", "\x07 -l\x1b]7;file://h/tmp\x1b", "\\"},
+		"every byte its own frame":      {"l", "s", "\x1b", "[", "3", "1", "m", " ", "-", "l", "\x1b", "[", "m"},
+	} {
+		var fs []TerminalFrame
+		for _, d := range frames {
+			fs = append(fs, TerminalFrame{Data: d})
+		}
+		want := "ls"
+		if strings.Contains(name, "parameters") || strings.Contains(name, "OSC") || strings.Contains(name, "every") {
+			want = "ls -l"
+		}
+		if got := reconstructInput(fs, prompt, ""); got != want {
+			t.Errorf("%s: %q, want %q", name, got, want)
+		}
+	}
+	// and the same frames in one piece give the same
+	whole := TerminalFrame{Data: "ls\x1b[31;1m -l\x1b[m"}
+	if got := reconstructInput([]TerminalFrame{whole}, prompt, ""); got != "ls -l" {
+		t.Errorf("whole: %q", got)
+	}
+}

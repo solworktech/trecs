@@ -512,6 +512,9 @@ type lineEditor struct {
 	rows [][]rune
 	r    int
 	col  int
+	// The start of an escape sequence whose end is in the next frame: the terminal's output is cut into frames wherever a read
+	// happened to end, so "ESC [" may be the end of one and "m" the start of the next. Read as two things, the "m" is typed text.
+	pending string
 }
 
 func newLineEditor() *lineEditor { return &lineEditor{rows: [][]rune{nil}} }
@@ -519,6 +522,9 @@ func newLineEditor() *lineEditor { return &lineEditor{rows: [][]rune{nil}} }
 func (e *lineEditor) reset() {
 	e.rows, e.r, e.col = [][]rune{nil}, 0, 0
 }
+
+// maxLineEditorCarry is the most of an unfinished sequence that is kept for the next frame; more than that is not one.
+const maxLineEditorCarry = 4096
 
 func (e *lineEditor) lines() []string {
 	out := make([]string, len(e.rows))
@@ -529,12 +535,20 @@ func (e *lineEditor) lines() []string {
 }
 
 func (e *lineEditor) write(data string) {
-	rs := []rune(data)
+	rs := []rune(e.pending + data)
+	e.pending = ""
 	for i := 0; i < len(rs); {
 		ch := rs[i]
 		switch {
 		case ch == 0x1b:
-			i = e.escape(rs, i)
+			next, complete := e.escape(rs, i)
+			if !complete {
+				if len(rs)-i <= maxLineEditorCarry {
+					e.pending = string(rs[i:])
+				}
+				return
+			}
+			i = next
 			continue
 		case ch == '\r':
 			e.col = 0
@@ -566,10 +580,11 @@ func (e *lineEditor) put(ch rune) {
 	e.col++
 }
 
-// escape returns the index just past the escape sequence starting at rs[i].
-func (e *lineEditor) escape(rs []rune, i int) int {
+// escape returns the index just past the escape sequence starting at rs[i], and whether the sequence is complete: one that the data
+// ends in the middle of is not, and is carried to the next frame.
+func (e *lineEditor) escape(rs []rune, i int) (next int, complete bool) {
 	if i+1 >= len(rs) {
-		return i + 1
+		return len(rs), false
 	}
 	switch rs[i+1] {
 	case '[':
@@ -577,11 +592,19 @@ func (e *lineEditor) escape(rs []rune, i int) int {
 		for j < len(rs) && (rs[j] < '@' || rs[j] > '~') {
 			j++
 		}
-		if j < len(rs) {
-			e.csi(string(rs[i+2:j]), rs[j])
+		if j >= len(rs) {
+			return len(rs), false
 		}
-		return j + 1
+		e.csi(string(rs[i+2:j]), rs[j])
+		return j + 1, true
 	case ']', 'P', '_', '^', 'X': // a string sequence (title, ...): up to BEL or ESC \
+		j := i + 2
+		for j < len(rs) && rs[j] != 0x07 && (rs[j] != 0x1b || j+1 >= len(rs) || rs[j+1] != '\\') {
+			j++
+		}
+		if j >= len(rs) || (rs[j] == 0x1b && j+1 >= len(rs)) {
+			return len(rs), false
+		}
 		// A window title (OSC 0/2) is written just before the prompt: a prompt
 		// being drawn again - after Ctrl-L, a completion listing, an i-search -
 		// starts the line over, so whatever was on screen before it is not part
@@ -589,20 +612,19 @@ func (e *lineEditor) escape(rs []rune, i int) int {
 		if rs[i+1] == ']' && i+3 < len(rs) && (rs[i+2] == '0' || rs[i+2] == '2') && rs[i+3] == ';' {
 			e.reset()
 		}
-		j := i + 2
-		for j < len(rs) && rs[j] != 0x07 && (rs[j] != 0x1b || j+1 >= len(rs) || rs[j+1] != '\\') {
-			j++
+		if rs[j] == 0x1b {
+			return j + 2, true
 		}
-		if j < len(rs) && rs[j] == 0x1b {
-			return j + 2
-		}
-		return j + 1
+		return j + 1, true
 	}
 	j := i + 1 // ESC, intermediates (charset selection), final byte
 	for j < len(rs) && rs[j] >= 0x20 && rs[j] <= 0x2f {
 		j++
 	}
-	return j + 1
+	if j >= len(rs) {
+		return len(rs), false
+	}
+	return j + 1, true
 }
 
 func (e *lineEditor) csi(params string, final rune) {
