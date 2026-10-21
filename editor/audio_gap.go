@@ -64,8 +64,26 @@ func recordingAudio(recordingPath string) string {
 // changeSound does the changes to the sound of the recording - it takes a while, so not on the UI goroutine: the status line says so, and
 // then how it went. Another change of an image waits until it is done (audioBusy), as the sound would be changed twice at once.
 func (em *EditorMode) changeSound(status string, edits []audioEdit) {
+	if len(edits) == 0 {
+		em.setStatus(status)
+		return
+	}
+	em.changeSoundWith(status, func(file string) string { return runAudioEdits(file, edits) })
+}
+
+// changeSoundCut is changeSound for time taken out of the recording (commands deleted): the sound loses it too.
+func (em *EditorMode) changeSoundCut(status string, spans []libtrecs.Span) {
+	if len(spans) == 0 {
+		em.setStatus(status)
+		return
+	}
+	em.changeSoundWith(status, func(file string) string { return runAudioCut(file, spans) })
+}
+
+// changeSoundWith runs a change of the sound's file in the background and tells how it went.
+func (em *EditorMode) changeSoundWith(status string, run func(file string) string) {
 	file := em.audioFile()
-	if len(edits) == 0 || file == "" {
+	if file == "" {
 		em.setStatus(status)
 		return
 	}
@@ -73,13 +91,13 @@ func (em *EditorMode) changeSound(status string, edits []audioEdit) {
 	em.audioBusy.Store(true)
 	em.setStatus(status + "  Changing the sound...")
 	go func() {
-		msg := runAudioEdits(file, edits)
+		msg := run(file)
 		em.app.QueueUpdateDraw(func() {
 			em.soundReport = msg
+			em.audioBusy.Store(false)
 			if ap, ok := em.player.(*audioPlayer); ok {
 				ap.resync() // what is heard is the file as it was
 			}
-			em.audioBusy.Store(false)
 			em.setStatus(status + msg)
 		})
 	}()
@@ -158,6 +176,61 @@ func changeAudio(file string, e audioEdit) error {
 	if e.dur <= 0 {
 		return nil
 	}
+	return filterAudio(file, func(p audioParams) string { return audioFilter(e, p) })
+}
+
+// cutFilter is the ffmpeg filter graph that keeps all of the sound but the spans (in order of time, apart from one another).
+func cutFilter(spans []libtrecs.Span, p audioParams) string {
+	format := fmt.Sprintf("aformat=sample_fmts=fltp:sample_rates=%d:channel_layouts=%s", p.rate, p.layout)
+	var parts, labels []string
+	from := int64(0)
+	add := func(to int64, open bool) {
+		label := fmt.Sprintf("[k%d]", len(labels))
+		trim := fmt.Sprintf("atrim=start=%s", seconds(from))
+		if !open {
+			trim += ":end=" + seconds(to)
+		}
+		parts = append(parts, fmt.Sprintf("[0:a]%s,asetpts=PTS-STARTPTS,%s%s", trim, format, label))
+		labels = append(labels, label)
+	}
+	for _, sp := range spans {
+		if sp.AtMs > from {
+			add(sp.AtMs, false)
+		}
+		from = max(from, sp.AtMs+sp.DurMs)
+	}
+	add(0, true)
+	if len(labels) == 1 {
+		return parts[0] + ";" + labels[0] + "anull[out]"
+	}
+	return strings.Join(parts, ";") + ";" + strings.Join(labels, "") + fmt.Sprintf("concat=n=%d:v=0:a=1[out]", len(labels))
+}
+
+// cutAudio takes the spans out of the file, all at once: once, so that the sound is encoded once however many there are.
+func cutAudio(file string, spans []libtrecs.Span) error {
+	if len(spans) == 0 {
+		return nil
+	}
+	return filterAudio(file, func(p audioParams) string { return cutFilter(spans, p) })
+}
+
+// runAudioCut is runAudioEdits' for a cut, and returns what is to be told after the status.
+func runAudioCut(audio string, spans []libtrecs.Span) string {
+	if len(spans) == 0 {
+		return ""
+	}
+	if err := copyAudioFile(audio, audio+".backup"); err != nil {
+		return fmt.Sprintf("  [red]The sound was not changed (%v): after %s it is not with the picture.", err, libtrecs.ClockText(spans[0].AtMs))
+	}
+	if err := cutAudio(audio, spans); err != nil {
+		return fmt.Sprintf("  [red]The sound was not changed (%v): after %s it is not with the picture.", err, libtrecs.ClockText(spans[0].AtMs))
+	}
+	return "  The sound was cut to match; backup: " + audio + ".backup"
+}
+
+// filterAudio makes the file again through a filter graph, in the codec and bitrate it has. The file is replaced only when ffmpeg
+// has made the new one.
+func filterAudio(file string, filter func(audioParams) string) error {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		return errors.New("ffmpeg is not installed")
 	}
@@ -168,7 +241,7 @@ func changeAudio(file string, e audioEdit) error {
 	ext := filepath.Ext(file)
 	tmp := filepath.Join(filepath.Dir(file), ".trecs-"+strings.TrimSuffix(filepath.Base(file), ext)+".new"+ext)
 	defer func() { _ = os.Remove(tmp) }()
-	args := []string{"-v", "error", "-y", "-i", file, "-filter_complex", audioFilter(e, p), "-map", "[out]", "-vn"}
+	args := []string{"-v", "error", "-y", "-i", file, "-filter_complex", filter(p), "-map", "[out]", "-vn"}
 	switch strings.ToLower(ext) {
 	case ".opus", ".ogg":
 		args = append(args, "-c:a", "libopus")

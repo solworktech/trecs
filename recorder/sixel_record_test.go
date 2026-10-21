@@ -22,7 +22,7 @@ func TestARecordedSixelGraphicIsKept(t *testing.T) {
 	}
 	out := filepath.Join(dir, "terminal.jsonl")
 	tr, err := NewTerminalRecorder(&libtrecs.RecordingConfig{
-		TerminalEnabled: true, TerminalCommand: "/bin/sh", ScriptFile: script, NoMarks: true, Cols: 100, Rows: 30,
+		TerminalEnabled: true, TerminalCommand: "/bin/sh", ScriptFile: script, NoMarks: true, AllowUnmarked: true, Cols: 100, Rows: 30,
 	}, out)
 	if err != nil {
 		t.Fatal(err)

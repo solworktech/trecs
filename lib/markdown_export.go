@@ -309,7 +309,7 @@ func mdAnnotationWith(text string, escapeAngle func(string) string) string {
 // as <file>.md. See libtrecs.MarkdownFromCommands for the format.
 func ExportToMarkdown(filePath, title string, commands []Command) error {
 	mdPath := filePath + ".md"
-	if err := os.WriteFile(mdPath, []byte(MarkdownFromCommands(title, commands)), 0o644); err != nil {
+	if err := os.WriteFile(mdPath, []byte(MarkdownFromCommands(title, commands)), 0o600); err != nil {
 		return fmt.Errorf("cannot write %s: %w", mdPath, err)
 	}
 	fmt.Printf("Successfully exported as %s\n", mdPath)

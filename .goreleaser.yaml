@@ -97,11 +97,13 @@ nfpms:
     # "recommends" (deb, rpm), required where it does not (archlinux, which has no weak dependencies in nfpm).
     recommends:
       - ffmpeg
+      - shellcheck
     overrides:
       archlinux:
         recommends: []
         dependencies:
           - ffmpeg
+          - shellcheck
     contents:
       - src: ./LICENSE
         dst: /usr/share/doc/{{ .PackageName }}/copyright

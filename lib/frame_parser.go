@@ -3,9 +3,14 @@ package lib
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"regexp"
+	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -955,14 +960,8 @@ func syncCommandFrames(cmd *Command) {
 	}
 
 	if deriveOutputText(cmd) != cmd.OutputText {
-		cmd.TypedAhead = nil // the frames are about to be replaced
-		ts := cmd.EndTime
-		if len(cmd.OutputFrames) > 0 {
-			ts = cmd.OutputFrames[0].Timestamp
-		}
-		cmd.OutputFrames = []TerminalFrame{
-			{Timestamp: ts, Data: strings.ReplaceAll(cmd.OutputText, "\n", "\r\n")},
-		}
+		cmd.OutputFrames = editedOutputFrames(cmd)
+		cmd.TypedAhead = nil // the frames they were indexes of are gone
 	}
 }
 
@@ -993,22 +992,76 @@ func shiftAnnotationTimestamps(in []Annotation, shift int64) []Annotation {
 	return out
 }
 
+// keepAfter is the annotations that are after a time (not at the moment of the command's last frame, which is the command's),
+// moved earlier by shift.
+func keepAfter(in []Annotation, from, shift int64) []Annotation {
+	var out []Annotation
+	for _, a := range in {
+		if a.Timestamp > from {
+			a.Timestamp = max(0, a.Timestamp-shift)
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// mergeByTime is the two lists as one, in order of time.
+func mergeByTime(a, b []Annotation) []Annotation {
+	if len(b) == 0 {
+		return a
+	}
+	out := append(append([]Annotation(nil), a...), b...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Timestamp < out[j].Timestamp })
+	return out
+}
+
+// Span is a stretch of a recording's timeline: DurMs from AtMs.
+type Span struct{ AtMs, DurMs int64 }
+
+// deletedSpans is the time that deleting a command takes out of the recording: from its first frame to its last. Nothing but what
+// it shows is cut: a picture or a note that comes after its last frame (in the quiet before the next command, where the author
+// put it) stays, and so does the time it takes.
+func deletedSpans(cmd Command) []Span {
+	start := commandFirstTimestamp(cmd)
+	end := commandLastTimestamp(cmd)
+	if end > start {
+		return []Span{{start, end - start}}
+	}
+	return nil
+}
+
+// RemovedSpans is the time CompressTimestamps takes out of the recording for the deleted commands, as stretches of the
+// recording as it is now, in order of time: what a sound that goes with the recording must lose too, to stay with it.
+func RemovedSpans(commands []Command, deleted map[int]bool) []Span {
+	var out []Span
+	for i, cmd := range commands {
+		if deleted[i] {
+			out = append(out, deletedSpans(cmd)...)
+		}
+	}
+	sort.Slice(out, func(a, b int) bool { return out[a].AtMs < out[b].AtMs })
+	return out
+}
+
 func CompressTimestamps(commands []Command, deleted map[int]bool) []Command {
 	var result []Command
 	var shift int64
+	var carryImages, carryNotes []Annotation // kept from deleted commands before the first that stays
 
 	for i, cmd := range commands {
 		if deleted[i] {
-			start := commandFirstTimestamp(cmd)
-			end := commandLastTimestamp(cmd)
-			if end > start {
-				shift += end - start
+			for _, sp := range deletedSpans(cmd) {
+				shift += sp.DurMs
 			}
-			// an image shown after its command's last frame, before the next command begins, took time that is not in the command
-			for _, img := range cmd.Images {
-				if img.Timestamp >= end {
-					shift += ImageDurationMs(img)
-				}
+			// What was put after the command's last frame - a picture, a timed note - is not the command's: it stays, at the
+			// same moment of what is left, with the command before (or the one after, if there is none before).
+			end := commandLastTimestamp(cmd)
+			imgs, notes := keepAfter(cmd.Images, end, shift), keepAfter(cmd.TimedAnnotations, end, shift)
+			if n := len(result); n > 0 {
+				result[n-1].Images = mergeByTime(result[n-1].Images, imgs)
+				result[n-1].TimedAnnotations = mergeByTime(result[n-1].TimedAnnotations, notes)
+			} else {
+				carryImages, carryNotes = append(carryImages, imgs...), append(carryNotes, notes...)
 			}
 			continue
 		}
@@ -1021,6 +1074,11 @@ func CompressTimestamps(commands []Command, deleted map[int]bool) []Command {
 		shifted.OutputFrames = shiftFrameTimestamps(cmd.OutputFrames, shift)
 		shifted.TimedAnnotations = shiftAnnotationTimestamps(cmd.TimedAnnotations, shift) // with the command, to the same time of what is left
 		shifted.Images = shiftAnnotationTimestamps(cmd.Images, shift)
+		if len(carryImages) > 0 || len(carryNotes) > 0 {
+			shifted.Images = mergeByTime(carryImages, shifted.Images)
+			shifted.TimedAnnotations = mergeByTime(carryNotes, shifted.TimedAnnotations)
+			carryImages, carryNotes = nil, nil
+		}
 		shifted.StartTime -= shift
 		shifted.EndTime -= shift
 		result = append(result, shifted)
@@ -1077,8 +1135,12 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 	if err != nil {
 		return fmt.Errorf("failed to read original: %w", err)
 	}
-	if err := os.WriteFile(backupPath, input, 0644); err != nil {
-		return fmt.Errorf("failed to create backup: %w", err)
+	// The backup is the recording as it was before the first change, and stays so: saving again does not replace it with a
+	// version that already has the earlier changes in it (a backup that follows every save is a backup of the last mistake).
+	if _, err := os.Lstat(backupPath); errors.Is(err, fs.ErrNotExist) {
+		if err := os.WriteFile(backupPath, input, 0o600); err != nil {
+			return fmt.Errorf("failed to create backup: %w", err)
+		}
 	}
 
 	var newFrames []TerminalFrame
@@ -1162,16 +1224,31 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 		}
 	}
 
-	// The header (terminal size, where it was recorded) is carried over as it was; the backup is the file as it was.
-	_, _, meta, err := LoadFrames(backupPath)
+	// The header (terminal size, where it was recorded) is carried over as it was.
+	_, _, meta, err := LoadFrames(originalPath)
 	if err != nil {
 		return fmt.Errorf("failed to read the recording's header: %w", err)
 	}
-	file, err := os.Create(originalPath)
+	// The new recording is written beside the old one and moved into place when it is whole: a crash, a full disk, or an encoding
+	// error half way leaves the recording as it was, and not a part of it. It has the permissions the old one had.
+	file, err := os.CreateTemp(filepath.Dir(originalPath), ".trecs-save-*")
 	if err != nil {
 		return fmt.Errorf("failed to create new recording: %w", err)
 	}
-	defer func() { _ = file.Close() }()
+	saved := false
+	defer func() {
+		_ = file.Close()
+		if !saved {
+			_ = os.Remove(file.Name())
+		}
+	}()
+	mode := os.FileMode(0o600)
+	if fi, err := os.Stat(originalPath); err == nil {
+		mode = fi.Mode().Perm()
+	}
+	if err := file.Chmod(mode); err != nil && runtime.GOOS != "windows" {
+		return fmt.Errorf("failed to create new recording: %w", err)
+	}
 
 	encoder := json.NewEncoder(file)
 	if err := writeMetaLine(encoder, meta); err != nil {
@@ -1198,7 +1275,16 @@ func RebuildRecording(originalPath string, backupPath string, commands []Command
 			return fmt.Errorf("failed to encode frame: %w", err)
 		}
 	}
-
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("failed to write the recording: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("failed to write the recording: %w", err)
+	}
+	if err := os.Rename(file.Name(), originalPath); err != nil {
+		return fmt.Errorf("failed to replace the recording: %w", err)
+	}
+	saved = true
 	return nil
 }
 

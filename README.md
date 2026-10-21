@@ -96,6 +96,17 @@ By default, recordings are kept in `trecs/recordings` under `$XDG_CONFIG_HOME` (
 - `terminal.jsonl` — the recording: plain text, one JSON object per line, easy to inspect, `grep` and diff;
 - `metadata.json` — session ID, start and end times, the shell used, and the paths of any audio file.
 
+### What the recorder does to your shell
+
+The recorder is meant to be invisible: it records what is run, and changes nothing about how it runs. What it does add is small, and listed here.
+
+- Your shell's startup files run first, as they always do. For bash, zsh and fish, a few lines are added after them to write the prompt marks (see below). They keep `$?` (and, in fish, `$status`) as the last command left it; `$ZDOTDIR` is your own while your zsh files run. The marks do add the `__trecs_*` functions and wrap `PS1`/`PS2`, and set `PS0` and `PROMPT_COMMAND` in bash.
+- `TRECS_RECORDING=1` is in the environment, so that a profile or script can tell. `TERM` is passed on as it is; only where there is none (CI) or it is `dumb`, `xterm-256color` is given.
+- The terminal is put in raw mode so that every key, Ctrl+C and Tab included, reaches the shell; it is given back when the recording ends, whether you end it, the terminal closes, or the recorder is sent `SIGTERM`, `SIGHUP`, `SIGINT` or `SIGQUIT`. The terminal's size follows your window.
+- The recording is text: bytes that are not valid UTF-8 (the contents of a binary file printed to the terminal) cannot be kept as they were. Device Control Strings that are only questions to the terminal are left out, and a sixel graphic or inline image bigger than the limit is replaced by a mark.
+
+Everything the recorder writes is private to you (directories `0700`, files `0600`), because a recording holds whatever was on the screen. A recording of the same name as one that is already there is never written over without a word: at a terminal you are asked to type `YES` to replace it, and anything else asks for another name or path (Tab completes paths). Where there is nobody to ask it is an error, unless `-overwrite` is given.
+
 ### Every command is a jump point
 
 For bash (4.4 and later), zsh and fish the recorder starts the shell with *prompt marks* (the OSC 133 escape sequences that kitty, iTerm2, WezTerm and VS Code use). They tell the recording, exactly, where each prompt, each command and each command's output begin and end, whatever your prompt looks like. Your own startup files run first, so your prompt, aliases and plugins are all there.
@@ -111,9 +122,13 @@ trecs record -commands-file setup.txt -name nginx-setup
 trecs record -commands-file setup.txt -human-like -cols 100 -rows 30
 ```
 
-- **Read the file before you run it.** The commands are typed into a real shell with your permissions, exactly as if they were a shell script: nothing reviews them. The recorder says so in a warning and asks you to type `YES` before it starts (anything else exits). When standard input is not a terminal (CI, a pipe) there is nobody to ask: the warning is printed and the recording goes ahead.
+- **The file is checked before anything runs.** It is read as a script (bash, sh and ksh are parsed; fish and the rest are read more roughly) and what is in it that does damage which cannot be undone, or hides what it does, **stops the recording**: a download that is run (`curl … | sh`, `bash -c "$(curl …)"`), text that is decoded and run, `rm -rf` of `/`, the home directory, `*` or a variable that may be empty, a write to a disk, to `/etc`, to `~/.ssh` or to a startup file (`~/.bashrc`...), `chmod u+s`, a shutdown, `kill -1`, a reverse shell (`/dev/tcp`, `nc -e`), a fork bomb, a secret (a key, the environment) sent to another machine, and characters that make a line read differently from what it does. The lines are listed with the reason; nothing has been run. Give `-allow-risky` if you have read them and they are meant. Other things (`sudo`, `&`, `read`, `eval`, `git push --force`...) are only listed. This is a seat belt and not a sandbox: a script written to hide what it does (with `eval` and a variable) will get past it, so it still has to be read. If [ShellCheck](https://www.shellcheck.net) is installed, what it says about the file is shown too (it never blocks).
+- **Use a shell with prompt marks.** A script is typed into bash, zsh or fish, which the recorder makes mark their prompts: that is how it knows the shell is ready for the next line and not waiting for the answer to a `read` of the script. A shell that cannot do this (`dash`, plain `sh`, `ksh`) or `-no-marks` is **refused** for `-commands-file`, and the message lists the shells on your machine that will do (`-cmd bash` runs a POSIX `sh` script too). If you must, `-allow-unmarked` types the lines when the shell is quiet, which goes wrong when the script asks for input. Recording **by hand** in such a shell works, but the recording cannot tell where one command ends and the next begins; `trecs record` says so, lists the shells on your machine that can do it, and asks `[y/N]` before it goes on (`-allow-unmarked` goes on without asking).
+- **Read the file before you run it.** The commands are typed into a real shell with your permissions, exactly as if they were a shell script: nothing reviews them. The recorder says so in a warning and asks you to type `YES` before it starts (anything else exits). What the audit (and ShellCheck) had to say is shown in yellow, and if there was any, a red line just before the question counts it: `3 warnings were triggered when auditing setup.txt. Review carefully before typing 'YES'.` When standard input is not a terminal (CI, a pipe) there is nobody to ask: the warning is printed and the recording goes ahead.
 - One command per line. Blank lines and lines starting with `#` are skipped. A line ending in a backslash, or leaving a quote open, is continued by the next one.
-- The recorder waits for the shell's next prompt after each command, so output and prompts come out in the order a person would have seen them.
+- The recorder waits for the shell's next prompt after each command, so output and prompts come out in the order a person would have seen them. A line is only typed when the shell is back at its prompt, so nothing is ever typed into a command that is running: one that waits for input (or a password) waits, as it would at a keyboard nobody touches, and a long one is never interrupted. `-command-timeout 10m` sets a limit for a job that must end; the shell is then hung up on, as when a terminal is closed, the rest of the file is not typed, the recording is kept as far as it got and `trecs` exits with status 1. So it does for a shell that never shows a prompt (after a minute) and for a recording that cannot be written (a full disk). (With `-allow-unmarked`, a shell without prompt marks can only be told from a *program* that is running, not from the shell's own `read` that is waiting.)
+- The lines are a script's, not a person's keystrokes: history expansion (`!word`) is off in bash and zsh, a tab is typed as a tab and not as a request to complete, and a file with a control character in it (Ctrl+C, Escape...: keys, which cannot be seen when the file is read) is refused.
+- When the script goes through, `trecs` exits with the status of the shell, which is that of the last command, as a script would: a failing last command fails the job in CI. (A recording made by hand always exits 0.)
 - By default each command is entered at once. `-human-like` types with the pauses a person makes, between characters and between commands.
 - `-cols` and `-rows` set the terminal size (default: the size of the current terminal, or 172×38 when there is none). They only apply with `-commands-file`; a person at the keyboard is recorded at the size of their own terminal.
 
@@ -138,7 +153,17 @@ trecs play -file path/to/terminal.jsonl
 trecs play -file path/to/terminal.jsonl -speed 2.0
 ```
 
-`-speed` is a multiplier (default `1.0`).
+`-speed` is a multiplier (default `1.0`). The recording is written to your terminal, and a recording from someone else can ask a terminal for more than drawing: to put something in the clipboard, to answer a question by typing the answer into your shell. So `play` leaves those out (clipboard writes, device and window reports, version and mode queries) and passes everything that draws.
+
+### Secrets
+
+A recording keeps everything that was on the screen: the token that was exported, the key that was printed, the password in a URL. So it is checked before anything leaves your machine, with the rules of [gitleaks](https://github.com/gitleaks/gitleaks) (about 220 of them: cloud and SaaS tokens, private keys, passwords in URLs, high-entropy values next to words like `secret` or `token`...). Commands, their output and annotations are all looked at.
+
+```sh
+trecs scan path/to/session          # list what was found; exits 1 if anything was
+```
+
+When a recording ends, anything found is listed (each secret masked, with the command it is in and its line), whether you upload or not: the file holds it either way. Before an upload (`record -upload` or the question that ends a recording, `upload`, and `update` with a `PATH`) a recording with secrets in it is **not sent** unless you type `YES` when asked, or give `-allow-secrets`. Where there is nobody to ask (CI) it is not sent. The way to get rid of a secret is to delete its command in `trecs-edit`, then `trecs update` the recording. A check like this finds what it has a rule for; it is a safety net, not a guarantee.
 
 ### Logging in, uploading and sharing
 
@@ -153,7 +178,7 @@ trecs logout
 
 When a recording made at a terminal ends, the recorder asks `Upload to the Trecs Platform? [Y/n]`. `Y`, `y` or Enter uploads it (as `private`, unless `-visibility` says otherwise; you are asked to log in first if needed); any other key does not. `-upload` uploads without asking, and `-no-upload` neither asks nor uploads. When standard input is not a terminal there is nobody to ask, so nothing is uploaded unless `-upload` was given.
 
-`login` asks for your email and password; use `-email` to give the email and `-password-stdin` to read the password from standard input (for scripts). The server is remembered, so you only need `-server` the first time. `upload` logs you in if you are not already.
+A server address must be `https://` (plain `http://` is accepted only for a server on this machine, such as `http://localhost:8080`, or when `login` is given `-allow-insecure-endpoint`, which you should do only on a network you trust), so that your password and session never cross the network in the clear. `login` asks for your email and password; use `-email` to give the email and `-password-stdin` to read the password from standard input (for scripts). The server is remembered, so you only need `-server` the first time. `upload` logs you in if you are not already.
 
 | `upload` option (before the path) | |
 |----------------------------------|-|
@@ -163,6 +188,7 @@ When a recording made at a terminal ends, the recorder asks `Upload to the Trecs
 | `-annotations-as-description`, `-aad` | Describe it with its "show in nav menu" annotations, each linking to its moment |
 | `-visibility` | `private` (the default), `unlisted` or `public` |
 | `-audio` | The audio file (default: `audio.opus`, or `.mp3`, `.m4a`, `.ogg`, beside the recording) |
+| `-allow-secrets` | Upload even if the recording has secrets in it (see [Secrets](#secrets)) |
 | `-markdown` | A Markdown file the server keeps as the recording's Markdown export (and the player's "export as Markdown" gives), instead of one made from the recording's commands. Nothing is looked for beside the recording: it is only sent when named. At most 2 MB, UTF-8 text. |
 
 `PATH` is a session directory or a `terminal.jsonl`. `record -upload` takes `-visibility` too.
@@ -183,17 +209,22 @@ Only what you give is changed. With a `PATH`, the recording's terminal file (and
 
 | Option | Default | |
 |--------|---------|-|
-| `-name` | date and time | Session name |
+| `-name` | date and time | Session name: a plain name (no `/` or `..`; use `-output` to say where) |
 | `-output` | see [Recording](#recording) | Where recordings are kept |
 | `-cmd` | your current shell | The shell to run |
 | `-terminal` | `true` | Record the terminal |
 | `-audio` | `false` | Record audio too |
 | `-commands-file` | | Type the commands in this file instead of reading the keyboard |
 | `-human-like` | `false` | With `-commands-file`, type like a person |
+| `-allow-risky` | `false` | With `-commands-file`: run it although the check of the script blocked it |
+| `-allow-unmarked` | `false` | Record in a shell without prompt marks without asking (with `-commands-file`: type the script into it) |
+| `-command-timeout` | none | With `-commands-file`, give up if one command runs longer than this (`10m`) |
 | `-cols`, `-rows` | the terminal's | With `-commands-file`, the terminal size |
 | `-no-marks` | `false` | Don't start the shell with prompt marks |
 | `-upload` | `false` | Upload when the recording ends, without asking |
 | `-no-upload` | `false` | Don't ask whether to upload the recording when it ends |
+| `-allow-secrets` | `false` | With `-upload`: upload even if secrets were found |
+| `-overwrite` | `false` | Replace a recording of the same name without asking |
 | `-visibility` | `private` | The upload's visibility: `private`, `unlisted` or `public` |
 
 ## The editor: `trecs-edit`
@@ -207,7 +238,7 @@ trecs-edit merge  -o <out> <file> <file> [<file>...]
 trecs-edit help
 ```
 
-`<file>` is a `terminal.jsonl`. The editor never works on your only copy: before a recording is rewritten, the original is kept beside it as `<file>.backup`.
+`<file>` is a `terminal.jsonl`. The editor never works on your only copy: before a recording is first rewritten, the original is kept beside it as `<file>.backup`, and stays so however many times you save (it is not replaced by a version that already has your changes in it). A save is written beside the recording and moved into place when whole, so a crash or a full disk leaves the recording as it was.
 
 ### Viewing and editing
 
@@ -240,7 +271,7 @@ In the edit screen you can change a command's **input** and **output** (a mistyp
 | Tab | Move between fields |
 | Ctrl+X | Discard the staged change and resume playback |
 
-When the recording is saved, the timestamps are compressed automatically, so a deleted command leaves no gap behind it.
+When the recording is saved, the timestamps are compressed automatically, so a deleted command leaves no gap behind it. The sound of a recording that has one loses the same time, in one pass of `ffmpeg` (the audio file is kept beside as `<file>.backup`), so what is said stays with what is shown. Only the commands' own time goes: an image or a timed note put after a deleted command's last frame stays, at the same moment of what is left; without `ffmpeg` the recording is still saved, the editor says the sound was not changed, and it is out of step after the first deleted command. Changing or deleting an image waits until deleted commands are saved.
 
 ### Annotations
 

@@ -372,7 +372,9 @@ func TestImageAtIsHalfOpen(t *testing.T) {
 	}
 }
 
-func TestDeletingACommandTakesItsImageAndItsTime(t *testing.T) {
+// A picture put in the quiet after a command is not the command's: deleting the command takes the command's time, and the picture
+// stays with its time.
+func TestDeletingACommandKeepsThePictureThatFollowsIt(t *testing.T) {
 	cmds := loadCommands(t, markedRecording(t))
 	// in the quiet after the second command's last frame (12.5 s), before the third begins (21 s): the second holds it
 	out, err := AddImage(cmds, newImage(t, 15000, 6, "a.png"))
@@ -383,13 +385,25 @@ func TestDeletingACommandTakesItsImageAndItsTime(t *testing.T) {
 		t.Fatal("held by the second")
 	}
 	got := CompressTimestamps(out, map[int]bool{1: true})
-	if len(got) != 2 || len(RecordingImages(got)) != 0 {
-		t.Fatalf("%d commands, %d images", len(got), len(RecordingImages(got)))
+	imgs := RecordingImages(got)
+	if len(got) != 2 || len(imgs) != 1 {
+		t.Fatalf("%d commands, %d images", len(got), len(imgs))
 	}
-	// what was deleted is the second command's span (11 s to 12.5 s) and the 6 s of the image, which was in the quiet after it: the
-	// third begins where it did before the image was put in, less the span - the image's time is not left behind
-	if want := cmds[2].PromptFrame.Timestamp - 1500; got[1].PromptFrame.Timestamp != want {
+	// what was deleted is the second command's span (11 s to 12.5 s); the picture is that much earlier, and the third begins
+	// where it did before the picture was put in, less the span: the picture's time is still there
+	if imgs[0].Timestamp != 15000-1500 {
+		t.Errorf("the picture is at %d, want %d", imgs[0].Timestamp, 15000-1500)
+	}
+	if want := out[2].PromptFrame.Timestamp - 1500; got[1].PromptFrame.Timestamp != want {
 		t.Errorf("the third begins at %d, want %d", got[1].PromptFrame.Timestamp, want)
+	}
+	// and one in the command goes with it
+	inside, err := AddImage(cmds, newImage(t, 11500, 2, "b.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept := RecordingImages(CompressTimestamps(inside, map[int]bool{1: true})); len(kept) != 0 {
+		t.Errorf("a picture inside the deleted command was kept: %+v", kept)
 	}
 }
 
@@ -488,5 +502,42 @@ func TestImageFilesAreTheOnesTheRecordingShowsAndSaysWhichAreMissing(t *testing.
 	// none, for a recording without images
 	if paths, missing, err := ImageFiles(markedRecording(t)); err != nil || len(paths) != 0 || len(missing) != 0 {
 		t.Errorf("%v %v %v", paths, missing, err)
+	}
+}
+
+// What a sound has to lose when commands are deleted is what the compression takes out of the recording: the commands' spans,
+// and not the picture that follows one.
+func TestRemovedSpansAreWhatCompressTimestampsTakesOut(t *testing.T) {
+	cmds := loadCommands(t, markedRecording(t))
+	out, err := AddImage(cmds, newImage(t, 15000, 6, "a.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deleted := map[int]bool{1: true}
+	spans := RemovedSpans(out, deleted)
+	if len(spans) != 1 || spans[0].AtMs != out[1].PromptFrame.Timestamp || spans[0].DurMs != 1500 {
+		t.Fatalf("spans %+v", spans)
+	}
+	got := CompressTimestamps(out, deleted)
+	if shift := out[2].PromptFrame.Timestamp - got[1].PromptFrame.Timestamp; shift != spans[0].DurMs {
+		t.Errorf("the third moved %d, the span is %d", shift, spans[0].DurMs)
+	}
+	if RemovedSpans(out, nil) != nil {
+		t.Error("nothing deleted, nothing removed")
+	}
+}
+
+// The first command deleted: what followed it goes to the first that stays.
+func TestAPictureAfterADeletedFirstCommandGoesToTheNext(t *testing.T) {
+	cmds := loadCommands(t, markedRecording(t))
+	first := commandLastTimestamp(cmds[0])
+	out, err := AddImage(cmds, newImage(t, first+500, 3, "a.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := CompressTimestamps(out, map[int]bool{0: true})
+	imgs := RecordingImages(got)
+	if len(imgs) != 1 || imgs[0].Timestamp != first+500-(first-commandFirstTimestamp(cmds[0])) {
+		t.Errorf("%+v", imgs)
 	}
 }

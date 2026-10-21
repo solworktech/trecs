@@ -256,7 +256,7 @@ func (o *imageOverlay) drawCard(screen tcell.Screen, s *shownImage, reason strin
 
 // shownImageRect is where the picture on show is to be painted, if it is a picture and nothing is laid over it.
 func (em *EditorMode) shownImageRect() (imageRect, bool) {
-	if em.imageOverlay == nil || em.imageOverlay.show == nil || em.imageOverlay.show.rect.cols == 0 || !em.picturesVisible() {
+	if em.imageOverlay == nil || em.imageOverlay.show == nil || em.imageOverlay.show.rect.cols == 0 || !em.playbackInFront() {
 		return imageRect{}, false
 	}
 	return em.imageOverlay.show.rect, true
@@ -514,6 +514,10 @@ func (em *EditorMode) saveImage() {
 		em.imageError("The sound of the last change is still being made: wait for it.", nil)
 		return
 	}
+	if len(em.deletedCommands) > 0 { // the sound would be changed for a recording that is not the one it goes with
+		em.imageError("Commands are deleted and not saved yet: save (Ctrl+W) before changing an image.", nil)
+		return
+	}
 	var ms int64
 	if timeText := m.time.GetText(); m.editID != "" && timeText == m.origTimeText {
 		ms = m.origTs
@@ -621,6 +625,10 @@ func (em *EditorMode) deleteImageFromModal() {
 func (em *EditorMode) deleteImage(id string) {
 	if em.audioBusy.Load() {
 		em.setStatus("The sound of the last change is still being made: wait for it.")
+		return
+	}
+	if len(em.deletedCommands) > 0 {
+		em.setStatus("Commands are deleted and not saved yet: save (Ctrl+W) before deleting an image.")
 		return
 	}
 	old, host, ok := libtrecs.FindImage(em.commands, id)

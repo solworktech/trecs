@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -127,13 +128,31 @@ type EditorMode struct {
 	editedCommands  map[int]bool
 }
 
+// openDebugLog opens (or creates) the debug log, private to the user. nil if it cannot be.
+func openDebugLog() *os.File {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return nil
+	}
+	dir = filepath.Join(dir, "trecs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "debug.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return nil
+	}
+	return f
+}
+
 // NewEditorMode creates a new editor mode
 func NewEditorMode(player libtrecs.TerminalPlayer, commands []libtrecs.Command, filePath string) *EditorMode {
 	// Opt-in debug log (TRECS_DEBUG=1) of playback transitions, jumps and
-	// annotation decisions, written to /tmp/trecs-debug.log. Off by default.
+	// annotation decisions, written to debug.log in the user's own cache directory (trecs/debug.log) - not to a name in /tmp
+	// that anyone on the machine could have made a link to somewhere else. Off by default.
 	var logFile *os.File
 	if os.Getenv("TRECS_DEBUG") != "" {
-		logFile, _ = os.OpenFile("/tmp/trecs-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		logFile = openDebugLog()
 	}
 
 	return &EditorMode{
@@ -1277,6 +1296,16 @@ func (em *EditorMode) writeRecording(savedCmdIdx int) (string, error) {
 		return "", errors.New("all commands would be deleted")
 	}
 
+	// The time the deleted commands take is taken out of the sound as well, or everything after it would be heard late.
+	cut := libtrecs.RemovedSpans(em.commands, em.deletedCommands)
+	if len(cut) > 0 && em.audioFile() != "" {
+		if em.audioBusy.Load() {
+			return "", errors.New("the sound of the last change is still being made: wait for it")
+		}
+	} else {
+		cut = nil
+	}
+
 	backupPath := em.filePath + ".backup"
 
 	// Ripple-delete semantics: every surviving command's timestamps are
@@ -1290,6 +1319,7 @@ func (em *EditorMode) writeRecording(savedCmdIdx int) (string, error) {
 	}
 
 	em.reloadFromDisk(newIdxForSaved, backupPath)
+	em.changeSoundCut(fmt.Sprintf("Recording saved and reloaded. Backup: %s", backupPath), cut)
 	return backupPath, nil
 }
 
@@ -1407,7 +1437,8 @@ func (em *EditorMode) openInExternalEditor(initial string) (string, error) {
 // externalEditorRun runs the editor on a file, with the terminal handed over; a variable so that a test can stand in for one.
 var externalEditorRun = func(editorCmd, path string) error {
 	// Run via sh -c so a $EDITOR containing arguments (e.g. "code --wait") is honoured, not treated as one literal binary name.
-	cmd := exec.Command("sh", "-c", editorCmd+" \""+path+"\"")
+	// the path is an argument of the script ("$1"), and not text in it: a name with a quote or a $ in it (it is under $TMPDIR) is just a name
+	cmd := exec.Command("sh", "-c", editorCmd+` "$1"`, "sh", path)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

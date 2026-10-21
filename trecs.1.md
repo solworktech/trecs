@@ -33,6 +33,7 @@ Usage:
   trecs update [options] ID [PATH]
                                Change an uploaded recording: its terminal file, audio, Markdown, name,
                                description or visibility (ID is the one in its link, or the link)
+  trecs scan PATH              Check a recording for secrets (exits 1 if any are found)
   trecs version                Show the version (also -version, --version)
   trecs help                   Show this help message
 
@@ -42,7 +43,7 @@ Record Options:
   -camera                         Enable camera recording (default: false)
   -screen                         Enable screen recording (default: false)
   -output string                  Output directory (default: "$HOME/.config/trecs/recordings")
-  -name string                    Session name (default: timestamp YYYY_MM_DD_HH_MM_SS)
+  -name string                    Session name, a plain one: no / or .. (default: timestamp YYYY_MM_DD_HH_MM_SS)
   -cmd string                     Terminal command to execute (default: current shell, or sh if unable to detect)
   -audio-device string            Audio device (default: "default")
   -audio-codec string             Audio codec: libopus (default, Ogg), libmp3lame, aac
@@ -59,12 +60,17 @@ Record Options:
   -upload                         Upload the recording when it ends, without asking (needs a login)
   -no-upload                      Don't ask whether to upload the recording when it ends
   -visibility string              Visibility for the upload: private (default), unlisted, public
+  -allow-risky                    With -commands-file: run it although the check blocked it
+  -allow-unmarked                 Record in a shell without prompt marks (-commands-file: allow it; by hand: do not ask)
+  -allow-secrets                  With -upload: upload even if secrets were found
+  -overwrite                      Replace a recording of the same name without asking
 
 Login Options:
   -server string                  Server address (default: the last login's, else $TRECS_SERVER,
                                   else the one built in, if any)
   -email string                   Account email (asked for if omitted)
   -password-stdin                 Read the password from standard input
+  -allow-insecure-endpoint        Accept a plain http:// server that is not on this machine (unencrypted!)
 
 Upload Options (before the path):
   -name string                    Recording title
@@ -77,17 +83,40 @@ Upload Options (before the path):
   -audio string                   Audio file (default: audio.opus, or .mp3 .m4a .ogg, beside the recording)
   -markdown string                Markdown file the server keeps as the recording's Markdown export,
                                   instead of making one from the recording (default: made from it)
+  -allow-secrets                  Upload even if secrets were found in the recording
 
 Play Options:
   -file string                    Terminal recording file to play (required)
   -speed float                    Playback speed multiplier (default: 1.0)
 
 Scripted Recordings (-commands-file):
+  - The file is read before anything runs. A download that is run, a recursive remove of / or ~ or
+    a variable, a write to a disk, /etc, ~/.ssh or a startup file, setuid, a shutdown, a reverse
+    shell, a fork bomb, a secret sent away and hidden characters BLOCK the run; give -allow-risky
+    if meant. Other things (sudo, &, read, eval...) are listed. ShellCheck is run too, if installed.
+  - The shell must mark its prompts (bash, zsh, fish): dash, sh, ksh and -no-marks are refused, and
+    the message lists the shells found here (-cmd bash). -allow-unmarked overrides.
+  - Recording by hand in such a shell is allowed after a [y/N] question: the recording cannot tell
+    the commands apart. What the audit warned about is shown in yellow, with a red count before YES.
   - The commands are typed into a real shell, with your permissions, as if they were a shell
     script: nothing reviews them. A warning is shown (in yellow) and you must type YES to
     continue; any other input exits without running anything.
   - When standard input is not a terminal (CI, a pipe) the warning is shown and the recording
     goes ahead.
+  - A line is typed only when the shell is back at its prompt: nothing is typed into a running
+    command, and it is never interrupted, unless -command-timeout is given (then the shell is hung
+    up on and the rest is not typed). History expansion is off; control characters in the file
+    are refused. Exit status: 1 if the session could not go on, else the shell's (the last command's).
+
+Secrets:
+  - Commands, output and annotations are checked with gitleaks' rules before any upload. If
+    something is found it is listed (masked) and the upload waits for YES, or -allow-secrets;
+    where nobody can be asked it is not sent. "trecs scan PATH" does the check alone.
+
+Files:
+  - Recordings are private to you (directories 0700, files 0600). An existing recording of the
+    same name is not written over unless you type YES (anything else asks for another name or
+    path); with nobody to ask it is an error, unless -overwrite.
 
 After Recording:
   - At a terminal you are asked "Upload to the Trecs Platform? [Y/n]". Y, y or Enter uploads the
@@ -102,6 +131,7 @@ Build Options (go build -ldflags "-X ..."):
 During Recording:
   - Use Ctrl+C to interrupt commands in the shell (works normally)
   - Type 'exit' or press Ctrl+D to end the recording
+  - TERM is passed on as it is (xterm-256color only where there is none, or "dumb")
   - The recording will stop and you'll return to your original shell
 ```
 

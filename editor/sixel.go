@@ -250,21 +250,90 @@ func (em *EditorMode) renderDisplay() string {
 	return em.display.Render()
 }
 
-// picturesVisible: the playback page is the one in front, with nothing laid over it.
-func (em *EditorMode) picturesVisible() bool {
+// playbackInFront: the playback page is the one in front (a list, an edit form or a dialog is not laid over it).
+func (em *EditorMode) playbackInFront() bool {
 	if em.pages == nil || em.playbackView == nil {
 		return false
 	}
-	if name, _ := em.pages.GetFrontPage(); name != "playback" {
-		return false
+	name, _ := em.pages.GetFrontPage()
+	return name == "playback"
+}
+
+// picturesVisible: the playback page is the one in front, with nothing laid over it.
+func (em *EditorMode) picturesVisible() bool {
+	return em.playbackInFront() && em.cueOverlay.text == "" && em.timedOverlay.text == ""
+}
+
+// cellBox is a rectangle of the screen, in cells.
+type cellBox struct{ x, y, w, h int }
+
+// overlayBoxes are the places of the cards and notes laid over the playback view: where text is drawn that a picture must not be.
+func (em *EditorMode) overlayBoxes() []cellBox {
+	var out []cellBox
+	if t := em.timedOverlay; t != nil && t.text != "" {
+		x, y, w, h := t.GetRect()
+		var l timedLayout
+		if t.centered {
+			c := layoutTaggedCard(taggedAnnotationText(t.text), w, h)
+			l = timedLayout{w: c.w, h: c.h, left: c.left, top: c.top}
+		} else {
+			l = layoutTimed(t.text, w, h)
+		}
+		if l.w > 0 {
+			out = append(out, cellBox{x + l.left, y + l.top, l.w, l.h})
+		}
 	}
-	return em.cueOverlay.text == "" && em.timedOverlay.text == ""
+	if c := em.cueOverlay; c != nil && c.text != "" {
+		x, y, w, h := c.GetRect()
+		if l := layoutCueCard(c.text, w, h, c.focus); l.w > 0 {
+			out = append(out, cellBox{x + l.left, y + l.top, l.w, l.h})
+		}
+	}
+	return out
+}
+
+// cutOut is the picture in a rectangle but for the places of the boxes laid over it: up to four pieces round each, each the part
+// of the picture that is in its cells. A note over a picture is read with the picture round it, and not instead of it.
+func cutOut(r imageRect, boxes []cellBox) []imageRect {
+	pieces := []imageRect{r}
+	piece := func(from imageRect, col, row, cols, rows int) (imageRect, bool) {
+		if cols <= 0 || rows <= 0 {
+			return imageRect{}, false
+		}
+		p := from
+		p.srcCol, p.srcRow = from.srcCol+(col-from.col), from.srcRow+(row-from.row)
+		p.col, p.row, p.cols, p.rows = col, row, cols, rows
+		return p, true
+	}
+	for _, b := range boxes {
+		var next []imageRect
+		for _, p := range pieces {
+			left, top := max(b.x, p.col), max(b.y, p.row)
+			right, bottom := min(b.x+b.w, p.col+p.cols), min(b.y+b.h, p.row+p.rows)
+			if right <= left || bottom <= top { // not over this piece
+				next = append(next, p)
+				continue
+			}
+			for _, q := range [][4]int{
+				{p.col, p.row, p.cols, top - p.row},                // above
+				{p.col, bottom, p.cols, p.row + p.rows - bottom},   // below
+				{p.col, top, left - p.col, bottom - top},           // to the left
+				{right, top, p.col + p.cols - right, bottom - top}, // to the right
+			} {
+				if n, ok := piece(p, q[0], q[1], q[2], q[3]); ok {
+					next = append(next, n)
+				}
+			}
+		}
+		pieces = next
+	}
+	return pieces
 }
 
 // pictureRects works out where on the screen the pictures of the emulated screen are drawn.
 func (em *EditorMode) pictureRects(screen tcell.Screen) []imageRect {
 	if r, ok := em.shownImageRect(); ok && em.sixel.canDraw() {
-		return []imageRect{r} // an image of the recording covers the terminal, and the pictures in it
+		return cutOut(r, em.overlayBoxes()) // an image of the recording covers the terminal, and the pictures in it; a note over it is not covered
 	}
 	vt, ok := em.display.(*libtrecs.VTScreen)
 	if !ok || !em.sixel.canDraw() || !em.picturesVisible() {

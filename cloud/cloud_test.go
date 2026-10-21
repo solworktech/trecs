@@ -304,3 +304,19 @@ func TestUpdateRecordingPutsTheWholeEdit(t *testing.T) {
 		t.Errorf("without a login: %v", err)
 	}
 }
+
+func TestPlainHTTPIsAcceptedOnlyForThisMachine(t *testing.T) {
+	for _, ok := range []string{"http://localhost:8080", "http://127.0.0.1:9", "http://[::1]:8080", "https://trecs.example.com"} {
+		if _, err := NormalizeServer(ok); err != nil {
+			t.Errorf("%s: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"http://trecs.example.com", "http://192.168.1.5:8080", "http://localhost.evil.com"} {
+		if _, err := NormalizeServer(bad); err == nil {
+			t.Errorf("%s was accepted", bad)
+		}
+		if _, err := NormalizeServerOpt(bad, true); err != nil {
+			t.Errorf("%s was refused although it was allowed: %v", bad, err)
+		}
+	}
+}

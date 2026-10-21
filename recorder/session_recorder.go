@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -36,7 +37,7 @@ func NewSessionRecorder(config *libtrecs.RecordingConfig) (*SessionRecorderImpl,
 	}
 
 	// Create output directory
-	if err := os.MkdirAll(config.OutputDir, 0755); err != nil {
+	if err := os.MkdirAll(config.OutputDir, 0o700); err != nil {
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -50,7 +51,7 @@ func NewSessionRecorder(config *libtrecs.RecordingConfig) (*SessionRecorderImpl,
 	}
 
 	sessionDir := filepath.Join(config.OutputDir, sessionID)
-	if err := os.MkdirAll(sessionDir, 0755); err != nil {
+	if err := os.MkdirAll(sessionDir, 0o700); err != nil {
 		return nil, fmt.Errorf("failed to create session directory: %w", err)
 	}
 
@@ -296,7 +297,7 @@ func (sr *SessionRecorderImpl) GetSessionID() string {
 
 // saveMetadata writes session metadata to file
 func (sr *SessionRecorderImpl) saveMetadata(path string) error {
-	file, err := os.Create(path)
+	file, err := createPrivate(path)
 	if err != nil {
 		return err
 	}
@@ -309,7 +310,38 @@ func (sr *SessionRecorderImpl) saveMetadata(path string) error {
 	return encoder.Encode(sr.metadata)
 }
 
+// Failure is why the recording is not what was asked for ("" if it is): a scripted session that stopped because the shell was not
+// where the script expected it, a file that could not be written.
+func (sr *SessionRecorderImpl) Failure() string {
+	if f, ok := sr.terminalRecorder.(interface{ Failure() string }); ok {
+		return f.Failure()
+	}
+	return ""
+}
+
+// ShellExitCode is the status the shell exited with by itself, if it did.
+func (sr *SessionRecorderImpl) ShellExitCode() (int, bool) {
+	if f, ok := sr.terminalRecorder.(interface{ ExitCode() (int, bool) }); ok {
+		return f.ExitCode()
+	}
+	return 0, false
+}
+
 // GetMetadata returns the session metadata
 func (sr *SessionRecorderImpl) GetMetadata() *libtrecs.RecordingMetadata {
 	return sr.metadata
+}
+
+// createPrivate creates a file only its owner can read, or truncates one - and makes it so: a recording holds whatever was on
+// the screen, tokens and passwords included.
+func createPrivate(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := f.Chmod(0o600); err != nil && runtime.GOOS != "windows" {
+		_ = f.Close()
+		return nil, err
+	}
+	return f, nil
 }

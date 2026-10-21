@@ -39,6 +39,7 @@ type TerminalPlayerImpl struct {
 	playbackState  PlaybackState
 	rawModeEnabled bool
 	outputFrames   bool
+	safeCarry      string // a sequence cut by the end of the last frame written (see SafeForTerminal)
 	frameCallback  func(frame TerminalFrame)
 
 	// Where playback is between frames. The loop only reports a frame when it
@@ -392,7 +393,10 @@ func (tp *TerminalPlayerImpl) playbackLoop() {
 
 		// Output the frame directly to stdout as bytes
 		if tp.outputFrames {
-			_, _ = os.Stdout.Write([]byte(currentFrame.Data))
+			// Written to the terminal the person is at, and a recording can ask that for more than drawing (see SafeForTerminal)
+			var safe string
+			safe, tp.safeCarry = SafeForTerminal(tp.safeCarry, currentFrame.Data)
+			_, _ = os.Stdout.Write([]byte(safe))
 		}
 
 		if tp.frameCallback != nil {

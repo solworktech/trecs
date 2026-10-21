@@ -72,11 +72,18 @@ const fishIntegration = `
 # --- trecs shell integration (prompt marks, OSC 133) ---
 if not set -q __trecs_marks
     set -g __trecs_marks 1
-    functions -q fish_prompt; and functions -c fish_prompt __trecs_orig_prompt
-    function fish_prompt
-        printf '\e]133;A\a'
-        functions -q __trecs_orig_prompt; and __trecs_orig_prompt
-        printf '\e]133;B\a'
+    # The prompt is run FIRST, and its output is what the marks are wrapped around: anything run before it (even a printf)
+    # would reset $status, and a prompt that shows the last command's status would show a success.
+    if functions -q fish_prompt
+        functions -c fish_prompt __trecs_orig_prompt
+        function fish_prompt
+            set -l __trecs_p (__trecs_orig_prompt)
+            printf '\e]133;A\a%s\e]133;B\a' (string join \n -- $__trecs_p)
+        end
+    else
+        function fish_prompt
+            printf '\e]133;A\a\e]133;B\a'
+        end
     end
     function __trecs_preexec --on-event fish_preexec
         printf '\e]133;C\a'
@@ -103,6 +110,12 @@ if not set -q __trecs_marks
 end
 `
 
+// fishQuote makes a path fit between single quotes in fish, in which a backslash and a quote are the two characters that are escaped:
+// a temporary directory with either in its name (it is under $TMPDIR) must not end the quote.
+func fishQuote(p string) string {
+	return strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(p)
+}
+
 var fishVersionRe = regexp.MustCompile(`version (\d+)\.`)
 
 // fishMajorVersion is the major version in "fish, version 4.1.0"; 0 if it can't be read.
@@ -124,6 +137,25 @@ type shellIntegration struct {
 // setupShellIntegration prepares the startup files for the given shell program.
 // It returns nil (and no error) for a shell it has no integration for.
 func setupShellIntegration(shell string) (*shellIntegration, error) {
+	return setupShellIntegrationFor(shell, false)
+}
+
+// The commands of a script are what a script would run, and not what a person would type: a person's shell expands !word to a
+// command from its history (so `echo !rm` would run the last rm again), and a script's does not. So a scripted session turns it off.
+const (
+	bashScripted = "\nset +H # trecs: the lines are a script's, not typed by a person: no history expansion\n"
+	zshScripted  = "\nsetopt NO_BANG_HIST # trecs: the lines are a script's, not typed by a person: no history expansion\n"
+)
+
+func scriptedOnly(scripted bool, s string) string {
+	if scripted {
+		return s
+	}
+	return ""
+}
+
+// setupShellIntegrationFor is setupShellIntegration for a shell that is to be typed a script (scripted) or a person's keystrokes.
+func setupShellIntegrationFor(shell string, scripted bool) (*shellIntegration, error) {
 	kind := filepath.Base(shell)
 	dir, err := os.MkdirTemp("", "trecs-shell-")
 	if err != nil {
@@ -138,7 +170,7 @@ func setupShellIntegration(shell string) (*shellIntegration, error) {
 
 	switch kind {
 	case "bash":
-		rc, err := write("bashrc", "[ -r /etc/bash.bashrc ] && . /etc/bash.bashrc\n[ -r ~/.bashrc ] && . ~/.bashrc\n"+bashIntegration)
+		rc, err := write("bashrc", "[ -r /etc/bash.bashrc ] && . /etc/bash.bashrc\n[ -r ~/.bashrc ] && . ~/.bashrc\n"+bashIntegration+scriptedOnly(scripted, bashScripted))
 		if err != nil {
 			cleanup()
 			return nil, err
@@ -146,15 +178,24 @@ func setupShellIntegration(shell string) (*shellIntegration, error) {
 		return &shellIntegration{args: []string{"--rcfile", rc}, env: env, cleanup: cleanup}, nil
 
 	case "zsh":
-		// zsh reads its startup files from $ZDOTDIR: point it at ours, which load the
-		// user's own from where they were.
-		orig := os.Getenv("ZDOTDIR")
-		const userDir = `"${TRECS_USER_ZDOTDIR:-$HOME}"`
-		if _, err := write(".zshenv", `[ -r `+userDir+`/.zshenv ] && . `+userDir+"/.zshenv\n"); err != nil {
+		// zsh reads its startup files from $ZDOTDIR: point it at ours, which load the user's own from where they were.
+		// The user's files must not see the detour, though - $ZDOTDIR is where compinit keeps its dump, where a framework
+		// keeps its cache, and a script may print it - so it is the user's own value while their files run: ours restore it
+		// before sourcing theirs. (A .zshenv that moves $ZDOTDIR itself is followed: its .zshrc is the one loaded.)
+		orig, wasSet := os.LookupEnv("ZDOTDIR")
+		if !wasSet {
+			orig = ""
+		}
+		const restore = `if [[ -n $TRECS_USER_ZDOTDIR ]]; then ZDOTDIR=$TRECS_USER_ZDOTDIR; else unset ZDOTDIR; fi` + "\n"
+		if _, err := write(".zshenv", "__trecs_zdotdir=$ZDOTDIR\n"+restore+
+			`[ -r "${ZDOTDIR:-$HOME}/.zshenv" ] && . "${ZDOTDIR:-$HOME}/.zshenv"`+"\n"+
+			"export TRECS_USER_ZDOTDIR=${ZDOTDIR-}\n"+
+			"ZDOTDIR=$__trecs_zdotdir; unset __trecs_zdotdir\n"); err != nil {
 			cleanup()
 			return nil, err
 		}
-		if _, err := write(".zshrc", `[ -r `+userDir+`/.zshrc ] && . `+userDir+"/.zshrc\n"+zshIntegration); err != nil {
+		if _, err := write(".zshrc", restore+"unset TRECS_USER_ZDOTDIR\n"+
+			`[ -r "${ZDOTDIR:-$HOME}/.zshrc" ] && . "${ZDOTDIR:-$HOME}/.zshrc"`+"\n"+zshIntegration+scriptedOnly(scripted, zshScripted)); err != nil {
 			cleanup()
 			return nil, err
 		}
@@ -173,7 +214,7 @@ func setupShellIntegration(shell string) (*shellIntegration, error) {
 			cleanup()
 			return nil, err
 		}
-		return &shellIntegration{args: []string{"--init-command", fmt.Sprintf("source '%s'", strings.ReplaceAll(f, "'", `\'`))}, env: env, cleanup: cleanup}, nil
+		return &shellIntegration{args: []string{"--init-command", fmt.Sprintf("source '%s'", fishQuote(f))}, env: env, cleanup: cleanup}, nil
 	}
 	cleanup()
 	return nil, nil

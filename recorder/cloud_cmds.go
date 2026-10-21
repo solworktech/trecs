@@ -44,6 +44,7 @@ func runLogin(args []string) {
 	server := fs.String("server", "", "Server address, e.g. https://trecs.example.com (default: "+serverDefaultHelp()+")")
 	email := fs.String("email", "", "Account email (asked for if omitted)")
 	passStdin := fs.Bool("password-stdin", false, "Read the password from standard input instead of asking for it")
+	insecure := fs.Bool("allow-insecure-endpoint", false, "Accept a plain http:// server that is not on this machine: your password and session then cross the network unencrypted")
 	_ = fs.Parse(args)
 
 	*server = resolveServer(*server, savedServer(), os.Getenv("TRECS_SERVER"), defaultServer)
@@ -56,7 +57,7 @@ func runLogin(args []string) {
 		}
 		// fail("which server? Use -server https://trecs.example.com (or set $TRECS_SERVER)")
 	}
-	client, err := cloud.New(*server)
+	client, err := cloud.NewOpt(*server, *insecure)
 	if err != nil {
 		fail("%v", err)
 	}
@@ -131,9 +132,10 @@ func runUpload(args []string) {
 	visibility := fs.String("visibility", "", "private, unlisted or public (default: private - recordings often show secrets)")
 	audio := fs.String("audio", "", "Audio file to attach (default: audio.opus - or .mp3, .m4a, .ogg - beside the recording, if there is one)")
 	markdown := fs.String("markdown", "", "Markdown file to keep as the recording's Markdown export (default: made from the recording)")
+	allowSecrets := fs.Bool("allow-secrets", false, "Upload even if secrets were found in the recording (it is checked first; by default you are asked)")
 	_ = fs.Parse(args)
 	if fs.NArg() != 1 {
-		fail("usage: %s upload [-name N] [-description D | -annotations-as-description | -commands-as-description] [-visibility private|unlisted|public] [-audio FILE] [-markdown FILE] <session directory | terminal.jsonl>\n(options go before the path)", os.Args[0])
+		fail("usage: %s upload [-name N] [-description D | -annotations-as-description | -commands-as-description] [-visibility private|unlisted|public] [-audio FILE] [-markdown FILE] [-allow-secrets] <session directory | terminal.jsonl>\n(options go before the path)", os.Args[0])
 	}
 	chosen := 0
 	for _, on := range []bool{*description != "", fromAnnotations, fromCommands} {
@@ -165,6 +167,9 @@ func runUpload(args []string) {
 		fail("the recording shows %s, which %s not in %s: put %s back, or delete the image in the editor",
 			strings.Join(missing, ", "), pluralIs(len(missing)), libtrecs.ImagesPath(terminal), pluralThem(len(missing)))
 	}
+	if !checkBeforeUpload(terminal, *allowSecrets) {
+		os.Exit(1)
+	}
 	uploadFiles(cloud.Upload{Name: *name, Description: *description, Visibility: *visibility, TerminalPath: terminal, AudioPath: *audio, MarkdownPath: *markdown, ImagePaths: images}, fromAnnotations)
 }
 
@@ -183,9 +188,10 @@ func runUpdate(args []string) {
 	visibility := fs.String("visibility", "", "private, unlisted or public")
 	audio := fs.String("audio", "", "Audio file to send (default, with PATH: audio.opus - or .mp3, .m4a, .ogg - beside the recording, if there is one)")
 	markdown := fs.String("markdown", "", "Markdown file to keep as the recording's Markdown export")
+	allowSecrets := fs.Bool("allow-secrets", false, "Send the recording even if secrets were found in it (it is checked first; by default you are asked)")
 	_ = fs.Parse(args)
 	if fs.NArg() < 1 || fs.NArg() > 2 {
-		fail("usage: %s update [-name N] [-description D | -annotations-as-description | -commands-as-description] [-visibility private|unlisted|public] [-audio FILE] [-markdown FILE] <recording id or link> [session directory | terminal.jsonl]\n(options go before the id)", os.Args[0])
+		fail("usage: %s update [-name N] [-description D | -annotations-as-description | -commands-as-description] [-visibility private|unlisted|public] [-audio FILE] [-markdown FILE] [-allow-secrets] <recording id or link> [session directory | terminal.jsonl]\n(options go before the id)", os.Args[0])
 	}
 	id, err := cloud.RecordingID(fs.Arg(0))
 	if err != nil {
@@ -237,6 +243,9 @@ func runUpdate(args []string) {
 		fail("nothing to change: give a name, description or visibility, a file (-audio, -markdown), or the session to send again")
 	}
 
+	if u.TerminalPath != "" && !checkBeforeUpload(u.TerminalPath, *allowSecrets) {
+		os.Exit(1)
+	}
 	session, err := cloud.LoadSession()
 	if err != nil {
 		fail("%v", err)

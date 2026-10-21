@@ -66,8 +66,16 @@ type RecordingConfig struct {
 	// Cols and Rows are the terminal's size when there is no terminal to ask
 	// (default 100x30).
 	ScriptFile string
-	HumanLike  bool
-	Cols, Rows int
+
+	// AllowUnmarked lets a script be typed into a shell that has no prompt marks. By default it is refused: such a shell
+	// cannot be told apart from one that is waiting for an answer to a `read` of the script's own.
+	AllowUnmarked bool
+	HumanLike     bool
+	Cols, Rows    int
+
+	// CommandTimeout, with a script (-commands-file), is how long one command may run before the session is given up on. Zero
+	// (the default) is for ever: a command that takes long is let to take it, as it would at a keyboard.
+	CommandTimeout time.Duration
 
 	// FFMpeg-based recordings
 	AudioEnabled bool

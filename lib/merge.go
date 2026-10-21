@@ -180,7 +180,7 @@ func writeMerged(output string, meta RecordingMeta, annotations []Annotation, fr
 	if err = tmp.Close(); err != nil {
 		return err
 	}
-	if err = os.Chmod(tmp.Name(), 0o644); err != nil {
+	if err = os.Chmod(tmp.Name(), 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp.Name(), output)

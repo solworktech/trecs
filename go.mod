@@ -3,12 +3,14 @@ module trecs
 go 1.27.2
 
 require (
-	github.com/creack/pty v1.1.21
+	github.com/creack/pty v1.1.24
+	github.com/ergochat/readline v0.1.3
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/rivo/tview v0.42.0
-	golang.org/x/sys v0.29.0
-	golang.org/x/term v0.28.0
+	golang.org/x/sys v0.33.0
+	golang.org/x/term v0.32.0
+	mvdan.cc/sh/v3 v3.12.0
 )
 
 require (

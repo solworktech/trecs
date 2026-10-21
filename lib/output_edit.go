@@ -200,3 +200,82 @@ func editedRaw(raw, oldPlain, newPlain string) (string, bool) {
 	}
 	return got, true
 }
+
+// editedOutputFrames is the command's output frames after its output text was edited. The shell's marks (OSC 133: where the output
+// begins and where the command ends) are kept exactly as they were - without them a command is no longer one, and the one before it
+// swallows it - and so are the colours of the text the edit did not touch (see editedRaw). All the text goes to where the first of it
+// was (after the mark that begins the output); a command whose output was emptied keeps its marks and no text; one that had none and
+// has some gets it just before the mark that ends it.
+func editedOutputFrames(cmd *Command) []TerminalFrame {
+	skip := make(map[int]bool, len(cmd.TypedAhead))
+	for _, i := range cmd.TypedAhead {
+		skip[i] = true
+	}
+	var kept []TerminalFrame
+	for i, f := range cmd.OutputFrames {
+		if !skip[i] {
+			kept = append(kept, f)
+		}
+	}
+	pieces := splitAtMarks(kept)
+	var oldRaw strings.Builder
+	for _, p := range pieces {
+		if p.kind == 0 {
+			oldRaw.WriteString(p.data)
+		}
+	}
+	newRaw, ok := editedRaw(oldRaw.String(), deriveOutputText(cmd), cmd.OutputText)
+	if !ok {
+		newRaw = strings.ReplaceAll(cmd.OutputText, "\n", "\r\n")
+	}
+
+	// where the text goes: the first text after the mark that begins the output, else the first text there is
+	at, sawC := -1, false
+	for i, p := range pieces {
+		if p.kind == 'C' {
+			sawC = true
+		}
+		if p.kind == 0 && (sawC || at < 0) {
+			at = i
+			if sawC {
+				break
+			}
+		}
+	}
+	if at < 0 && newRaw != "" {
+		ins := markPiece{frameIdx: -1, frame: TerminalFrame{Timestamp: cmd.EndTime}}
+		pos := len(pieces)
+		for i, p := range pieces {
+			if p.kind == 'D' {
+				pos = i
+				break
+			}
+		}
+		switch {
+		case pos < len(pieces):
+			ins.frame = pieces[pos].frame
+		case len(pieces) > 0:
+			ins.frame = pieces[len(pieces)-1].frame
+		}
+		pieces = append(pieces[:pos], append([]markPiece{ins}, pieces[pos:]...)...)
+		at = pos
+	}
+
+	var out []TerminalFrame
+	lastIdx := -2
+	for i, p := range pieces {
+		if p.kind == 0 {
+			if i != at || newRaw == "" {
+				continue
+			}
+			p.data = newRaw
+		}
+		if len(out) > 0 && p.frameIdx == lastIdx && p.frameIdx >= 0 {
+			out[len(out)-1].Data += p.data
+			continue
+		}
+		out = append(out, p.asFrame())
+		lastIdx = p.frameIdx
+	}
+	return out
+}

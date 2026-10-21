@@ -108,12 +108,19 @@ func (mr *MediaRecorderImpl) Start() error {
 	// Append output file
 	args = append(args, "-y", mr.outputPath)
 
+	// The file is made before ffmpeg makes it, so that it is private from the start (ffmpeg would make it as the umask says).
+	if f, err := createPrivate(mr.outputPath); err != nil {
+		return fmt.Errorf("failed to create %s: %w", mr.outputPath, err)
+	} else {
+		_ = f.Close()
+	}
+
 	cmd := exec.Command(mr.ffmpeg, args...)
 	ownProcessGroup(cmd)
 
 	// ffmpeg's own messages go to a log file, not the console: the terminal is the recording's.
 	mr.logPath = mr.outputPath + ".log"
-	logFile, err := os.OpenFile(mr.logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	logFile, err := os.OpenFile(mr.logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to create ffmpeg log file: %w", err)
 	}

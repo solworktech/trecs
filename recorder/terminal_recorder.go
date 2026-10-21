@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/creack/pty"
 	"golang.org/x/sys/unix"
@@ -43,11 +45,83 @@ type TerminalRecorderImpl struct {
 	lastOutput      int64         // unix nanos of the shell's last output
 	commandsStarted int64         // how many command-start marks (C) the shell has written
 	markTail        string        // the end of the last read, for a mark cut between two
+
+	failMu    sync.Mutex
+	failure   string // why the recording is not what was asked for (see fail); "" if it is
+	exitCode  int    // the shell's own exit status, if it exited by itself
+	exited    bool
+	shellGone chan struct{} // closed when the shell has exited
+	writeFail bool          // the recording file could not be written to: nothing more is tried
+}
+
+// fail notes why the recording is not what was asked for, and says so. The first reason is the one kept.
+func (tr *TerminalRecorderImpl) fail(msg string) {
+	tr.failMu.Lock()
+	if tr.failure == "" {
+		tr.failure = msg
+	}
+	tr.failMu.Unlock()
+	fmt.Fprintf(os.Stderr, "\r\nrecorder: %s\r\n", msg) // the terminal is in raw mode: a line ends with both
+}
+
+// Failure is why the recording is not what was asked for: "" if it is.
+func (tr *TerminalRecorderImpl) Failure() string {
+	tr.failMu.Lock()
+	defer tr.failMu.Unlock()
+	return tr.failure
+}
+
+// ExitCode is the status the shell exited with by itself; false if it was stopped instead.
+func (tr *TerminalRecorderImpl) ExitCode() (int, bool) {
+	tr.failMu.Lock()
+	defer tr.failMu.Unlock()
+	return tr.exitCode, tr.exited
+}
+
+// write puts one line in the recording file. Once that fails (the disk is full, the file is gone) it is said once, and the
+// session carries on unrecorded rather than complaining at every frame onto the screen the person is working in.
+func (tr *TerminalRecorderImpl) write(v any) {
+	if tr.writeFail {
+		return
+	}
+	if err := tr.encoder.Encode(v); err != nil {
+		tr.writeFail = true
+		tr.fail(fmt.Sprintf("the recording can no longer be written (%v): everything from here on is missing from it", err))
+	}
+}
+
+// withTerm gives the shell the terminal it is in: TERM is passed on as it is, so that what runs in it sees the terminal the person
+// has (terminfo-driven programs, colours, a multiplexer). Only when there is none to pass on - a CI job has no TERM, or "dumb" -
+// is one given, as a shell for a recording is expected to be in a terminal.
+func withTerm(env []string) []string {
+	for i, e := range env {
+		if v, ok := strings.CutPrefix(e, "TERM="); ok {
+			if v == "" || v == "dumb" {
+				env[i] = "TERM=xterm-256color"
+			}
+			return env
+		}
+	}
+	return append(env, "TERM=xterm-256color")
+}
+
+// splitUTF8 cuts off the end of b if it is the start of a character whose rest has not been read yet. The pty is read in
+// pieces of any size, and a character cut between two is two broken ones in a file of JSON text.
+func splitUTF8(b []byte) (whole, rest []byte) {
+	for i := len(b) - 1; i >= 0 && i >= len(b)-3; i-- {
+		if utf8.RuneStart(b[i]) {
+			if !utf8.FullRune(b[i:]) {
+				return b[:i], b[i:]
+			}
+			break
+		}
+	}
+	return b, nil
 }
 
 // NewTerminalRecorder creates a new terminal recorder
 func NewTerminalRecorder(config *libtrecs.RecordingConfig, outputPath string) (*TerminalRecorderImpl, error) {
-	file, err := os.Create(outputPath)
+	file, err := createPrivate(outputPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create terminal output file: %w", err)
 	}
@@ -57,6 +131,7 @@ func NewTerminalRecorder(config *libtrecs.RecordingConfig, outputPath string) (*
 		outputFile: file,
 		encoder:    json.NewEncoder(file),
 		frames:     make(chan libtrecs.Frame, 100),
+		shellGone:  make(chan struct{}),
 		done:       make(chan struct{}),
 		promptCh:   make(chan struct{}, 1),
 	}, nil
@@ -105,7 +180,7 @@ func (tr *TerminalRecorderImpl) Start() error {
 	// Start the shell so that it marks where prompts and commands begin and end.
 	var shellArgs, shellEnv []string
 	if !tr.config.NoMarks {
-		switch integ, err := setupShellIntegration(shell); {
+		switch integ, err := setupShellIntegrationFor(shell, tr.config.ScriptFile != ""); {
 		case err != nil:
 			fmt.Fprintf(os.Stderr, "recorder: shell integration unavailable (%v); recording without prompt marks\n", err)
 		case integ != nil:
@@ -113,26 +188,20 @@ func (tr *TerminalRecorderImpl) Start() error {
 		}
 	}
 
+	if tr.config.ScriptFile != "" && !tr.marks {
+		if !tr.config.AllowUnmarked {
+			if tr.cleanup != nil {
+				tr.cleanup()
+			}
+			return errors.New(unmarkedRefusal(shell, tr.config.NoMarks, markShellsAvailable()))
+		}
+		fmt.Fprintln(os.Stderr, "recorder: this shell has no prompt marks (-allow-unmarked): lines are typed when it is quiet, which is wrong if the script asks for input.")
+	}
+
 	// Create command with shell
 	tr.cmd = exec.Command(shell, shellArgs...)
 
-	// Set environment to prevent excessive terminal capability queries
-	// that get recorded and cause garbage during playback
-	tr.cmd.Env = os.Environ()
-	// Override TERM to use a terminal that's simpler and less likely to
-	// query capabilities in ways that break playback
-	termEnv := "xterm-256color"
-	found := false
-	for i, env := range tr.cmd.Env {
-		if strings.HasPrefix(env, "TERM=") {
-			tr.cmd.Env[i] = "TERM=" + termEnv
-			found = true
-			break
-		}
-	}
-	if !found {
-		tr.cmd.Env = append(tr.cmd.Env, "TERM="+termEnv)
-	}
+	tr.cmd.Env = withTerm(os.Environ())
 
 	// Use pty.Start which creates PTY and properly sets up process group and TTY control
 	tr.cmd.Env = append(tr.cmd.Env, shellEnv...)
@@ -168,9 +237,7 @@ func (tr *TerminalRecorderImpl) Start() error {
 	metaLine := libtrecs.NewRecordingMetaLine(width, height)
 	metaLine.Env, metaLine.Shell = libtrecs.DetectEnv(), libtrecs.ShellName(shell)
 	metaLine.CellWidth, metaLine.CellHeight = tr.cellW, tr.cellH
-	if err := tr.encoder.Encode(metaLine); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to encode recording metadata: %v\n", err)
-	}
+	tr.write(metaLine)
 
 	tr.running = true
 
@@ -190,7 +257,13 @@ func (tr *TerminalRecorderImpl) Start() error {
 
 	// Wait for command to finish
 	go func() {
-		_ = tr.cmd.Wait() // Ignore error
+		_ = tr.cmd.Wait() // the status is kept below
+		close(tr.shellGone)
+		if ps := tr.cmd.ProcessState; ps != nil && ps.Exited() {
+			tr.failMu.Lock()
+			tr.exitCode, tr.exited = ps.ExitCode(), true
+			tr.failMu.Unlock()
+		}
 		// The shell has exited, but its last output - the echo of the final
 		// Enter, the exit itself - may still be sitting unread in the PTY.
 		// Let the capture loop drain it to EOF before stopping: stopping
@@ -267,6 +340,7 @@ func (tr *TerminalRecorderImpl) captureAndEchoOutput() {
 	reader := bufio.NewReaderSize(tr.ptmx, 4096)
 	buffer := make([]byte, 4096)
 	filter := newDCSFilter()
+	var carry []byte // the start of a character whose end is in the next read
 
 	// Runs until the PTY reports EOF/an error - which is what closing it (Stop)
 	// or the shell exiting produces - so everything the shell wrote is read.
@@ -277,9 +351,12 @@ func (tr *TerminalRecorderImpl) captureAndEchoOutput() {
 		}
 
 		if n > 0 {
-			// Convert bytes to string
-			data := string(buffer[:n])
-			tr.noteOutput(data)
+			tr.noteOutput(string(buffer[:n]))
+
+			// A character cut by the end of this read waits for the rest of it
+			whole, rest := splitUTF8(append(carry, buffer[:n]...))
+			carry = append([]byte(nil), rest...)
+			data := string(whole)
 
 			// Remove DCS (Device Control String) sequences that cause playback issues
 			// (ESC P ... ESC \: VIM capability queries and the like that shouldn't be
@@ -291,16 +368,11 @@ func (tr *TerminalRecorderImpl) captureAndEchoOutput() {
 			// Create frame with filtered data (a chunk that is only the start of a graphic
 			// being held back makes no frame; one that was all a dropped string does, empty
 			// as it always has)
-			if data != "" || !filter.holding() {
-				frame := libtrecs.TerminalFrame{
+			if len(whole) > 0 && (data != "" || !filter.holding()) {
+				tr.write(libtrecs.TerminalFrame{
 					Timestamp: time.Since(tr.startTime).Milliseconds(),
 					Data:      data,
-				}
-
-				// Write to file
-				if err := tr.encoder.Encode(frame); err != nil {
-					fmt.Fprintf(os.Stderr, "Failed to encode frame: %v\n", err)
-				}
+				})
 			}
 
 			// Echo original (unfiltered) to stdout so user sees everything
@@ -311,8 +383,9 @@ func (tr *TerminalRecorderImpl) captureAndEchoOutput() {
 			_, _ = os.Stdout.Write(echo) // Ignore error - stdout may be broken
 		}
 	}
-	if rest := filter.Flush(); rest != "" { // the output ended on an escape that began nothing
-		_ = tr.encoder.Encode(libtrecs.TerminalFrame{Timestamp: time.Since(tr.startTime).Milliseconds(), Data: rest})
+	// the output ended on an escape that began nothing, or on a character that never ended
+	if rest := filter.Flush() + string(carry); rest != "" {
+		tr.write(libtrecs.TerminalFrame{Timestamp: time.Since(tr.startTime).Milliseconds(), Data: rest})
 	}
 }
 
@@ -340,9 +413,19 @@ func (tr *TerminalRecorderImpl) Stop() error {
 		tr.cleanup()
 	}
 
-	// Terminate the shell process
+	// End the shell as closing the terminal would: hung up on first, so that it saves its history and hangs up on its jobs, and
+	// only killed if it does not go.
 	if tr.cmd != nil && tr.cmd.Process != nil {
-		_ = tr.cmd.Process.Kill() // Ignore error - process may already be dead
+		select {
+		case <-tr.shellGone:
+		default:
+			_ = tr.cmd.Process.Signal(syscall.SIGHUP)
+			select {
+			case <-tr.shellGone:
+			case <-time.After(2 * time.Second):
+				_ = tr.cmd.Process.Kill() // Ignore error - process may already be dead
+			}
+		}
 	}
 
 	// Close PTY master
@@ -377,4 +460,23 @@ func (tr *TerminalRecorderImpl) GetOutput() chan libtrecs.Frame {
 // Wait blocks until recording completes
 func (tr *TerminalRecorderImpl) Wait() {
 	<-tr.done
+}
+
+// shellInForeground says whether the shell is what the terminal is waiting on - no command of its own is running in the foreground.
+// When that cannot be told, it is taken to be so.
+func (tr *TerminalRecorderImpl) shellInForeground() bool {
+	if tr.ptmx == nil || tr.cmd == nil || tr.cmd.Process == nil {
+		return true
+	}
+	conn, err := tr.ptmx.SyscallConn() // not Fd(): that would make the file blocking
+	if err != nil {
+		return true
+	}
+	pgrp, ok := 0, false
+	_ = conn.Control(func(fd uintptr) {
+		if g, err := unix.IoctlGetInt(int(fd), unix.TIOCGPGRP); err == nil {
+			pgrp, ok = g, true
+		}
+	})
+	return !ok || pgrp == tr.cmd.Process.Pid
 }

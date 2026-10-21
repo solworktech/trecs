@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -44,13 +45,30 @@ func (e *APIError) Error() string {
 }
 
 // NormalizeServer checks a server address and trims it to scheme://host[/path].
-func NormalizeServer(raw string) (string, error) {
+func NormalizeServer(raw string) (string, error) { return NormalizeServerOpt(raw, false) }
+
+// NormalizeServerOpt is NormalizeServer, with allowInsecure saying that a plain http:// address may be used for a server that is
+// not on this machine (-allow-insecure-endpoint): the password and the session cookie then cross the network in the clear.
+func NormalizeServerOpt(raw string, allowInsecure bool) (string, error) {
 	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
 		return "", fmt.Errorf("%q does not include a schema: use something like https://trecs.example.com", raw)
 	}
+	if u.Scheme == "http" && !allowInsecure && !isLoopback(u.Hostname()) {
+		// the password and the session cookie would cross the network in the clear
+		return "", fmt.Errorf("%q is not encrypted: use https:// (http:// is accepted only for a server on this machine, or with -allow-insecure-endpoint)", raw)
+	}
 	return raw, nil
+}
+
+// isLoopback says whether a host name is this machine: localhost or a loopback address.
+func isLoopback(host string) bool {
+	if strings.EqualFold(host, "localhost") || strings.HasSuffix(strings.ToLower(host), ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // Client talks to one trecs server, with the cookies of a login if it has them.
@@ -61,8 +79,11 @@ type Client struct {
 }
 
 // New returns a client for a server address (see NormalizeServer).
-func New(server string) (*Client, error) {
-	s, err := NormalizeServer(server)
+func New(server string) (*Client, error) { return NewOpt(server, false) }
+
+// NewOpt is New, allowing a plain http:// server that is not on this machine if allowInsecure.
+func NewOpt(server string, allowInsecure bool) (*Client, error) {
+	s, err := NormalizeServerOpt(server, allowInsecure)
 	if err != nil {
 		return nil, err
 	}

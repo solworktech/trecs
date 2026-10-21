@@ -862,3 +862,108 @@ func TestAudioEditsForAChange(t *testing.T) {
 		}
 	}
 }
+
+// ---- a note over the picture --------------------------------------------------------------------------------------------------------
+
+func TestCutOutLeavesThePictureRoundTheBoxes(t *testing.T) {
+	r := imageRect{dcs: "p", pxW: 800, pxH: 320, col: 10, row: 5, cols: 100, rows: 20, recCellW: 8, recCellH: 16, cellW: 8, cellH: 16}
+	area := func(ps []imageRect) (n int) {
+		for _, p := range ps {
+			n += p.cols * p.rows
+		}
+		return
+	}
+	if got := cutOut(r, nil); len(got) != 1 || got[0] != r {
+		t.Errorf("no box, no change: %+v", got)
+	}
+	// a box inside: four pieces round it, and what is left is the picture less the box
+	box := cellBox{x: 40, y: 10, w: 30, h: 6}
+	got := cutOut(r, []cellBox{box})
+	if len(got) != 4 || area(got) != r.cols*r.rows-box.w*box.h {
+		t.Errorf("%d pieces, %d cells (want %d)", len(got), area(got), r.cols*r.rows-box.w*box.h)
+	}
+	for _, p := range got {
+		if p.col < box.x+box.w && p.col+p.cols > box.x && p.row < box.y+box.h && p.row+p.rows > box.y {
+			t.Errorf("%+v is over the box", p)
+		}
+		// each piece is the part of the picture that is in its cells
+		if p.srcCol != p.col-r.col || p.srcRow != p.row-r.row {
+			t.Errorf("%+v takes the picture from the wrong place", p)
+		}
+	}
+	// a box that is not over it, a box across the whole of it, and a box at its corner
+	if got := cutOut(r, []cellBox{{x: 0, y: 0, w: 5, h: 5}}); len(got) != 1 || got[0] != r {
+		t.Errorf("a box elsewhere: %+v", got)
+	}
+	if got := cutOut(r, []cellBox{{x: 0, y: 0, w: 200, h: 100}}); len(got) != 0 {
+		t.Errorf("a box over all of it: %+v", got)
+	}
+	if got := cutOut(r, []cellBox{{x: 10, y: 5, w: 10, h: 4}}); len(got) != 2 || area(got) != r.cols*r.rows-40 {
+		t.Errorf("a corner: %+v", got)
+	}
+	// two boxes
+	if got := cutOut(r, []cellBox{box, {x: 12, y: 6, w: 3, h: 3}}); area(got) != r.cols*r.rows-box.w*box.h-9 {
+		t.Errorf("two boxes: %d cells", area(got))
+	}
+}
+
+func TestAnImageStaysOnShowWhileANoteIsOverItAndTheNoteIsNotCovered(t *testing.T) {
+	var out syncBuf
+	path := filepath.Join(t.TempDir(), "terminal.jsonl")
+	copyFile(t, stretchedFixture(t, 8), path)
+	cmds, err := libtrecs.ParseRecording(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &harness{t: t, sim: tcell.NewSimulationScreen("UTF-8"), done: make(chan error, 1)}
+	h.em = NewEditorMode(libtrecs.NewTerminalPlayer(), cmds, path)
+	h.em.sixel = newSixelPainter(termGraphics{sixel: true, cellW: 8, cellH: 16})
+	h.em.sixel.out = &out
+	h.em.app.SetScreen(h.sim)
+	h.sim.SetSize(120, 40)
+	go func() { h.done <- h.em.Run() }()
+	t.Cleanup(func() {
+		h.em.app.Stop()
+		if err := <-h.done; err != nil {
+			t.Errorf("the test stopped with an error: %v", err)
+		}
+	})
+	h.waitFor("the editor", func() bool { return strings.Contains(h.screen(), "^L Browse") }, 5*time.Second)
+
+	h.addImage(writePNG(t, t.TempDir(), "wide.png", 1200, 600), "00:02", "30")
+	h.pausePlayback()
+	h.onUI(func() { h.em.jumpToTime(4000); h.em.player.Pause() })
+	h.waitFor("the picture", func() (whole bool) {
+		h.onUI(func() { whole = len(h.em.sixel.last) == 1 })
+		return
+	}, 25*time.Second)
+
+	// a centred note comes up over it: the picture is still drawn, round the note
+	h.onUI(func() {
+		h.em.showTimed(&libtrecs.Annotation{Text: "**Downloading Trecs**\n\nhttps://example.com/releases", Placement: libtrecs.TimedPlacementCentered, DurationSeconds: 30})
+	})
+	var pieces []imageRect
+	var boxes []cellBox
+	h.waitFor("the picture round the note", func() (cut bool) {
+		h.onUI(func() {
+			pieces, boxes = append([]imageRect(nil), h.em.sixel.last...), h.em.overlayBoxes()
+			cut = len(pieces) > 1
+		})
+		return
+	}, 5*time.Second)
+	if len(boxes) != 1 {
+		t.Fatalf("%d boxes", len(boxes))
+	}
+	for _, p := range pieces {
+		if b := boxes[0]; p.col < b.x+b.w && p.col+p.cols > b.x && p.row < b.y+b.h && p.row+p.rows > b.y {
+			t.Errorf("a piece of the picture %+v is over the note %+v", p, b)
+		}
+	}
+
+	// dismissed: the whole of it again
+	h.onUI(func() { h.em.hideTimed() })
+	h.waitFor("the whole picture", func() (whole bool) {
+		h.onUI(func() { whole = len(h.em.sixel.last) == 1 })
+		return
+	}, 5*time.Second)
+}

@@ -35,6 +35,13 @@ func readScript(path string) ([]string, error) {
 		if t := strings.TrimSpace(line); t == "" || strings.HasPrefix(t, "#") {
 			continue
 		}
+		// A control character is a keystroke - Ctrl+C, Escape, Ctrl+D - and not text: typed, it would do what the key does,
+		// and it cannot be seen when the file is read to check it. (A tab is text: see keystrokes.)
+		for _, r := range line {
+			if r != '\t' && (r < ' ' || r == 0x7f || (r >= 0x80 && r <= 0x9f)) {
+				return nil, fmt.Errorf("%s has a control character (%U) in %q: it would be typed as a key, and it cannot be seen", path, r, line)
+			}
+		}
 		lines = append(lines, line)
 	}
 	if err := sc.Err(); err != nil {
@@ -45,6 +52,10 @@ func readScript(path string) ([]string, error) {
 	}
 	return lines, nil
 }
+
+// keystrokes is what is typed for a line: a tab is quoted (Ctrl+V), so that the shell takes it for a tab in the command and does not
+// complete a name with it.
+func keystrokes(line string) string { return strings.ReplaceAll(line, "\t", "\x16\t") }
 
 // A shell asks its terminal what it is (fish: primary device attributes, the
 // terminal's version, whether it speaks the kitty keyboard protocol) and waits for
@@ -89,7 +100,10 @@ func (tr *TerminalRecorderImpl) noteOutput(data string) {
 // shell is waiting for more of it - an open quote in fish, which has no PS2 to
 // announce that - and the next line can go in.
 func (tr *TerminalRecorderImpl) waitPrompt(timeout time.Duration, afterLine bool, startedBefore int64) bool {
-	deadline := time.After(timeout)
+	var deadline <-chan time.Time // none: a command takes as long as it takes
+	if timeout > 0 {
+		deadline = time.After(timeout)
+	}
 	if tr.marks {
 		var grace <-chan time.Time
 		if afterLine {
@@ -119,7 +133,9 @@ func (tr *TerminalRecorderImpl) waitPrompt(timeout time.Duration, afterLine bool
 		select {
 		case <-tick.C:
 			quiet := time.Since(time.Unix(0, atomic.LoadInt64(&tr.lastOutput)))
-			if quiet > 600*time.Millisecond && time.Since(start) > 800*time.Millisecond {
+			// quiet is not enough: a command that is running without a word (a copy, a sleep, a question waiting for its answer) is
+			// quiet too, and the next line must not be typed into it. The shell must also be what the terminal is waiting on.
+			if quiet > 600*time.Millisecond && time.Since(start) > 800*time.Millisecond && tr.shellInForeground() {
 				return true
 			}
 		case <-deadline:
@@ -128,6 +144,18 @@ func (tr *TerminalRecorderImpl) waitPrompt(timeout time.Duration, afterLine bool
 			return false
 		}
 	}
+}
+
+// scriptPromptTimeout is added to -command-timeout, and is for the tests to shorten. By default (-command-timeout 0) a command
+// is waited for as long as it runs: it is not interrupted - that could leave a half-done install or a half-written file that
+// running it by hand would not - and nothing is typed while it runs, so a command that waits for input waits, as it would at a
+// keyboard that nobody touches. -command-timeout sets a limit for a job that must end; the shell is then hung up on, as when a terminal is closed.
+var scriptPromptTimeout time.Duration
+
+// abortScript ends a scripted session that cannot go on: the recording is kept as far as it got, and the recorder fails.
+func (tr *TerminalRecorderImpl) abortScript(why string) {
+	tr.fail(why)
+	_ = tr.Stop()
 }
 
 // feedScript types the commands into the shell, then ends the session.
@@ -145,10 +173,10 @@ func (tr *TerminalRecorderImpl) feedScript(lines []string) {
 	enter := func() bool { _, err := tr.ptmx.WriteString("\r"); return err == nil }
 	typeLine := func(line string) bool {
 		if !tr.config.HumanLike {
-			_, err := tr.ptmx.WriteString(line + "\r")
+			_, err := tr.ptmx.WriteString(keystrokes(line) + "\r")
 			return err == nil
 		}
-		for _, r := range line {
+		for _, r := range keystrokes(line) {
 			if _, err := tr.ptmx.WriteString(string(r)); err != nil {
 				return false
 			}
@@ -163,8 +191,11 @@ func (tr *TerminalRecorderImpl) feedScript(lines []string) {
 		return pause(jitter(250, 500)) && enter()
 	}
 
-	if !tr.waitPrompt(20*time.Second, false, 0) {
-		fmt.Fprintln(os.Stderr, "recorder: the shell never showed a prompt")
+	// A line typed into a shell that is not at a prompt goes to whatever is reading: it must not be. So when the shell is not
+	// where the script expects it, the session ends, and says so, instead of typing on.
+	if !tr.waitPrompt(time.Minute, false, 0) {
+		tr.abortScript("the shell never showed a prompt: nothing was typed")
+		return
 	}
 	last := ""
 	for _, line := range lines {
@@ -179,12 +210,13 @@ func (tr *TerminalRecorderImpl) feedScript(lines []string) {
 		if !typeLine(line) {
 			return
 		}
-		if !tr.waitPrompt(2*time.Minute, true, started) {
+		if !tr.waitPrompt(tr.config.CommandTimeout+scriptPromptTimeout, true, started) {
 			select {
 			case <-tr.done:
 				return
 			default:
-				fmt.Fprintf(os.Stderr, "recorder: no prompt after %q; carrying on\n", line)
+				tr.abortScript(fmt.Sprintf("no prompt after %q within %v: the shell was hung up on, and the rest of the file was not typed", line, tr.config.CommandTimeout+scriptPromptTimeout))
+				return
 			}
 		}
 		last = strings.TrimSpace(line)
