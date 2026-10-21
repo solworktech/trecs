@@ -168,9 +168,15 @@ func runRecord(terminal, audio, camera, screen *bool,
 		warnings = n
 	} else if *terminal && !*extras.allowUnmarked && !*extras.noMarks && stdinIsTerminal() {
 		// A person at the keyboard, in a shell whose prompts cannot be marked: the recording will not know its commands. Say so first.
-		if shell := cmp.Or(*terminalCmd, detectShell()); !supportsMarks(shell, false) && !confirmUnmarked(shell, markShellsAvailable(), os.Stdin, os.Stderr) {
-			fmt.Fprintln(os.Stderr, "Aborted; nothing was recorded.")
-			os.Exit(1)
+		if shell := cmp.Or(*terminalCmd, detectShell()); !supportsMarks(shell, false) {
+			use, ok := confirmUnmarked(shell, markShellsAvailable(), os.Stdin, os.Stderr)
+			if !ok {
+				fmt.Fprintln(os.Stderr, "Aborted; nothing was recorded.")
+				os.Exit(1)
+			}
+			if use != "" { // one of the shells that can be recorded with its commands told apart was chosen
+				*terminalCmd = use
+			}
 		}
 	}
 	if *extras.commandsFile != "" && !confirmScript(*extras.commandsFile, os.Stdin, os.Stderr, stdinIsTerminal(), warnings) {

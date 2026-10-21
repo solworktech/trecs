@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unicode/utf8"
@@ -33,6 +33,8 @@ type TerminalRecorderImpl struct {
 	startTime   time.Time
 	frames      chan libtrecs.Frame
 	done        chan struct{}
+	inputDone   chan struct{}  // closed when forwardInput has stopped reading the keyboard
+	inputStop   atomic.Bool    // Stop sets it: the keyboard is the person's again
 	captureDone chan struct{}  // closed when captureAndEchoOutput has read everything the PTY had
 	oldState    *term.State    // Original terminal state (for restoration)
 	sigWinch    chan os.Signal // Window resize signal handler
@@ -246,6 +248,7 @@ func (tr *TerminalRecorderImpl) Start() error {
 
 	// Start goroutine that forwards stdin to PTY (user input)
 	if tr.interactive {
+		tr.inputDone = make(chan struct{})
 		go tr.forwardInput()
 	} else {
 		go tr.feedScript(script)
@@ -329,9 +332,47 @@ func (tr *TerminalRecorderImpl) handleWindowResize() {
 	}
 }
 
-// forwardInput reads from stdin and writes to PTY (user input forwarding)
+// forwardInput reads from stdin and writes to PTY (user input forwarding). It stops when Stop says so, and it must: a reader left
+// blocked in a read of the keyboard takes the first key the person presses after the recording - the answer to "Upload to the Trecs
+// Platform? [Y/n]" - and sends it to a shell that is gone, so that "n" is lost and the Enter after it answers yes. It waits for the
+// keyboard with poll, a tenth of a second at a time, and reads only what is there.
 func (tr *TerminalRecorderImpl) forwardInput() {
-	_, _ = io.Copy(tr.ptmx, os.Stdin) // Ignore bytes written and error - normal when user closes terminal
+	defer close(tr.inputDone)
+	fd := int(os.Stdin.Fd())
+	buf := make([]byte, 4096)
+	for !tr.inputStop.Load() {
+		fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
+		n, err := unix.Poll(fds, 100)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		if err != nil {
+			return
+		}
+		if n == 0 || tr.inputStop.Load() { // nothing yet; or the recording is over, and what is there is not for the shell
+			continue
+		}
+		m, err := os.Stdin.Read(buf)
+		if m > 0 {
+			if _, werr := tr.ptmx.Write(buf[:m]); werr != nil {
+				return // the shell is gone
+			}
+		}
+		if err != nil {
+			return // closed, or end of input
+		}
+	}
+}
+
+// stopInput makes forwardInput let go of the keyboard, and waits for it to.
+func (tr *TerminalRecorderImpl) stopInput() {
+	tr.inputStop.Store(true)
+	if tr.inputDone != nil {
+		select {
+		case <-tr.inputDone:
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 // captureAndEchoOutput reads from PTY, records output, and echoes to stdout
@@ -399,6 +440,8 @@ func (tr *TerminalRecorderImpl) Stop() error {
 	}
 
 	tr.running = false
+
+	tr.stopInput()
 
 	// Stop signal handling
 	signal.Stop(tr.sigWinch)

@@ -181,37 +181,57 @@ func TestWarningsAreYellowAndBlocksRedOnATerminal(t *testing.T) {
 	}
 }
 
-func TestTheInteractiveWarningNamesTheShellAndTheAlternatives(t *testing.T) {
+func TestTheInteractiveWarningNamesTheShellAndNumbersTheAlternatives(t *testing.T) {
 	msg := unmarkedInteractiveWarning("/bin/dash", map[string]string{"bash": "/usr/bin/bash", "fish": "/usr/bin/fish"})
-	for _, want := range []string{"dash cannot be made to mark its prompts", "individual commands", "trecs record -cmd bash", "/usr/bin/fish"} {
+	for _, want := range []string{"dash cannot be made to mark its prompts", "individual commands", "It's recommended that you use one of these shells instead:",
+		"  0  bash    (/usr/bin/bash)", "  1  fish    (/usr/bin/fish)", "  2  Record using dash"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("missing %q in %s", want, msg)
 		}
 	}
-	if strings.Contains(msg, "zsh") {
-		t.Errorf("zsh was not found, but is offered: %s", msg)
+	if strings.Contains(msg, "zsh") || strings.Contains(msg, "told apart") {
+		t.Errorf("zsh was not found, but is offered, or the old wording is back: %s", msg)
 	}
-	if none := unmarkedInteractiveWarning("sh", nil); !strings.Contains(none, "None of bash, zsh or fish") {
+	none := unmarkedInteractiveWarning("sh", nil)
+	if !strings.Contains(none, "None of bash, zsh or fish") || !strings.Contains(none, "  0  Record using sh") {
 		t.Errorf("%s", none)
 	}
 }
 
-func TestOnlyYContinuesInAShellWithoutMarks(t *testing.T) {
-	for in, want := range map[string]bool{"y": true, "Y": true, "n": false, "\n": false, "": false, "x": false} {
+func TestTheNumberChosenInAShellWithoutMarksSaysWhatToRecordIn(t *testing.T) {
+	avail := map[string]string{"bash": "/usr/local/bin/bash", "zsh": "/usr/local/bin/zsh", "fish": "/usr/local/bin/fish"}
+	for _, c := range []struct {
+		in      string
+		avail   map[string]string
+		use     string
+		goOn    bool
+		comment string
+	}{
+		{"0", avail, "/usr/local/bin/bash", true, "the first"},
+		{"1", avail, "/usr/local/bin/zsh", true, "the second"},
+		{"2", avail, "/usr/local/bin/fish", true, "the third"},
+		{"3", avail, "", true, "the shell asked for, after the three"},
+		{"4", avail, "", false, "no such number"},
+		{"y", avail, "", false, "the old answer is not one now"},
+		{"\n", avail, "", false, "Enter"},
+		{"", avail, "", false, "nothing to read"},
+		{"0", nil, "", true, "with no alternative, 0 is the shell asked for"},
+		{"1", nil, "", false, "with no alternative, 1 is nothing"},
+	} {
 		r, w, err := os.Pipe()
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, _ = w.WriteString(in)
+		_, _ = w.WriteString(c.in)
 		_ = w.Close()
 		var out bytes.Buffer
-		got := confirmUnmarked("/bin/sh", nil, r, &out)
+		use, ok := confirmUnmarked("/bin/sh", c.avail, r, &out)
 		_ = r.Close()
-		if got != want {
-			t.Errorf("%q: %v, want %v", in, got, want)
+		if use != c.use || ok != c.goOn {
+			t.Errorf("%q (%s): got %q, %v; want %q, %v", c.in, c.comment, use, ok, c.use, c.goOn)
 		}
-		if !strings.Contains(out.String(), "individual commands") || !strings.Contains(out.String(), "[y/N]") {
-			t.Errorf("%q: %s", in, out.String())
+		if !strings.Contains(out.String(), "individual commands") || !strings.Contains(out.String(), "Input selection number (or any other key to exit)") {
+			t.Errorf("%q: %s", c.in, out.String())
 		}
 	}
 }

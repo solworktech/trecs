@@ -160,27 +160,47 @@ func unmarkedRefusal(shell string, noMarks bool, avail map[string]string) string
 	return b.String()
 }
 
-// unmarkedInteractiveWarning is what a person at the keyboard is told before recording in a shell that has no prompt marks.
+// markShellChoices are the shells of avail that can be offered, in the order they are numbered: bash, zsh, fish.
+func markShellChoices(avail map[string]string) (names, paths []string) {
+	for _, n := range []string{"bash", "zsh", "fish"} {
+		if p, ok := avail[n]; ok {
+			names, paths = append(names, n), append(paths, p)
+		}
+	}
+	return names, paths
+}
+
+// unmarkedInteractiveWarning is what a person at the keyboard is told before recording in a shell that has no prompt marks, with the
+// numbered choices: each shell that can be recorded with its commands told apart (from 0), then recording in the shell that was asked for.
 func unmarkedInteractiveWarning(shell string, avail map[string]string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s cannot be made to mark its prompts, so this recording will not be able to detect individual commands:\n", shellName(shell))
 	b.WriteString("it is kept as one stream of terminal output, and the editor cannot tell where one command ends and the next begins.\n")
-	if len(avail) > 0 {
-		b.WriteString("These shells on this machine can be recorded with their commands told apart:\n")
-		for _, n := range []string{"bash", "zsh", "fish"} {
-			if p, ok := avail[n]; ok {
-				fmt.Fprintf(&b, "  trecs record -cmd %s    (%s)\n", n, p)
-			}
+	names, paths := markShellChoices(avail)
+	if len(names) > 0 {
+		b.WriteString("It's recommended that you use one of these shells instead:\n")
+		for i, n := range names {
+			fmt.Fprintf(&b, "  %d  %s    (%s)\n", i, n, paths[i])
 		}
 	} else {
 		b.WriteString("None of bash, zsh or fish was found on this machine; install one of them to get that (bash is the smallest).\n")
 	}
+	fmt.Fprintf(&b, "  %d  Record using %s\n", len(names), shellName(shell))
 	return b.String()
 }
 
-// confirmUnmarked warns a person who is about to record in a shell without prompt marks, and asks one key: y goes on, anything else
-// (Enter too) does not. It reports whether to go on.
-func confirmUnmarked(shell string, avail map[string]string, in *os.File, out io.Writer) bool {
+// confirmUnmarked warns a person who is about to record in a shell without prompt marks, and asks for one key: the number of a shell to
+// record in instead (its path is returned as use), or the number after those - recording in the shell that was asked for (use is empty).
+// Any other key, Enter too, is not to go on. It reports whether to go on.
+func confirmUnmarked(shell string, avail map[string]string, in *os.File, out io.Writer) (use string, ok bool) {
 	say(out, "\n%s\n", yellow(out, unmarkedInteractiveWarning(shell, avail)))
-	return askKey("Record in "+shellName(shell)+" anyway?", " [y/N] ", in, out) == 'y'
+	_, paths := markShellChoices(avail)
+	key := askKey("Input selection number (or any other key to exit)", ": ", in, out)
+	switch n := int(key) - '0'; {
+	case n >= 0 && n < len(paths):
+		return paths[n], true
+	case n == len(paths):
+		return "", true
+	}
+	return "", false
 }

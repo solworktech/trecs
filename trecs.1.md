@@ -96,8 +96,9 @@ Scripted Recordings (-commands-file):
     if meant. Other things (sudo, &, read, eval...) are listed. ShellCheck is run too, if installed.
   - The shell must mark its prompts (bash, zsh, fish): dash, sh, ksh and -no-marks are refused, and
     the message lists the shells found here (-cmd bash). -allow-unmarked overrides.
-  - Recording by hand in such a shell is allowed after a [y/N] question: the recording cannot tell
-    the commands apart. What the audit warned about is shown in yellow, with a red count before YES.
+  - Recording by hand in such a shell is offered a choice: the shells that can mark prompts are numbered
+    from 0 (press one to record in it), then "Record using <the shell asked for>"; any other key stops. In
+    that last case the recording cannot tell the commands apart. What the audit warned about is shown in yellow, with a red count before YES.
   - The commands are typed into a real shell, with your permissions, as if they were a shell
     script: nothing reviews them. A warning is shown (in yellow) and you must type YES to
     continue; any other input exits without running anything.

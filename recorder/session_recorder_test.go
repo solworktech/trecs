@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/creack/pty"
+
 	libtrecs "trecs/lib"
 )
 
@@ -262,3 +264,66 @@ func TestASessionOfTheTerminalAloneEndsWhenTheShellDoes(t *testing.T) {
 
 func contains(s, sub string) bool { return strings.Contains(s, sub) }
 func mkdirAll(p string) error     { return os.MkdirAll(p, 0o755) }
+
+// The recorder reads the keyboard to give it to the shell. When the recording is over it must let go of it: a read left waiting takes
+// the first key typed afterwards - the answer to "Upload to the Trecs Platform? [Y/n]" - and sends it to a shell that is gone, so an
+// "n" was lost and the Enter after it said yes.
+func TestTheKeyboardIsGivenBackWhenTheRecordingEnds(t *testing.T) {
+	master, slave, err := pty.Open()
+	if err != nil {
+		t.Skip("no pty: ", err)
+	}
+	defer func() { _ = master.Close(); _ = slave.Close() }()
+	oldStdin := os.Stdin
+	os.Stdin = slave
+	defer func() { os.Stdin = oldStdin }()
+
+	tr, err := NewTerminalRecorder(&libtrecs.RecordingConfig{TerminalEnabled: true, TerminalCommand: "/bin/sh"}, filepath.Join(t.TempDir(), "t.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.Start(); err != nil {
+		t.Fatal(err)
+	}
+	go func() { // what the shell prints goes to the terminal's screen: someone has to read it
+		buf := make([]byte, 4096)
+		for {
+			if _, err := master.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+	time.Sleep(300 * time.Millisecond)
+	// typed during the recording, a key reaches the shell: it exits
+	if _, err := master.WriteString("exit\r"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-tr.shellGone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the shell did not get what was typed")
+	}
+	if err := tr.Stop(); err != nil {
+		t.Fatal(err)
+	}
+
+	// after it, the first key is the reader's own (the terminal is cooked again, so the line is ended)
+	if _, err := master.WriteString("n\n"); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan byte, 1)
+	go func() {
+		var b [1]byte
+		if n, _ := slave.Read(b[:]); n == 1 {
+			got <- b[0]
+		}
+	}()
+	select {
+	case k := <-got:
+		if k != 'n' {
+			t.Errorf("read %q, want n", k)
+		}
+	case <-time.After(3 * time.Second):
+		t.Error("the key typed after the recording was taken by the recorder")
+	}
+}
