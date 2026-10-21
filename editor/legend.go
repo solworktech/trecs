@@ -11,7 +11,7 @@ import (
 
 // The legend: the line of keys at the top of a page. It is made of items, and is drawn with as many of them as the width of the
 // terminal has room for - the most useful first (an item's prio: 1 is kept longest) - and always ends with the key that opens the
-// full help menu, which lists everything the page does. The items that are shown keep the order they were given in, so the legend
+// help (preceded by "/ find" on the page that can search), which lists everything the page does. The items that are shown keep the order they were given in, so the legend
 // does not move about as the window is made wider or narrower; the others come back when there is room.
 
 // legendGap is what separates the items.
@@ -28,16 +28,43 @@ func (it legendItem) width() int {
 
 func (it legendItem) tagged() string { return "[yellow]" + it.key + "[white] " + it.label }
 
-// legendHelpText is the item that is always there: the key, and what it opens.
-func legendHelpText(helpKey string) string { return helpKey + " full help menu" }
+// legendFind is the item before the help item on a page that can search.
+var legendFind = legendItem{key: "/", label: "find"}
 
 // fitLegend chooses the items that fit in width, with the help item; shown is in the order of items.
 func fitLegend(items []legendItem, helpKey string, width int) (shown []legendItem, help bool) {
-	helpW := utf8.RuneCountInString(legendHelpText(helpKey))
-	if helpW > width {
-		return nil, false
+	shown, tail := fitLegendTail(items, []legendItem{{key: helpKey, label: "help"}}, width)
+	return shown, len(tail) > 0
+}
+
+// fitLegendTail is fitLegend for a legend that ends with several items (find, then help): all of them if they fit, else the last one -
+// the help - alone, else none.
+func fitLegendTail(items []legendItem, tail []legendItem, width int) (shown []legendItem, kept []legendItem) {
+	for len(tail) > 0 {
+		w := 0
+		for i, t := range tail {
+			if i > 0 {
+				w += len(legendGap)
+			}
+			w += t.width()
+		}
+		if w <= width {
+			kept = tail
+			break
+		}
+		tail = tail[1:] // the help is the last, and the last to go
 	}
-	avail := width - helpW - len(legendGap)
+	if len(kept) == 0 {
+		return nil, nil
+	}
+	tailW := 0
+	for i, t := range kept {
+		if i > 0 {
+			tailW += len(legendGap)
+		}
+		tailW += t.width()
+	}
+	avail := width - tailW - len(legendGap)
 	order := make([]int, len(items))
 	for i := range order {
 		order[i] = i
@@ -62,18 +89,22 @@ func fitLegend(items []legendItem, helpKey string, width int) (shown []legendIte
 			shown = append(shown, it)
 		}
 	}
-	return shown, true
+	return shown, kept
 }
 
 // legendText is the legend as tagged text, for the width.
 func legendText(items []legendItem, helpKey string, width int) string {
-	shown, help := fitLegend(items, helpKey, width)
-	parts := make([]string, 0, len(shown)+1)
+	return legendTextTail(items, []legendItem{{key: helpKey, label: "help"}}, width)
+}
+
+func legendTextTail(items []legendItem, tail []legendItem, width int) string {
+	shown, kept := fitLegendTail(items, tail, width)
+	parts := make([]string, 0, len(shown)+len(kept))
 	for _, it := range shown {
 		parts = append(parts, it.tagged())
 	}
-	if help {
-		parts = append(parts, legendItem{key: helpKey, label: "full help menu"}.tagged())
+	for _, it := range kept {
+		parts = append(parts, it.tagged())
 	}
 	return strings.Join(parts, legendGap)
 }
@@ -83,10 +114,25 @@ type legendBar struct {
 	*tview.Box
 	items   []legendItem
 	helpKey string
+	find    bool // the page can search: "/ find" comes before the help
 }
 
 func newLegendBar(helpKey string, items ...legendItem) *legendBar {
 	return &legendBar{Box: tview.NewBox(), items: items, helpKey: helpKey}
+}
+
+// withFind makes the bar end with "/ find", then the help.
+func (l *legendBar) withFind() *legendBar {
+	l.find = true
+	return l
+}
+
+func (l *legendBar) tail() []legendItem {
+	t := []legendItem{{key: l.helpKey, label: "help"}}
+	if l.find {
+		t = append([]legendItem{legendFind}, t...)
+	}
+	return t
 }
 
 func (l *legendBar) Draw(screen tcell.Screen) {
@@ -95,7 +141,7 @@ func (l *legendBar) Draw(screen tcell.Screen) {
 	if h < 1 || w < 1 {
 		return
 	}
-	tview.Print(screen, legendText(l.items, l.helpKey, w), x, y, w, tview.AlignLeft, tcell.ColorWhite)
+	tview.Print(screen, legendTextTail(l.items, l.tail(), w), x, y, w, tview.AlignLeft, tcell.ColorWhite)
 }
 
 // ---- the legends ---------------------------------------------------------------------------------------------------------------------
@@ -180,6 +226,8 @@ func helpRows(page string) (title string, rows []helpRow) {
 		{"^T", "Show or hide the note of the command being played"},
 		{"^X", "Dismiss a note, a cue card or an annotation that is up"},
 		{"^F / Esc", "Full screen on / off"},
+		{"/", "Find in the commands and their output"},
+		{"Drag", "Paused: select text with the mouse; letting go copies it"},
 		{"?", "This help"},
 		{"Q / ^C", "Quit"},
 	}

@@ -51,9 +51,9 @@ func scanRecording(terminal string) ([]secretHit, error) {
 
 // reportSecrets says what was found, with each secret masked.
 func reportSecrets(w io.Writer, hits []secretHit) {
-	say(w, "Found %d possible secret(s) in the recording:\n", len(hits))
+	say(w, "%s\n", red(w, fmt.Sprintf("Found %d possible secret(s) in the recording:", len(hits))))
 	for _, h := range hits {
-		say(w, "  %s, line %d: %s [%s] %s\n", h.where, h.Line, shortDescription(h.Description), h.RuleID, secrets.Mask(h.Secret))
+		say(w, "%s\n", red(w, fmt.Sprintf("  %s, line %d: %s [%s] %s", h.where, h.Line, shortDescription(h.Description), h.RuleID, secrets.Mask(h.Secret))))
 	}
 }
 

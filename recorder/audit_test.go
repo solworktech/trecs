@@ -10,6 +10,8 @@ import (
 
 	"github.com/creack/pty"
 
+	"trecs/secrets"
+
 	libtrecs "trecs/lib"
 )
 
@@ -211,5 +213,41 @@ func TestOnlyYContinuesInAShellWithoutMarks(t *testing.T) {
 		if !strings.Contains(out.String(), "individual commands") || !strings.Contains(out.String(), "[y/N]") {
 			t.Errorf("%q: %s", in, out.String())
 		}
+	}
+}
+
+func TestFoundSecretsAreRedOnATerminalAndPlainElsewhere(t *testing.T) {
+	hits := []secretHit{{where: "output of command 1", Finding: secrets.Finding{RuleID: "sendgrid-api-token", Description: "Detected a SendGrid API token", Line: 1, Secret: "SG.zzzzzzzzzzzzzzzzzzzzzz.zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzPI"}}}
+	var plain bytes.Buffer
+	reportSecrets(&plain, hits)
+	if strings.Contains(plain.String(), "\x1b[") || !strings.Contains(plain.String(), "Found 1 possible secret(s)") {
+		t.Errorf("plain output: %q", plain.String())
+	}
+
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("TERM", "xterm")
+	ptmx, tty, err := pty.Open()
+	if err != nil {
+		t.Skip("no pty: ", err)
+	}
+	defer func() { _ = ptmx.Close(); _ = tty.Close() }()
+	got := make(chan string)
+	go func() {
+		var b bytes.Buffer
+		buf := make([]byte, 4096)
+		for !strings.Contains(b.String(), "ENDMARK") {
+			n, err := ptmx.Read(buf)
+			b.Write(buf[:n])
+			if err != nil {
+				break
+			}
+		}
+		got <- b.String()
+	}()
+	reportSecrets(tty, hits)
+	say(tty, "ENDMARK")
+	s := <-got
+	if !strings.Contains(s, "\x1b[31mFound 1 possible secret(s)") || !strings.Contains(s, "\x1b[31m  output of command 1, line 1:") {
+		t.Errorf("not red: %q", s)
 	}
 }

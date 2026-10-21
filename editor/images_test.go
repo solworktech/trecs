@@ -37,7 +37,7 @@ func TestTheLegendKeepsTheItemsThatFitAndAlwaysTheHelp(t *testing.T) {
 		if w := tviewWidth(text); w > width {
 			t.Errorf("width %d: the legend is %d wide: %q", width, w, text)
 		}
-		if !strings.HasSuffix(text, "[yellow]?[white] full help menu") {
+		if !strings.HasSuffix(text, "[yellow]?[white] help") {
 			t.Errorf("width %d: ends with %q", width, text[max(0, len(text)-40):])
 		}
 		// what is shown is in the order it was given
@@ -64,15 +64,15 @@ func TestTheLegendKeepsTheItemsThatFitAndAlwaysTheHelp(t *testing.T) {
 		}
 		prev = len(shown)
 	}
-	if shown, _ := fitLegend(items, "?", 16+3+20); len(shown) != 1 || shown[0].key != "Space/P" {
+	if shown, _ := fitLegend(items, "?", 6+3+20); len(shown) != 1 || shown[0].key != "Space/P" {
 		t.Errorf("room for one: %+v", shown)
 	}
-	if shown, help := fitLegend(items, "?", 10); len(shown) != 0 || help {
+	if shown, help := fitLegend(items, "?", 5); len(shown) != 0 || help {
 		t.Errorf("no room for the help: %+v %v", shown, help)
 	}
 	// an item that does not fit does not hold back a shorter one after it
 	two := []legendItem{{"A", "short", 1}, {"B", strings.Repeat("long", 10), 2}, {"C", "ok", 3}}
-	if shown, _ := fitLegend(two, "?", 16+3+7+3+4+3); len(shown) != 2 || shown[1].key != "C" {
+	if shown, _ := fitLegend(two, "?", 6+3+7+3+4); len(shown) != 2 || shown[1].key != "C" {
 		t.Errorf("%+v", shown)
 	}
 }
@@ -96,7 +96,7 @@ func TestTheLegendOnTheScreenFitsTheWidthAndSaysHelp(t *testing.T) {
 	h := newStretched(t, nil)
 	h.pausePlayback()
 	first := func() string { return strings.TrimRight(strings.Split(h.screen(), "\n")[0], " ") }
-	for _, want := range []string{"Space/P Pause/Resume", "^A Timed Annotations", "^G Add Image", "^L Browse Commands", "? full help menu"} {
+	for _, want := range []string{"Space/P Pause/Resume", "^A Timed Annotations", "^G Add Image", "^L Browse Commands", "? help"} {
 		if !strings.Contains(first(), want) {
 			t.Errorf("%q is not in the legend at 120 columns: %q", want, first())
 		}
@@ -104,14 +104,14 @@ func TestTheLegendOnTheScreenFitsTheWidthAndSaysHelp(t *testing.T) {
 	h.sim.SetSize(70, 40)
 	h.waitFor("the legend at 70", func() bool {
 		f := first()
-		return strings.Contains(f, "? full help menu") && !strings.Contains(f, "Timed Annotations")
+		return strings.Contains(f, "? help") && !strings.Contains(f, "Timed Annotations")
 	}, 3*time.Second)
 	if f := first(); len([]rune(f)) > 70 || !strings.Contains(f, "Space/P Pause/Resume") {
 		t.Errorf("the legend at 70 columns: %q", f)
 	}
 	h.sim.SetSize(160, 40)
 	h.waitFor("the legend at 160", func() bool {
-		return strings.Contains(first(), "Q Quit") && strings.Contains(first(), "? full help menu")
+		return strings.Contains(first(), "Q Quit") && strings.Contains(first(), "? help")
 	}, 3*time.Second)
 }
 
@@ -146,7 +146,7 @@ func TestTheFullHelpMenuListsEveryKeyOfThePageAndEscClosesIt(t *testing.T) {
 	// on the editing page ? is a letter to be typed: F1 is the key
 	h.key(tcell.KeyCtrlE)
 	h.waitFor("the edit page", func() bool { return h.front() == "edit" }, 2*time.Second)
-	if !strings.Contains(strings.Split(h.screen(), "\n")[0], "F1 full help menu") {
+	if !strings.Contains(strings.Split(h.screen(), "\n")[0], "F1 help") {
 		t.Errorf("the edit legend: %q", strings.Split(h.screen(), "\n")[0])
 	}
 	h.typeText("?")

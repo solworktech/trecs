@@ -254,7 +254,8 @@ If the recording has a sound (`audio.opus`, or `.mp3`, `.m4a`, `.ogg`, beside it
 | Ctrl+E | Edit the current command |
 | Ctrl+A | Timed annotations: list, edit or add |
 | Ctrl+G | Add an image at this moment (or edit the one on show) |
-| `?` | The full help menu of the page (F1 on the edit screen) |
+| `/` | Find in the commands and what they printed (see below) |
+| `?` | Help: every key of the page (F1 on the edit screen) |
 | Ctrl+T | Show or hide the annotation of the current command |
 | Ctrl+X | Dismiss what is on screen (an annotation, a cue card, a preview) |
 | Ctrl+F | Full screen |
@@ -291,11 +292,15 @@ Ctrl+G on the playback screen (**Add Image**) shows a picture over the terminal 
 
 The recording makes room for it: everything from that moment on is later by the duration, so nothing is covered up - the commands, annotations and the sound after it all move together. The picture is copied into an `images/` folder beside the recording, named after its content (`img-<12 hex>.png`), so the recording does not depend on where the file was; it can be at most 2 MB, and the same picture used twice is stored once. In the list of commands (Ctrl+L) the image is a row of its own under the command it is in, `display image: <file name>` (the name only, not the path), and it can be treated as a command is: Ctrl+E edits it (time, file, duration), Ctrl+D deletes it, Ctrl+P plays from it. Ctrl+E while one is on show edits it as well. Changing or deleting an image closes up the time it made, in the picture and in the sound.
 
+**Find.** `/` opens a box over the commands and what they printed (the web player's search, with the same options). Type at least three characters and press Enter: the matches are listed under their command, each with the line before and after it and the term highlighted. **Regex** (on to begin with) reads the term as a regular expression - Go's, not PCRE: no lookaround or back-references, which are refused with a message rather than quietly matching something else; **Match case** (off) makes case count - without it, case counts only if the term has a capital. Alt+R and Alt+C switch them. Enter on a match goes there, paused, with the line on the screen; Esc closes the box and leaves playback paused.
+
+**Copying.** While a recording plays, the terminal's own selection works as it does anywhere. While playback is paused, has ended, or a box is open, the editor takes the mouse instead: drag over the playback screen, the results of a search or the help to select, and letting go copies. What is copied is what is on the screen, a line per row, without the spaces at the end of a row. (Shift+drag is the terminal's own selection, as ever.) The copy goes to the system clipboard through `wl-copy`, `xclip`, `xsel`, `pbcopy` or `clip.exe`, whichever the machine has, and also to the terminal as an OSC 52 sequence, which is what reaches your clipboard over ssh; GNOME Terminal and other VTE terminals ignore OSC 52, so they need one of the programs. In the text fields of the edit page, Ctrl+Q copies the selection and Ctrl+X cuts it, to the system clipboard as well.
+
 The sound of a recording that has one is changed to match, with `ffmpeg`: silence is put in for the image's duration, and taken out again when an image is shortened or deleted. The audio file is kept beside the original as `<file>.backup`. Without `ffmpeg` the recording is still changed and the editor says that the sound is not, so it will be out of step after the image.
 
 The editor draws the picture where the terminal supports sixel (see below); elsewhere, and for WebP, it shows a card with the file name and size. `trecs upload` sends the images with the recording, and the web player shows them over the terminal for the same moments (the list of commands there has the same `display image:` rows). The Markdown export puts `![display image: name](images/<file>)` at the image's moment.
 
-On a narrow terminal the key line at the top of a page shows only the keys that fit, most useful first, and always ends with `? full help menu`.
+On a narrow terminal the key line at the top of a page shows only the keys that fit, most useful first, and always ends with `/ find` (on the playback page) and `? help`.
 
 ### Pictures (sixel and inline images)
 

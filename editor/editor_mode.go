@@ -106,6 +106,13 @@ type EditorMode struct {
 	timedOverlay   *timedOverlay
 	timedModal     *timedModal
 	timedListModal *timedListModal
+	searchModal    *searchModal
+
+	// Copying with the mouse (see copy.go). The UI goroutine's.
+	sel     selection
+	mouseOn bool                // the editor has the mouse: playback is not going on
+	screen  tcell.Screen        // the screen, as of the last draw
+	copyFn  func(string) string // replaces the clipboard, in tests
 
 	// Images (see images.go) and the full help menu (see legend.go). The UI goroutine's.
 	imageOverlay   *imageOverlay
@@ -213,6 +220,7 @@ func (em *EditorMode) Run() error {
 	em.createCueCardModal() // added as a page of its own when it is opened (Ctrl+A in the command list)
 	em.createTimedModal()
 	em.createTimedListModal() // and this one by Ctrl+A on the playback screen
+	em.createSearchModal()    // and this by / on the same screen
 	em.createImageModal()     // and this by Ctrl+G, or Ctrl+E on an image in the list of commands
 
 	em.previousPage = "playback"
@@ -228,7 +236,8 @@ func (em *EditorMode) Run() error {
 
 	em.app.SetRoot(root, true)
 	em.initSixel()
-	em.app.SetAfterDrawFunc(em.paintPictures)
+	em.app.SetAfterDrawFunc(em.afterDraw)
+	em.app.SetMouseCapture(em.handleMouse)
 	em.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		return em.handleInput(event)
 	})
@@ -542,7 +551,7 @@ func (em *EditorMode) toggleFullScreen() {
 }
 
 func (em *EditorMode) createPlaybackView() tview.Primitive {
-	em.playbackLegend = newLegendBar("?", playbackLegendItems()...)
+	em.playbackLegend = newLegendBar("?", playbackLegendItems()...).withFind()
 
 	em.playbackSeparator = newHorizontalRule()
 
@@ -600,6 +609,11 @@ func (em *EditorMode) createEditView() tview.Primitive {
 	em.annotationField = tview.NewTextArea()
 	em.annotationField.SetWrap(true)
 	em.annotationField.SetBorder(true).SetTitle(" Annotation ")
+
+	// Copy and cut (Ctrl+Q, Ctrl+X) in these go to the system clipboard.
+	for _, ta := range []*tview.TextArea{em.inputField, em.outputField, em.annotationField} {
+		em.shareClipboard(ta)
+	}
 
 	em.annotationDurationField = tview.NewInputField()
 	em.annotationDurationField.SetAcceptanceFunc(tview.InputFieldInteger)
@@ -694,6 +708,7 @@ func (em *EditorMode) refreshCommandList() {
 }
 
 func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
+	em.sel = selection{} // a key puts the selection away
 	// Hard-quit works everywhere
 	if event.Key() == tcell.KeyCtrlC {
 		em.quit()
@@ -739,6 +754,9 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	}
 	if pageName == imageModalPage {
 		return em.handleImageModalInput(event)
+	}
+	if pageName == searchPage {
+		return em.handleSearchInput(event)
 	}
 	if pageName == helpPage {
 		return em.handleHelpInput(event)
@@ -959,6 +977,9 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 				// a jump to command 0 would.
 				em.jumpToCommandForPlayback(0)
 			}
+			return nil
+		case '/':
+			em.openSearch()
 			return nil
 		case '?':
 			em.openHelp("playback")
@@ -1636,6 +1657,7 @@ func (em *EditorMode) runProgressClock(done <-chan struct{}) {
 				em.progressBar.SetProgress(pos, em.totalDurationMs)
 				em.fireTimed(pos) // the timed annotation that its time has come - which may pause playback
 			}
+			em.syncMouse(p.GetPlaybackState())
 			em.updateImage(p.Position()) // the image that is on show at this position - playing, or paused in it
 			em.tickTimed(p.GetPlaybackState() == libtrecs.PlaybackPaused, time.Now())
 		})
