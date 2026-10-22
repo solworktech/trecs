@@ -148,3 +148,131 @@ func TestFishQuoteKeepsAPathInsideItsQuotes(t *testing.T) {
 		t.Errorf("got %s", got)
 	}
 }
+
+// Old fish (3.1) draws its prompt twice at startup, 2 ms apart. The second prompt mark must not be taken for the end of the
+// first command: that left one "the shell is ready" signal over, so that every later command was released as soon as it was
+// entered, and the next line of the script was typed into `apt update` while it ran.
+func TestAPromptDrawnTwiceAtStartDoesNotReleaseTheNextLineWhileACommandRuns(t *testing.T) {
+	if _, err := os.Stat("/bin/bash"); err != nil {
+		t.Skip("no bash")
+	}
+	rc := "PS1='\\[\\e]133;A\\a\\]$ \\[\\e]133;B\\a\\]'\n" + // the person's own marks, so that the recorder's are not added
+		"__once() { [ -n \"$__d\" ] && return; __d=1; (sleep 0.03; printf '\\e]133;B\\a' >/dev/tty) & disown; }\n" +
+		"PS0='\\e]133;C\\a'\n" +
+		"PROMPT_COMMAND=__once\n"
+	dir := t.TempDir()
+	file := filepath.Join(dir, "cmds.txt")
+	if err := os.WriteFile(file, []byte("true\nsleep 4\necho SECOND-LINE\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".bashrc"), []byte(rc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "terminal.jsonl")
+	t.Setenv("HOME", dir)
+	cfg := &libtrecs.RecordingConfig{TerminalEnabled: true, TerminalCommand: "/bin/bash", ScriptFile: file, Cols: 100, Rows: 30, HumanLike: true}
+	tr, err := NewTerminalRecorder(cfg, out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.Start(); err != nil {
+		t.Skipf("cannot start a scripted session here: %v", err)
+	}
+	done := make(chan struct{})
+	go func() { tr.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(40 * time.Second):
+		_ = tr.Stop()
+		t.Fatal("the session did not end")
+	}
+	frames, _, _, err := libtrecs.LoadFrames(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the marks in order, with the time of the frame that held them
+	type mark struct {
+		kind byte
+		at   int64
+	}
+	var marks []mark
+	for _, f := range frames {
+		d := string(f.Data)
+		for i := 0; i+7 < len(d); i++ {
+			if strings.HasPrefix(d[i:], "\x1b]133;") {
+				marks = append(marks, mark{d[i+6], f.Timestamp})
+			}
+		}
+	}
+	// `sleep 4` is the second command started (C). The prompt after it (B) is when the shell is ready; the next line must then be
+	// typed like a person types it (a pause, then the keys: a second or more) before that line is entered (the next C). When the
+	// signal was left over, the line was typed into the running sleep, and entered the moment the shell was back: no time at all.
+	cs, sleepEnd, nextStart := 0, int64(-1), int64(-1)
+	for _, m := range marks {
+		switch {
+		case m.kind == 'C':
+			cs++
+			if cs == 3 && nextStart < 0 {
+				nextStart = m.at
+			}
+		case m.kind == 'B' && cs == 2 && sleepEnd < 0:
+			sleepEnd = m.at
+		}
+	}
+	if sleepEnd < 0 || nextStart < 0 {
+		t.Fatalf("the session is not what the test expects: %v", marks)
+	}
+	if gap := nextStart - sleepEnd; gap < 1000 {
+		t.Errorf("the line after `sleep 4` was entered %d ms after its prompt came back: it was typed into the running command", gap)
+	}
+}
+
+// The same, without -human-like: the first line is entered the moment the first prompt is there, so the second prompt mark
+// arrives after it was entered. The shell must be given the moment it needs to finish drawing before the first line goes in.
+func TestAPromptDrawnTwiceAtStartIsWaitedOutWithoutHumanLike(t *testing.T) {
+	if _, err := os.Stat("/bin/bash"); err != nil {
+		t.Skip("no bash")
+	}
+	rc := "PS1='\\[\\e]133;A\\a\\]$ \\[\\e]133;B\\a\\]'\n" +
+		"__once() { [ -n \"$__d\" ] && return; __d=1; (sleep 0.03; printf '\\e]133;B\\a' >/dev/tty) & disown; }\n" +
+		"PS0='\\e]133;C\\a'\n" +
+		"PROMPT_COMMAND=__once\n"
+	dir := t.TempDir()
+	file := filepath.Join(dir, "cmds.txt")
+	if err := os.WriteFile(file, []byte("read -t 1 x; echo got=$x\necho SECOND-LINE\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".bashrc"), []byte(rc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "terminal.jsonl")
+	t.Setenv("HOME", dir)
+	cfg := &libtrecs.RecordingConfig{TerminalEnabled: true, TerminalCommand: "/bin/bash", ScriptFile: file, Cols: 100, Rows: 30}
+	tr, err := NewTerminalRecorder(cfg, out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.Start(); err != nil {
+		t.Skipf("cannot start a scripted session here: %v", err)
+	}
+	done := make(chan struct{})
+	go func() { tr.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		_ = tr.Stop()
+		t.Fatal("the session did not end")
+	}
+	frames, _, _, err := libtrecs.LoadFrames(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The first command waits a second for a line of input. If the next line of the script was typed while it ran, it reads it.
+	var all strings.Builder
+	for _, f := range frames {
+		all.WriteString(f.Data)
+	}
+	if got := all.String(); strings.Contains(got, "got=echo SECOND-LINE") || !strings.Contains(got, "got=\r\n") {
+		t.Errorf("the next line was typed into the command that was running: %q", got)
+	}
+}

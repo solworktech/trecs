@@ -180,9 +180,21 @@ func (tr *TerminalRecorderImpl) feedScript(lines []string) {
 		}
 	}
 	jitter := func(lo, hi int) time.Duration { return time.Duration(lo+rng.Intn(hi-lo+1)) * time.Millisecond }
-	enter := func() bool { _, err := tr.ptmx.WriteString("\r"); return err == nil }
+	// forgetPrompt drops a "the shell is ready" signal that is already there. It is called just before a line is entered: a prompt
+	// that was drawn before the Enter - old fish (3.1) draws its first one twice, 2 ms apart, and repaints it at other times - is
+	// not the end of the command that the Enter starts. Left in, it released the line after it as soon as this one was entered,
+	// and every later line stayed one step early: the next command was typed into `apt update` while it ran. What shows up after
+	// the Enter is the shell's answer to it, and is kept.
+	forgetPrompt := func() {
+		select {
+		case <-tr.promptCh:
+		default:
+		}
+	}
+	enter := func() bool { forgetPrompt(); _, err := tr.ptmx.WriteString("\r"); return err == nil }
 	typeLine := func(line string) bool {
 		if !tr.config.HumanLike {
+			forgetPrompt()
 			_, err := tr.ptmx.WriteString(keystrokes(line) + "\r")
 			return err == nil
 		}
@@ -207,12 +219,20 @@ func (tr *TerminalRecorderImpl) feedScript(lines []string) {
 		tr.abortScript("the shell never showed a prompt: nothing was typed")
 		return
 	}
+	// Old fish draws its first prompt twice, 2 ms apart: the second mark is not an answer to anything that is typed, and a line
+	// entered in those milliseconds (without -human-like there is no pause) would take it for one. So the shell is given a moment
+	// to finish drawing before the first line goes in.
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
+		if time.Since(time.Unix(0, atomic.LoadInt64(&tr.lastOutput))) > 250*time.Millisecond {
+			break
+		}
+		if !pause(50 * time.Millisecond) {
+			return
+		}
+	}
 	last := ""
 	for _, line := range lines {
-		select { // forget any prompt seen before this line
-		case <-tr.promptCh:
-		default:
-		}
+		forgetPrompt() // any prompt seen before this line
 		if tr.config.HumanLike && !pause(jitter(600, 1000)) {
 			return
 		}
