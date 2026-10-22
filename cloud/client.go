@@ -27,6 +27,12 @@ type APIError struct {
 	Fields  []FieldError
 }
 
+// QuotaExceeded says that the server refused because the account has no room left: its message says what is left and where
+// to ask for more.
+func (e *APIError) QuotaExceeded() bool {
+	return e.Status == http.StatusForbidden && e.Code == "quota_exceeded"
+}
+
 // FieldError names one invalid field of a request.
 type FieldError struct {
 	Field   string `json:"field"`

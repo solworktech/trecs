@@ -20,7 +20,7 @@ import (
 )
 
 func fail(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, red(os.Stderr, "Error:")+" "+format+"\n", args...)
 	os.Exit(1)
 }
 
@@ -289,6 +289,9 @@ func runUpdate(args []string) {
 	start := time.Now()
 	rec, err := cloud.FromSession(session).Revise(ctx, id, u)
 	if err != nil {
+		if quotaRefusal(err) {
+			fail("%v\n\nThe recording is as it was; the local files are untouched. Once there is room (delete recordings you no longer need, or ask for more at the address above), try again.", err)
+		}
 		fail("update failed: %v\nThe recording is as it was; the local files are untouched.", err)
 	}
 	var sent []string
@@ -304,6 +307,13 @@ func runUpdate(args []string) {
 	secs := rec.DurationMs / 1000
 	fmt.Printf("Updated \"%s\" (%d:%02d, %s): %s, in %v\n", rec.Name, secs/60, secs%60, rec.Visibility, strings.Join(sent, ", "), time.Since(start).Round(time.Millisecond))
 	fmt.Printf("Watch: %s\n", watchURL)
+}
+
+// quotaRefusal says whether the server refused because the account has used its storage: its message already says what is left and
+// where to ask for more.
+func quotaRefusal(err error) bool {
+	var ae *cloud.APIError
+	return errors.As(err, &ae) && ae.QuotaExceeded()
 }
 
 func pluralIs(n int) string {
@@ -338,6 +348,9 @@ func uploadFiles(u cloud.Upload, annotationsAsDescription bool) {
 	client := cloud.FromSession(session)
 	rec, err := client.Upload(ctx, u)
 	if err != nil {
+		if quotaRefusal(err) {
+			fail("%v\n\nThe recording is untouched. Once there is room (delete recordings you no longer need, or ask for more),\nupload it with: %s upload %s", err, os.Args[0], u.TerminalPath)
+		}
 		fail("upload failed: %v\nThe recording is untouched; upload it later with: %s upload %s", err, os.Args[0], u.TerminalPath)
 	}
 	secs := rec.DurationMs / 1000

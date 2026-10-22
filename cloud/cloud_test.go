@@ -320,3 +320,22 @@ func TestPlainHTTPIsAcceptedOnlyForThisMachine(t *testing.T) {
 		}
 	}
 }
+
+func TestAQuotaRefusalIsRecognisedAndKeepsTheServersMessage(t *testing.T) {
+	dir := t.TempDir()
+	termPath := filepath.Join(dir, "t.jsonl")
+	_ = os.WriteFile(termPath, []byte(`{"timestamp":1,"data":"x"}`), 0o644)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		writeAPIError(w, 403, "quota_exceeded", "Not enough storage: ask for more at https://trecs.example.com/quota-request")
+	}))
+	defer srv.Close()
+	_, err := FromSession(&Session{Server: srv.URL, Cookies: []Cookie{{Name: "c", Value: "v"}}}).Upload(context.Background(), Upload{TerminalPath: termPath})
+	var ae *APIError
+	if !errors.As(err, &ae) || !ae.QuotaExceeded() || !strings.Contains(err.Error(), "https://trecs.example.com/quota-request") {
+		t.Errorf("%v", err)
+	}
+	if (&APIError{Status: 403, Code: "forbidden"}).QuotaExceeded() {
+		t.Error("another refusal is not a quota one")
+	}
+}

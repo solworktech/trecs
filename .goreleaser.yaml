@@ -16,7 +16,7 @@ builds:
     main: ./recorder
     binary: trecs
     ldflags:
-      - -s -w -X trecs/lib.Version={{ .Tag }}
+      - -s -w -X trecs/lib.Version={{ .Tag }} -X main.defaultServer=https://trecs.run
     goos:
       - linux
       - darwin
