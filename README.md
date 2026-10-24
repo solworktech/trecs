@@ -12,11 +12,11 @@ This repository holds the two command-line tools:
 | Tool | What it does |
 |------|--------------|
 | `trecs` | The recorder. Records a terminal session, plays it back, and uploads it to a Trecs platform. |
-| `trecs-edit` | The editor. Trims and fixes a recording, adds annotations, merges recordings, exports Markdown. |
+| `trecs-edit` | The editor. Trims and fixes a recording, adds annotations, merges recordings, exports Markdown and animated GIFs. |
 
 Recordings are played in the browser by the Trecs web player (see [The player](#the-player)).
 
-[![Trecs](https://trecs.run/v1/recordings/c57450ec-4a30-485b-82d5-ece473fe3c39/preview.gif)](https://trecs.run/watch/c57450ec-4a30-485b-82d5-ece473fe3c39)
+[![Trecs](https://trecs.run/demo/install_trecs.gif)](https://trecs.run/watch/c57450ec-4a30-485b-82d5-ece473fe3c39)
 
 ## Contents
 
@@ -229,7 +229,8 @@ Only what you give is changed. With a `PATH`, the recording's terminal file (and
 
 ```
 trecs-edit view   <file>      View and edit a recording
-trecs-edit export <file>      Export the commands and their output as Markdown
+trecs-edit export md  <file>  Export the commands and their output as Markdown
+trecs-edit export gif <file>  Render the whole recording as an animated GIF
 trecs-edit info   <file>      List the recording's commands
 trecs-edit merge  -o <out> <file> <file> [<file>...]
                               Join recordings into one
@@ -322,10 +323,31 @@ Joins recordings in the order given: each starts where the one before it ended, 
 ### Exporting
 
 ```sh
-trecs-edit export session.jsonl -title "Setting up nginx"
+trecs-edit export md  session.jsonl -title "Setting up nginx"
+trecs-edit export gif session.jsonl
 ```
 
-Writes the commands and their output as Markdown, to `<file>.md` beside the recording, with `-title` as its heading. This is the same transcript `trecs record` writes when a recording ends, and makes a good starting point for written documentation. `trecs-edit info <file>` just prints the commands.
+`export md` writes the commands and their output as Markdown, to `<file>.md` beside the recording, with `-title` as its heading. This is the same transcript `trecs record` writes when a recording ends, and makes a good starting point for written documentation. `trecs-edit info <file>` just prints the commands. (`trecs-edit export <file>`, without `md`, still does this.)
+
+`export gif` renders the whole recording as an animated GIF, to `<file>.gif` (or the file named by `-o`): the terminal as `trecs-edit view` shows it, at the size it was recorded, from the first frame to the last. It is a picture of text, so it is larger than the recording by a long way, and has no sound. A GIF of several minutes is usually a few megabytes. Pictures (sixel, inline images) and timed annotations are not in it.
+
+| Flag | Default | |
+|---|---|---|
+| `-o` | `<file>.gif` | The GIF to write |
+| `-idle` | `2s` | The longest pause shown: a pause of a minute at the prompt is two seconds in the GIF. `0` keeps every pause |
+| `-speed` | `1` | Play the recording this many times faster |
+| `-fps` | `10` | The most pictures a second (1 to 50). Changes closer together than that are shown together |
+| `-hold` | `3s` | How long the last picture stays before the GIF starts again. `0` for no wait |
+| `-loop` | `0` | Repeats after the first play: `0` for ever, `-1` once |
+| `-font-size` | `16` | The size of the text in pixels. The picture is as large as the terminal, in cells of that size |
+| `-font` | built in | A monospaced TrueType or OpenType font. The built-in one is Go Mono. A font with no bold of its own is smeared for bold text |
+| `-fg`, `-bg` | `#c9d1d9`, `#0d1117` | The colours of text the recording does not colour, and of the screen, as `#rrggbb` |
+| `-cols`, `-rows` | as recorded | The terminal's size, for a recording that does not say |
+| `-no-cursor` | | Leave the cursor out |
+
+A GIF has 256 colours. All that a recording uses are kept when they fit (a terminal rarely uses more than a few dozen, and the edges of letters take three more each); otherwise the 255 that stand for them best are chosen. Block elements, box-drawing lines and braille are drawn by the exporter rather than taken from the font, so they meet their neighbours without gaps. A character the font has no glyph for is left blank: `-font` takes a font that has it. To make it smaller, lower `-fps`, raise `-speed`, lower `-idle` or `-font-size`, or trim the recording first.
+
+We recommend using [JetBrainsMonoNerdFontMono-Regular.ttf](./fonts/JetBrainsMonoNerdFontMono-Regular.ttf), as it includes nerd icons, needed for TUI tools like [gh-dash](https://github.com/dlvhdr/gh-dash). You can download additional fonts from the [nerd-fonts repo](https://github.com/ryanoasis/nerd-fonts).
 
 ## The player
 

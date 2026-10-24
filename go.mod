@@ -8,7 +8,8 @@ require (
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/rivo/tview v0.42.0
-	golang.org/x/sys v0.33.0
+	golang.org/x/image v0.47.0
+	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.32.0
 	mvdan.cc/sh/v3 v3.12.0
 )
@@ -18,5 +19,5 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 )

@@ -27,8 +27,13 @@ Commands:
                    View and edit recording. Its sound - audio.opus, .mp3, .m4a,
                    .ogg beside it, or the file given - is played along with it
                    (needs ffmpeg), and follows every pause and jump
-  export <file>    Export the recording's commands and outputs as Markdown
+  export md  <file>
+                   Export the recording's commands and outputs as Markdown
                    (written next to it, as <file>.md; -title sets the heading)
+  export gif <file>
+                   Render the whole recording as an animated GIF (written next
+                   to it, as <file>.gif; -o names it). See "export gif -h" for
+                   the size, speed, font and colours
   info   <file>    Output recording's commands
   merge  -o <out> <file> <file> [<file>...]
                    Join recordings into one, in the order given: each starts
@@ -50,4 +55,8 @@ $ trecs-edit view /path/to/terminal.jsonl -audio /path/to/narration.mp3
 
 Export commands and output as Markdown:
 
-$ trecs-edit export -file /path/to/terminal.jsonl
+$ trecs-edit export md /path/to/terminal.jsonl
+
+Render the recording as an animated GIF, twice as fast, with pauses cut to a second:
+
+$ trecs-edit export gif /path/to/terminal.jsonl -speed 2 -idle 1s
