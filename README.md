@@ -16,7 +16,7 @@ This repository holds the two command-line tools:
 
 Recordings are played in the browser by the Trecs web player (see [The player](#the-player)).
 
-[![Trecs](https://trecs.run/demo/install_trecs2.gif)](https://trecs.run/watch/c57450ec-4a30-485b-82d5-ece473fe3c39)
+[![Trecs](https://trecs.run/v1/recordings/5bb6689c-164b-4ca6-9057-087560147134/social.png)](https://trecs.run/watch/5bb6689c-164b-4ca6-9057-087560147134)
 
 ## Contents
 
