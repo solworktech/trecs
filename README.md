@@ -30,6 +30,14 @@ Recordings are played in the browser by the Trecs web player (see [The player](#
 - [Enterprise licences](#enterprise-licences)
 - [Contributing](#contributing)
 
+## Features
+
+- [Audio: narrate a terminal recording](https://trecs.run/features/audio)
+- [Jump between commands](https://trecs.run/features/command-navigation)
+- [Annotate](https://trecs.run/features/annotations)
+- [In-player Search](https://trecs.run/features/search)
+- [Export as Markdown (free documentation, zero effort)](Turn a terminal session into Markdown)
+
 ## Install
 
 Download a package or archive for your system from the
