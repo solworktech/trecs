@@ -230,7 +230,7 @@ func TestTheNumberChosenInAShellWithoutMarksSaysWhatToRecordIn(t *testing.T) {
 		if use != c.use || ok != c.goOn {
 			t.Errorf("%q (%s): got %q, %v; want %q, %v", c.in, c.comment, use, ok, c.use, c.goOn)
 		}
-		if !strings.Contains(out.String(), "individual commands") || !strings.Contains(out.String(), "Input selection number (or any other key to exit)") {
+		if !strings.Contains(out.String(), "individual commands") || !strings.Contains(out.String(), "Input selection number (or any other key to abort)") {
 			t.Errorf("%q: %s", c.in, out.String())
 		}
 	}

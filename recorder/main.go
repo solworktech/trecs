@@ -29,6 +29,28 @@ type recordExtras struct {
 	allowUnmarked *bool
 }
 
+// defineExtras adds the record options for scripted sessions and shell integration to a set of flags (`record` and `livestream` both have them).
+func defineExtras(fs *flag.FlagSet) *recordExtras {
+	return &recordExtras{
+		commandsFile:  fs.String("commands-file", "", "Run the commands in this file (one per line; blank lines and lines starting with # are skipped) instead of reading the keyboard. Needs no terminal, so it works in CI"),
+		humanLike:     fs.Bool("human-like", false, "With -commands-file: type with the pauses a person makes, between characters and between commands (default: each command is entered at once)"),
+		cols:          fs.Int("cols", 0, "Terminal width for -commands-file (default: this terminal's, or 172 when there is none)"),
+		rows:          fs.Int("rows", 0, "Terminal height for -commands-file (default: this terminal's, or 38 when there is none)"),
+		cmdTimeout:    fs.Duration("command-timeout", 0, "With -commands-file: give up if one command runs longer than this (default: wait for ever, as at a keyboard). The shell is then hung up on, as when a terminal is closed"),
+		noMarks:       fs.Bool("no-marks", false, "Don't start the shell with prompt marks (OSC 133); bash, zsh and fish get them by default"),
+		noUpload:      fs.Bool("no-upload", false, "Don't ask whether to upload the recording when it ends"),
+		overwrite:     fs.Bool("overwrite", false, "Replace a recording of the same name without asking (by default you are asked, or it is an error where there is nobody to ask)"),
+		allowRisky:    fs.Bool("allow-risky", false, "With -commands-file: run the script even if the check of it found something that blocks (a download that is run, a recursive remove of the home directory, a write to a startup file...)"),
+		allowUnmarked: fs.Bool("allow-unmarked", false, "Record in a shell that has no prompt marks (not bash, zsh or fish) without asking. With -commands-file, a line can then be typed as the answer to a `read` of the script; interactively, the recording cannot tell the commands apart"),
+		allowSecrets:  fs.Bool("allow-secrets", false, "With -upload: upload even if secrets were found in the recording (it is checked first; by default you are asked)"),
+	}
+}
+
+// defaultOutputDir is where recordings are kept unless -output says otherwise.
+func defaultOutputDir() string {
+	return filepath.Join(cmp.Or(os.Getenv("XDG_CONFIG_HOME"), os.Getenv("HOME")), "trecs", "recordings")
+}
+
 func main() {
 	recordCmd := flag.NewFlagSet("record", flag.ExitOnError)
 	playCmd := flag.NewFlagSet("play", flag.ExitOnError)
@@ -38,7 +60,7 @@ func main() {
 	recordAudio := recordCmd.Bool("audio", false, "Enable audio recording")
 	recordCamera := recordCmd.Bool("camera", false, "Enable camera recording")
 	recordScreen := recordCmd.Bool("screen", false, "Enable screen recording")
-	outputDir := recordCmd.String("output", filepath.Join(cmp.Or(os.Getenv("XDG_CONFIG_HOME"), os.Getenv("HOME")), "trecs", "recordings"), "Output directory")
+	outputDir := recordCmd.String("output", defaultOutputDir(), "Output directory")
 	sessionName := recordCmd.String("name", "", "Session name, a plain one: no / or .. (default: timestamp YYYY_MM_DD_HH_MM_SS)")
 	terminalCmd := recordCmd.String("cmd", "", "Shell to run (default: the shell this was run from)")
 	audioDevice := recordCmd.String("audio-device", "default", "Audio device")
@@ -50,19 +72,7 @@ func main() {
 	screenSize := recordCmd.String("screen-size", "1920x1080", "Screen resolution")
 	uploadAfter := recordCmd.Bool("upload", false, "Upload the recording when it ends (log in first with `"+os.Args[0]+" login`)")
 	uploadVisibility := recordCmd.String("visibility", "", "Visibility for -upload: private (default), unlisted or public")
-	extras := &recordExtras{
-		commandsFile:  recordCmd.String("commands-file", "", "Run the commands in this file (one per line; blank lines and lines starting with # are skipped) instead of reading the keyboard. Needs no terminal, so it works in CI"),
-		humanLike:     recordCmd.Bool("human-like", false, "With -commands-file: type with the pauses a person makes, between characters and between commands (default: each command is entered at once)"),
-		cols:          recordCmd.Int("cols", 0, "Terminal width for -commands-file (default: this terminal's, or 172 when there is none)"),
-		rows:          recordCmd.Int("rows", 0, "Terminal height for -commands-file (default: this terminal's, or 38 when there is none)"),
-		cmdTimeout:    recordCmd.Duration("command-timeout", 0, "With -commands-file: give up if one command runs longer than this (default: wait for ever, as at a keyboard). The shell is then hung up on, as when a terminal is closed"),
-		noMarks:       recordCmd.Bool("no-marks", false, "Don't start the shell with prompt marks (OSC 133); bash, zsh and fish get them by default"),
-		noUpload:      recordCmd.Bool("no-upload", false, "Don't ask whether to upload the recording when it ends"),
-		overwrite:     recordCmd.Bool("overwrite", false, "Replace a recording of the same name without asking (by default you are asked, or it is an error where there is nobody to ask)"),
-		allowRisky:    recordCmd.Bool("allow-risky", false, "With -commands-file: run the script even if the check of it found something that blocks (a download that is run, a recursive remove of the home directory, a write to a startup file...)"),
-		allowUnmarked: recordCmd.Bool("allow-unmarked", false, "Record in a shell that has no prompt marks (not bash, zsh or fish) without asking. With -commands-file, a line can then be typed as the answer to a `read` of the script; interactively, the recording cannot tell the commands apart"),
-		allowSecrets:  recordCmd.Bool("allow-secrets", false, "With -upload: upload even if secrets were found in the recording (it is checked first; by default you are asked)"),
-	}
+	extras := defineExtras(recordCmd)
 
 	// Play flags
 	playFile := playCmd.String("file", "", "Terminal recording file to play")
@@ -84,7 +94,14 @@ func main() {
 		}
 		runRecord(recordTerminal, recordAudio, recordCamera, recordScreen,
 			outputDir, sessionName, terminalCmd, audioDevice, audioCodec, audioBitrate,
-			cameraDevice, cameraSize, screenDisplay, screenSize, uploadAfter, uploadVisibility, extras)
+			cameraDevice, cameraSize, screenDisplay, screenSize, uploadAfter, uploadVisibility, extras, nil)
+
+	case "livestream":
+		_, err := cloud.LoadSession()
+		if errors.Is(err, cloud.ErrNotLoggedIn) {
+			runLogin(make([]string, 0))
+		}
+		runLivestream(os.Args[2:])
 
 	case "login":
 		runLogin(os.Args[2:])
@@ -129,7 +146,7 @@ func main() {
 func runRecord(terminal, audio, camera, screen *bool,
 	outputDir, sessionName, terminalCmd, audioDevice, audioCodec, audioBitrate,
 	cameraDevice, cameraSize, screenDisplay, screenSize *string,
-	uploadAfter *bool, uploadVisibility *string, extras *recordExtras) {
+	uploadAfter *bool, uploadVisibility *string, extras *recordExtras, live *liveRun) {
 
 	if *extras.humanLike && *extras.commandsFile == "" {
 		fmt.Fprintln(os.Stderr, "Error: -human-like only applies with -commands-file")
@@ -179,7 +196,12 @@ func runRecord(terminal, audio, camera, screen *bool,
 			}
 		}
 	}
-	if *extras.commandsFile != "" && !confirmScript(*extras.commandsFile, os.Stdin, os.Stderr, stdinIsTerminal(), warnings) {
+	if live != nil {
+		if !live.confirm(*extras.commandsFile, warnings) {
+			fmt.Fprintln(os.Stderr, "Aborted; nothing was streamed.")
+			os.Exit(1)
+		}
+	} else if *extras.commandsFile != "" && !confirmScript(*extras.commandsFile, os.Stdin, os.Stderr, stdinIsTerminal(), warnings) {
 		fmt.Fprintln(os.Stderr, "Aborted; nothing was run.")
 		os.Exit(1)
 	}
@@ -219,16 +241,33 @@ func runRecord(terminal, audio, camera, screen *bool,
 		*sessionName = config.SessionName
 	}
 
+	// A live stream is taken now, so that the first record written has somewhere to go (and a stream that is taken by someone else
+	// is found out before anything runs).
+	if live != nil {
+		if err := live.start(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		config.OnRecord = live.sender.Add
+	}
+
 	// Create and start session recorder
 	recorder, err := NewSessionRecorder(config)
 	if err != nil {
+		if live != nil {
+			live.release()
+		}
 		fmt.Fprintf(os.Stderr, "Failed to create recorder: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Print the recording message, then reset cursor to column 0 before entering raw mode
 	// This prevents terminal cursor position confusion when the shell starts
-	fmt.Fprint(os.Stderr, "Recording in progress. Type 'exit' or Ctrl+D to end the recording.\r\n")
+	if live != nil {
+		fmt.Fprintf(os.Stderr, "Streaming to %s in progress. Type 'exit' or Ctrl+D to end the recording.\r\n", live.info.URL)
+	} else {
+		fmt.Fprint(os.Stderr, "Recording in progress. Type 'exit' or Ctrl+D to end the recording.\r\n")
+	}
 
 	// Every signal that ends a process and can be caught ends the recording properly: the terminal is given back, the files are
 	// finished and ffmpeg is told to stop. A recorder that dies of one leaves ffmpeg recording the microphone, the camera or the
@@ -237,6 +276,9 @@ func runRecord(terminal, audio, camera, screen *bool,
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT)
 
 	if err := recorder.Start(); err != nil {
+		if live != nil {
+			live.release()
+		}
 		fmt.Fprintf(os.Stderr, "Failed to start recording: %v\n", err)
 		os.Exit(1)
 	}
@@ -307,7 +349,16 @@ func runRecord(terminal, audio, camera, screen *bool,
 		} else if len(secretHits) > 0 {
 			fmt.Println()
 			reportSecrets(os.Stdout, secretHits)
+			if live != nil {
+				fmt.Println("This is the recording on this machine, which is as it was. What viewers of the stream saw has these masked where the live check recognised them, which is not always.")
+			}
 		}
+	}
+
+	if live != nil {
+		// the server has the recording (or, if the stream stopped early, a part of it); nothing is offered to be uploaded
+		live.finish(metadata.TerminalFile)
+		os.Exit(exitCode)
 	}
 
 	if metadata.TerminalFile != "" && !*extras.noUpload {
@@ -365,6 +416,10 @@ func printUsage() {
 Usage:
   %[1]s record [options]       Record terminal and media streams
   %[1]s play [options]         Play back terminal recording
+  %[1]s livestream create [options]
+                               Make a live stream: a page to watch it at, and an id to stream to
+  %[1]s livestream ID [options]
+                               Record a shell as record does, and stream it live to that page (see Livestream Options)
   %[1]s login [options]        Log in to a %[1]s server (saves the session)
   %[1]s logout                 Log out and forget the saved session
   %[1]s upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
@@ -408,6 +463,20 @@ Record Options:
   Enter uploads it, any other key doesn't). -upload skips the question and uploads; -no-upload skips
   it and doesn't. With -commands-file, a warning is shown and you are asked to type YES to continue
   (when standard input is a terminal).
+
+Livestream Options:
+  livestream create:
+    -name string                  The stream's title (default: a timestamp)
+    -description string           Its description (Markdown)
+    -visibility string            private (default), unlisted or public; the recordings it makes have it too
+  livestream ID (the id, or the address of the stream's page, comes first):
+    -cmd, -commands-file, -human-like, -cols, -rows, -command-timeout, -no-marks, -allow-risky,
+    -allow-unmarked, -output, -name (the recording kept on this machine), -overwrite: as for record
+    -audio                        Not available for live streams yet
+  You are told how much storage you have and asked to type YES before a stream starts. Secrets are
+  masked in what viewers get, as far as they are recognised; the recording on this machine is not
+  changed. If the storage runs out or the connection is lost for good, streaming stops and the
+  recording goes on: upload it later. Each time a stream ends it becomes a recording of its own.
 
 Login Options:
   -server string                  Server address (default: the last login's, else $TRECS_SERVER, else the one built in, if any)

@@ -83,7 +83,7 @@ func letSecretsGo(hits []secretHit, allow bool, in io.Reader, out io.Writer, int
 		say(out, "%s\n", "Not uploaded. Take the secrets out first (trecs-edit), or give -allow-secrets if they are fine to share.")
 		return false
 	}
-	say(out, "%s", yellow(out, "Type 'YES' to upload it anyway, any other input to cancel: "))
+	say(out, "%s", yellow(out, "Type 'YES' to upload it anyway, any other input to abort: "))
 	line, _ := bufio.NewReader(in).ReadString('\n')
 	if strings.TrimSpace(line) == "YES" {
 		return true

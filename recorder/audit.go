@@ -205,7 +205,7 @@ func unmarkedInteractiveWarning(shell string, avail map[string]string) string {
 func confirmUnmarked(shell string, avail map[string]string, in *os.File, out io.Writer) (use string, ok bool) {
 	say(out, "\n%s\n", yellow(out, unmarkedInteractiveWarning(shell, avail)))
 	_, paths := markShellChoices(avail)
-	key := askKey("Input selection number (or any other key to exit)", ": ", in, out)
+	key := askKey("Input selection number (or any other key to abort)", ": ", in, out)
 	switch n := int(key) - '0'; {
 	case n >= 0 && n < len(paths):
 		return paths[n], true

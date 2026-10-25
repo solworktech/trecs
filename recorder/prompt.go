@@ -58,7 +58,11 @@ func confirmScript(file string, in io.Reader, out io.Writer, interactive bool, w
 	if !interactive {
 		return true
 	}
-	say(out, "%s", yellow(out, "Type 'YES' to continue, any other input to exit: "))
+	return askYES(in, out)
+}
+
+// readYES reads a line and reports whether it is exactly YES.
+func readYES(in io.Reader) bool {
 	line, _ := bufio.NewReader(in).ReadString('\n')
 	return strings.TrimSpace(line) == "YES"
 }

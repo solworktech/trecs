@@ -73,6 +73,11 @@ type RecordingConfig struct {
 	HumanLike     bool
 	Cols, Rows    int
 
+	// OnRecord, if set, is called with every record written to the terminal recording (the RecordingMetaLine first, then each
+	// TerminalFrame) after it is written, from the goroutine that reads the shell's output: it must return quickly. A live stream
+	// is fed by it (see recorder/livestream.go); the recording file is the same with or without.
+	OnRecord func(record any)
+
 	// CommandTimeout, with a script (-commands-file), is how long one command may run before the session is given up on. Zero
 	// (the default) is for ever: a command that takes long is let to take it, as it would at a keyboard.
 	CommandTimeout time.Duration

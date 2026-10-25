@@ -27,6 +27,10 @@ right next to your written steps.
 Usage:
   trecs record [options]       Record terminal and media streams
   trecs play [options]         Play back terminal recording
+  trecs livestream create [options]
+                               Make a live stream: a page to watch it at, and an id to stream to
+  trecs livestream ID [options]
+                               Record a shell as record does, and stream it live to that page
   trecs login [options]        Log in to a trecs server (saves the session)
   trecs logout                 Log out and forget the saved session
   trecs upload [options] PATH  Upload a recording (a session directory or terminal.jsonl)
@@ -65,6 +69,20 @@ Record Options:
   -allow-secrets                  With -upload: upload even if secrets were found
   -overwrite                      Replace a recording of the same name without asking
 
+Livestream Options:
+  livestream create:
+    -name string                  The stream's title (default: a timestamp)
+    -description string           Its description (Markdown)
+    -visibility string            private (default), unlisted or public; the recordings it makes have it too
+  livestream ID (the id, or the address of the stream's page, comes first):
+    -cmd, -commands-file, -human-like, -cols, -rows, -command-timeout, -no-marks, -allow-risky,
+    -allow-unmarked, -output, -name (the recording kept on this machine), -overwrite: as for record
+    -audio                        Not available for live streams yet
+  You are told how much storage you have and asked to type YES before a stream starts. Secrets are
+  masked in what viewers get, as far as they are recognised; the recording on this machine is not
+  changed. If the storage runs out or the connection is lost for good, streaming stops and the
+  recording goes on: upload it later. Each time a stream ends it becomes a recording of its own.
+
 Login Options:
   -server string                  Server address (default: the last login's, else $TRECS_SERVER,
                                   else the one built in, if any)
@@ -97,11 +115,11 @@ Scripted Recordings (-commands-file):
   - The shell must mark its prompts (bash, zsh, fish): dash, sh, ksh and -no-marks are refused, and
     the message lists the shells found here (-cmd bash). -allow-unmarked overrides.
   - Recording by hand in such a shell is offered a choice: the shells that can mark prompts are numbered
-    from 0 (press one to record in it), then "Record using <the shell asked for>"; any other key stops. In
+    from 0 (press one to record in it), then "Record using <the shell asked for>"; any other key aborts. In
     that last case the recording cannot tell the commands apart. What the audit warned about is shown in yellow, with a red count before YES.
   - The commands are typed into a real shell, with your permissions, as if they were a shell
     script: nothing reviews them. A warning is shown (in yellow) and you must type YES to
-    continue; any other input exits without running anything.
+    continue; any other input aborts without running anything.
   - When standard input is not a terminal (CI, a pipe) the warning is shown and the recording
     goes ahead.
   - A line is typed only when the shell is back at its prompt: nothing is typed into a running
@@ -153,6 +171,11 @@ $ trecs record -audio
 Replace the narration of an uploaded recording, and rename it (the id is the one in its link):
 
 $ trecs update -name "Better title" -audio narration.mp3 0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d
+
+Make a live stream and stream a shell to it:
+
+$ trecs livestream create -name "Setting up nginx" -visibility unlisted
+$ trecs livestream 0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d
 
 Play back a recording at 2x speed:
 

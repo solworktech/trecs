@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,7 +26,6 @@ import (
 type TerminalRecorderImpl struct {
 	config      *libtrecs.RecordingConfig
 	outputFile  *os.File
-	encoder     *json.Encoder
 	cmd         *exec.Cmd
 	ptmx        *os.File
 	running     bool
@@ -81,14 +81,28 @@ func (tr *TerminalRecorderImpl) ExitCode() (int, bool) {
 }
 
 // write puts one line in the recording file. Once that fails (the disk is full, the file is gone) it is said once, and the
-// session carries on unrecorded rather than complaining at every frame onto the screen the person is working in.
+// session carries on unrecorded rather than complaining at every frame onto the screen the person is working in. What was
+// written is also handed to OnRecord, if there is one (a live stream): the file is written first, and a stream that fails does not
+// touch the recording.
 func (tr *TerminalRecorderImpl) write(v any) {
 	if tr.writeFail {
 		return
 	}
-	if err := tr.encoder.Encode(v); err != nil {
+	var line bytes.Buffer
+	if err := json.NewEncoder(&line).Encode(v); err == nil {
+		_, err = tr.outputFile.Write(line.Bytes())
+		if err != nil {
+			tr.writeFail = true
+			tr.fail(fmt.Sprintf("the recording can no longer be written (%v): everything from here on is missing from it", err))
+			return
+		}
+	} else {
 		tr.writeFail = true
 		tr.fail(fmt.Sprintf("the recording can no longer be written (%v): everything from here on is missing from it", err))
+		return
+	}
+	if tr.config.OnRecord != nil {
+		tr.config.OnRecord(v)
 	}
 }
 
@@ -131,7 +145,6 @@ func NewTerminalRecorder(config *libtrecs.RecordingConfig, outputPath string) (*
 	return &TerminalRecorderImpl{
 		config:     config,
 		outputFile: file,
-		encoder:    json.NewEncoder(file),
 		frames:     make(chan libtrecs.Frame, 100),
 		shellGone:  make(chan struct{}),
 		done:       make(chan struct{}),

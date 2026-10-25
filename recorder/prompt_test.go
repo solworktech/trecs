@@ -15,7 +15,7 @@ func TestOnlyYESConfirmsAScript(t *testing.T) {
 		if got := confirmScript("commands.txt", strings.NewReader(in), &out, true, 0); got != want {
 			t.Errorf("%q: %v, want %v", in, got, want)
 		}
-		if !strings.Contains(out.String(), "commands.txt") || !strings.Contains(out.String(), "Type 'YES' to continue, any other input to exit") {
+		if !strings.Contains(out.String(), "commands.txt") || !strings.Contains(out.String(), "Type 'YES' to continue, any other input to abort") {
 			t.Errorf("the warning and the question should be shown: %q", out.String())
 		}
 	}
