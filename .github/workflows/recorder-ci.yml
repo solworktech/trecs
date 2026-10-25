@@ -11,7 +11,7 @@
 # Settings > Secrets and variables > Actions:
 #   secret    TRECS_PASSWORD   the account's password
 #   variable  TRECS_EMAIL      the account's email
-#   variable  TRECS_SERVER     
+#   variable  TRECS_SERVER
 #
 ---
 name: recorder
@@ -54,7 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: src/go.mod
           cache-dependency-path: src/go.sum
@@ -89,7 +89,8 @@ jobs:
         shell: [fish]
     env:
       SHELL_UNDER_TEST: ${{ matrix.shell }}
-      # secret or variable, whichever you made; here, after `environment:` has been applied
+      # secret or variable, whichever you made; here, after `environment:`
+      # has been applied
       TRECS_SERVER: ${{ secrets.TRECS_SERVER || vars.TRECS_SERVER }}
       TRECS_EMAIL: ${{ secrets.TRECS_EMAIL || vars.TRECS_EMAIL }}
     steps:
@@ -168,8 +169,10 @@ jobs:
           ./gorec "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/record.log"
           { echo "### $RUNNER_OS / $SHELL_UNDER_TEST"; grep -E '^(Uploaded|Watch):' "$RUNNER_TEMP/record.log"; } >> "$GITHUB_STEP_SUMMARY"
 
-      # Reads the recording back with the editor's parser and puts the Markdown it makes in the
-      # job summary: if the commands or outputs are wrong for a shell, it shows up here.
+      # Reads the recording back with the editor's parser and puts the Markdown
+      # it makes in the
+      # job summary: if the commands or outputs are wrong for a shell, it shows
+      # up here.
       - name: Export Markdown with the editor
         shell: bash
         run: |
