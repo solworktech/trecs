@@ -56,8 +56,8 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version-file: src/go.mod
-          cache-dependency-path: src/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
       - name: Build the recorder and the editor
         run: |
