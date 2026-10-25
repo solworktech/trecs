@@ -21,6 +21,12 @@ func TestTheDebugLogIsPrivateAndInTheCacheDirectory(t *testing.T) {
 		t.Fatal("no log")
 	}
 	defer func() { _ = f.Close() }()
+	// the cache directory of the system: $XDG_CACHE_HOME where that is the convention, ~/Library/Caches on macOS
+	base, err := os.UserCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache = base
 	if want := filepath.Join(cache, "trecs", "debug.log"); f.Name() != want {
 		t.Errorf("log at %s, want %s", f.Name(), want)
 	}

@@ -64,9 +64,14 @@ jobs:
           go build -o trecs ./recorder
           go build -o trecs-edit ./editor
           ./trecs help | head -5
+      # macOS ships bash 3.2, which cannot mark its prompts (that needs 4.4):
+      # the scripted-session tests use a newer one
+      - name: A bash the prompt marks work in (macOS)
+        if: runner.os == 'macOS'
+        run: brew install bash
 
       - name: Test
-        run: go test ./... -skip "TestNewVTScreenSizedClampsInput|TestTheDebugLogIsPrivateAndInTheCacheDirectory|TestAScriptedCommandThatWaitsForInputEndsTheSessionAndTheNextLinesAreNotTyped|TestAScriptedSessionEndsWithTheStatusOfItsLastCommand|TestACharacterCutByAReadIsNotBrokenInTheRecording|TestACommandThatTakesLongIsWaitedForAndNotInterrupted|TestAScriptIsNotGivenHistoryExpansion|TestAPromptDrawnTwiceAtStartDoesNotReleaseTheNextLineWhileACommandRuns" -v
+        run: go test ./... -skip "TestNewVTScreenSizedClampsInput" -v
 
       - uses: actions/upload-artifact@v4
         with:

@@ -120,17 +120,27 @@ func supportsMarks(shell string, noMarks bool) bool {
 		return false
 	}
 	switch shellName(shell) {
-	case "bash", "zsh", "fish":
+	case "bash":
+		return bashSupportsMarks(shell) // 4.4 or newer: macOS's 3.2 and some old Linux distributions' bash cannot
+	case "zsh", "fish":
 		return true
 	}
 	return false
+}
+
+// whyUnmarked is a few words on why the recorder cannot make shell mark its prompts, when that is something to say.
+func whyUnmarked(shell string) string {
+	if shellName(shell) == "bash" {
+		return " (it is older than bash 4.4)"
+	}
+	return ""
 }
 
 // markShellsAvailable are the shells on this machine that can be recorded with marks, by name and path.
 func markShellsAvailable() map[string]string {
 	found := map[string]string{}
 	for _, n := range []string{"bash", "zsh", "fish"} {
-		if p, err := exec.LookPath(n); err == nil {
+		if p, err := exec.LookPath(n); err == nil && (n != "bash" || bashSupportsMarks(p)) {
 			found[n] = p
 		}
 	}
@@ -143,7 +153,7 @@ func unmarkedRefusal(shell string, noMarks bool, avail map[string]string) string
 	if noMarks {
 		fmt.Fprintf(&b, "-commands-file with -no-marks: the prompt marks are what tell the recorder that %s is ready for the next line.\n", shellName(shell))
 	} else {
-		fmt.Fprintf(&b, "-commands-file in %s: this shell cannot be made to mark its prompts, so the recorder cannot tell when it is ready for the next line,\n"+
+		fmt.Fprintf(&b, "-commands-file in %s: this shell cannot be made to mark its prompts"+whyUnmarked(shell)+", so the recorder cannot tell when it is ready for the next line,\n"+
 			"and a line of the script can be typed as the answer to a question that a command of the script asks (a `read`, a prompt of the shell's own).\n", shellName(shell))
 	}
 	b.WriteString("Use a shell that supports prompt marks - that is what a scripted recording should be made with:\n")
@@ -174,7 +184,7 @@ func markShellChoices(avail map[string]string) (names, paths []string) {
 // numbered choices: each shell that can be recorded with its commands told apart (from 0), then recording in the shell that was asked for.
 func unmarkedInteractiveWarning(shell string, avail map[string]string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s cannot be made to mark its prompts, so this recording will not be able to detect individual commands:\n", shellName(shell))
+	fmt.Fprintf(&b, "%s cannot be made to mark its prompts"+whyUnmarked(shell)+", so this recording will not be able to detect individual commands:\n", shellName(shell))
 	b.WriteString("it is kept as one stream of terminal output, and the editor cannot tell where one command ends and the next begins.\n")
 	names, paths := markShellChoices(avail)
 	if len(names) > 0 {

@@ -18,9 +18,7 @@ func runScript(t *testing.T, script string) (*TerminalRecorderImpl, string) {
 
 func runScriptWith(t *testing.T, script string, tweak func(*libtrecs.RecordingConfig)) (*TerminalRecorderImpl, string) {
 	t.Helper()
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("no bash")
-	}
+	bash := testBash(t)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "cmds.txt")
 	if err := os.WriteFile(file, []byte(script), 0o600); err != nil {
@@ -29,7 +27,7 @@ func runScriptWith(t *testing.T, script string, tweak func(*libtrecs.RecordingCo
 	out := filepath.Join(dir, "terminal.jsonl")
 	t.Setenv("HOME", dir) // no rc file of the person's
 	cfg := &libtrecs.RecordingConfig{
-		TerminalEnabled: true, TerminalCommand: "/bin/bash", ScriptFile: file, Cols: 100, Rows: 30,
+		TerminalEnabled: true, TerminalCommand: bash, ScriptFile: file, Cols: 100, Rows: 30,
 	}
 	tweak(cfg)
 	tr, err := NewTerminalRecorder(cfg, out)
@@ -153,9 +151,7 @@ func TestFishQuoteKeepsAPathInsideItsQuotes(t *testing.T) {
 // first command: that left one "the shell is ready" signal over, so that every later command was released as soon as it was
 // entered, and the next line of the script was typed into `apt update` while it ran.
 func TestAPromptDrawnTwiceAtStartDoesNotReleaseTheNextLineWhileACommandRuns(t *testing.T) {
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("no bash")
-	}
+	bash := testBash(t)
 	rc := "PS1='\\[\\e]133;A\\a\\]$ \\[\\e]133;B\\a\\]'\n" + // the person's own marks, so that the recorder's are not added
 		"__once() { [ -n \"$__d\" ] && return; __d=1; (sleep 0.03; printf '\\e]133;B\\a' >/dev/tty) & disown; }\n" +
 		"PS0='\\e]133;C\\a'\n" +
@@ -170,7 +166,7 @@ func TestAPromptDrawnTwiceAtStartDoesNotReleaseTheNextLineWhileACommandRuns(t *t
 	}
 	out := filepath.Join(dir, "terminal.jsonl")
 	t.Setenv("HOME", dir)
-	cfg := &libtrecs.RecordingConfig{TerminalEnabled: true, TerminalCommand: "/bin/bash", ScriptFile: file, Cols: 100, Rows: 30, HumanLike: true}
+	cfg := &libtrecs.RecordingConfig{TerminalEnabled: true, TerminalCommand: bash, ScriptFile: file, Cols: 100, Rows: 30, HumanLike: true}
 	tr, err := NewTerminalRecorder(cfg, out)
 	if err != nil {
 		t.Fatal(err)
@@ -230,9 +226,7 @@ func TestAPromptDrawnTwiceAtStartDoesNotReleaseTheNextLineWhileACommandRuns(t *t
 // The same, without -human-like: the first line is entered the moment the first prompt is there, so the second prompt mark
 // arrives after it was entered. The shell must be given the moment it needs to finish drawing before the first line goes in.
 func TestAPromptDrawnTwiceAtStartIsWaitedOutWithoutHumanLike(t *testing.T) {
-	if _, err := os.Stat("/bin/bash"); err != nil {
-		t.Skip("no bash")
-	}
+	bash := testBash(t)
 	rc := "PS1='\\[\\e]133;A\\a\\]$ \\[\\e]133;B\\a\\]'\n" +
 		"__once() { [ -n \"$__d\" ] && return; __d=1; (sleep 0.03; printf '\\e]133;B\\a' >/dev/tty) & disown; }\n" +
 		"PS0='\\e]133;C\\a'\n" +
@@ -247,7 +241,7 @@ func TestAPromptDrawnTwiceAtStartIsWaitedOutWithoutHumanLike(t *testing.T) {
 	}
 	out := filepath.Join(dir, "terminal.jsonl")
 	t.Setenv("HOME", dir)
-	cfg := &libtrecs.RecordingConfig{TerminalEnabled: true, TerminalCommand: "/bin/bash", ScriptFile: file, Cols: 100, Rows: 30}
+	cfg := &libtrecs.RecordingConfig{TerminalEnabled: true, TerminalCommand: bash, ScriptFile: file, Cols: 100, Rows: 30}
 	tr, err := NewTerminalRecorder(cfg, out)
 	if err != nil {
 		t.Fatal(err)

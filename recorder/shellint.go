@@ -127,6 +127,22 @@ func fishMajorVersion(versionOutput string) int {
 	return 0
 }
 
+// bashSupportsMarks reports whether the bash at shell is new enough for the integration (4.4: PS0 is what marks the start of
+// a command's output). macOS ships bash 3.2, and the integration skips itself there - which, without this check, left the
+// recorder believing the shell was marked and waiting for a prompt mark that never came. A bash that can't be asked is
+// treated as a new one.
+func bashSupportsMarks(shell string) bool {
+	out, err := exec.Command(shell, "-c", `echo "${BASH_VERSINFO[0]} ${BASH_VERSINFO[1]}"`).Output()
+	if err != nil {
+		return true
+	}
+	var major, minor int
+	if _, err := fmt.Sscan(string(out), &major, &minor); err != nil {
+		return true
+	}
+	return major > 4 || (major == 4 && minor >= 4)
+}
+
 // shellIntegration is what it takes to start a shell with prompt marks.
 type shellIntegration struct {
 	args    []string
@@ -170,6 +186,10 @@ func setupShellIntegrationFor(shell string, scripted bool) (*shellIntegration, e
 
 	switch kind {
 	case "bash":
+		if !bashSupportsMarks(shell) {
+			cleanup()
+			return nil, nil
+		}
 		rc, err := write("bashrc", "[ -r /etc/bash.bashrc ] && . /etc/bash.bashrc\n[ -r ~/.bashrc ] && . ~/.bashrc\n"+bashIntegration+scriptedOnly(scripted, bashScripted))
 		if err != nil {
 			cleanup()

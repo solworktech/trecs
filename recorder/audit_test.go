@@ -90,7 +90,7 @@ func TestShellCheckDialects(t *testing.T) {
 }
 
 func TestWhichShellsCanBeMarked(t *testing.T) {
-	for shell, want := range map[string]bool{"/bin/bash": true, "zsh": true, "/usr/bin/fish": true, "/bin/sh": false, "dash": false, "ksh": false} {
+	for shell, want := range map[string]bool{testBash(t): true, "zsh": true, "/usr/bin/fish": true, "/bin/sh": false, "dash": false, "ksh": false} {
 		if got := supportsMarks(shell, false); got != want {
 			t.Errorf("%s: %v", shell, got)
 		}
