@@ -40,7 +40,7 @@ env:
 
 defaults:
   run:
-    working-directory: src
+    working-directory: .
 
 jobs:
   build:
@@ -61,9 +61,9 @@ jobs:
 
       - name: Build the recorder and the editor
         run: |
-          go build -o gorec ./recorder
-          go build -o goedit ./editor
-          ./gorec help | head -5
+          go build -o trecs ./recorder
+          go build -o trecs-edit ./editor
+          ./trecs help | head -5
 
       - name: Test
         run: go test ./... -skip TestNewVTScreenSizedClampsInput -v
@@ -72,8 +72,8 @@ jobs:
         with:
           name: bin-${{ runner.os }}
           path: |
-            src/gorec
-            src/goedit
+            trecs
+            trecs-edit
           if-no-files-found: error
 
   record:
@@ -123,10 +123,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: bin-${{ runner.os }}
-          path: src
+          path: .
 
       - name: Make the binaries executable (artifacts do not keep the mode)
-        run: chmod +x gorec goedit
+        run: chmod +x trecs trecs-edit
 
       - name: Install the shell
         shell: bash
@@ -152,7 +152,7 @@ jobs:
           TRECS_PASSWORD: ${{ secrets.TRECS_PASSWORD }}
           TRECS_EMAIL: ${{ secrets.TRECS_EMAIL }}
         run: |
-          printf '%s\n' "$TRECS_PASSWORD" | ./gorec login -server "$TRECS_SERVER" -email "$TRECS_EMAIL" -password-stdin
+          printf '%s\n' "$TRECS_PASSWORD" | ./trecs login -server "$TRECS_SERVER" -email "$TRECS_EMAIL" -password-stdin
 
       - name: Record and upload
         shell: bash
@@ -166,7 +166,7 @@ jobs:
                 -upload -visibility "$VISIBILITY")
           [ -n "$HUMAN_LIKE" ] && args+=("$HUMAN_LIKE")
           [ "$SHELL_UNDER_TEST" != auto ] && args+=(-cmd "$SHELL_UNDER_TEST")
-          ./gorec "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/record.log"
+          ./trecs "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/record.log"
           { echo "### $RUNNER_OS / $SHELL_UNDER_TEST"; grep -E '^(Uploaded|Watch):' "$RUNNER_TEMP/record.log"; } >> "$GITHUB_STEP_SUMMARY"
 
       # Reads the recording back with the editor's parser and puts the Markdown
@@ -178,7 +178,7 @@ jobs:
         run: |
           f=$(find "$RUNNER_TEMP/recordings" -name terminal.jsonl | head -1)
           echo "recording: $f"
-          ./goedit export "$f" -title "$RECORDING_NAME"
+          ./trecs-edit export "$f" -title "$RECORDING_NAME"
           { echo; echo '<details><summary>Markdown export</summary>'; echo; echo '````markdown'; cat "$f.md"; echo '````'; echo; echo '</details>'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep the recording
@@ -192,4 +192,4 @@ jobs:
       - name: Log out
         if: always()
         shell: bash
-        run: ./gorec logout || true
+        run: ./trecs logout || true
