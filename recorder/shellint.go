@@ -27,69 +27,96 @@ import (
 
 const bashIntegration = `
 # --- trecs shell integration (prompt marks, OSC 133) ---
-if [ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }; then
-  case $PS1 in
+# This runs at every prompt of a shell that is the person's own, so it must change nothing they can see or have set:
+#  - aliases are off while it is read, as a function body is expanded when it is read (an alias for printf would be in it),
+#    and what it runs is "builtin": a function of theirs called local or printf is theirs, and not what this means;
+#  - the functions say nothing under set -x (the group's stderr is dropped) and leave the options as they were (local -);
+#  - they are called as "f && :": a command that fails there is not the last of its list, so set -e does not end the shell over
+#    the status of the command before it (false && true leaves 1), an ERR trap does not fire for it, and $? is still that status;
+#  - a PROMPT_COMMAND that is readonly (an audit setup) cannot be wrapped: then nothing is done, and the shell is left alone.
+{ __trecs_xt=$-; set +x; } 2>/dev/null   # nor does loading it show under set -x
+__trecs_alias=$(shopt -p expand_aliases || :); shopt -u expand_aliases
+__trecs_pc=$(builtin declare -p PROMPT_COMMAND 2>/dev/null || :); __trecs_pc=${__trecs_pc#declare }; __trecs_pc=${__trecs_pc%% *}
+if { [ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }; } && [[ $__trecs_pc != -*r* ]]; then
+  case ${PS1-} in
   *'133;A'*) ;;
   *)
     # $? first: D reports the status of the command that just ran and hands it on.
-    __trecs_pre() { local s=$?; printf '\e]133;D;%s\a' "$s"; return "$s"; }
+    __trecs_pre() { { builtin local - s=$?; builtin set +eux; builtin printf '\e]133;D;%s\a' "$s"; return "$s"; } 2>/dev/null; }
     # Last, so a prompt a user's PROMPT_COMMAND rebuilds each time still gets wrapped.
     __trecs_post() {
-      local s=$?
-      case $PS1 in *'133;A'*) ;; *) PS1='\[\e]133;A\a\]'"$PS1"'\[\e]133;B\a\]' ;; esac
-      case $PS2 in *'133;A'*) ;; *) PS2='\[\e]133;A;k=s\a\]'"$PS2"'\[\e]133;B\a\]' ;; esac
-      return "$s"
+      { builtin local - s=$?; builtin set +eux
+        case ${PS1-} in *'133;A'*) ;; *) PS1='\[\e]133;A\a\]'"${PS1-}"'\[\e]133;B\a\]' ;; esac
+        case ${PS2-} in *'133;A'*) ;; *) PS2='\[\e]133;A;k=s\a\]'"${PS2-}"'\[\e]133;B\a\]' ;; esac
+        return "$s"
+      } 2>/dev/null
     }
-    case $PS0 in *'133;C'*) ;; *) PS0='\e]133;C\a'"$PS0" ;; esac
-    if [[ $(declare -p PROMPT_COMMAND 2>/dev/null) == "declare -a"* ]]; then
-      PROMPT_COMMAND=(__trecs_pre "${PROMPT_COMMAND[@]}" __trecs_post)
+    case ${PS0-} in *'133;C'*) ;; *) PS0='\e]133;C\a'"${PS0-}" ;; esac
+    if [[ $(builtin declare -p PROMPT_COMMAND 2>/dev/null || :) == "declare -a"* ]]; then
+      PROMPT_COMMAND=('__trecs_pre && :' "${PROMPT_COMMAND[@]}" '__trecs_post && :')
     else
-      PROMPT_COMMAND="__trecs_pre${PROMPT_COMMAND:+;$PROMPT_COMMAND};__trecs_post"
+      PROMPT_COMMAND="__trecs_pre && :${PROMPT_COMMAND:+;$PROMPT_COMMAND};__trecs_post && :"
     fi
     ;;
   esac
 fi
+builtin eval "$__trecs_alias"; builtin unset __trecs_alias __trecs_pc
+case $__trecs_xt in *x*) builtin unset __trecs_xt; builtin set -x ;; *) builtin unset __trecs_xt ;; esac
 `
 
 const zshIntegration = `
 # --- trecs shell integration (prompt marks, OSC 133) ---
+# Run at every prompt, so it changes nothing the person has set: emulate -L gives the functions zsh's own options (whatever
+# they have set - errexit, nounset, ksh arrays, no prompt_percent... - does not reach them) and puts theirs back after.
+{ __trecs_xt=0; [[ -o xtrace ]] && __trecs_xt=1; unsetopt xtrace } 2>/dev/null   # nor does loading it show under setopt xtrace
 if [[ $PS1 != *'133;A'* ]]; then
-  autoload -Uz add-zsh-hook
+  builtin autoload -Uz add-zsh-hook
   __trecs_precmd() {
-    local s=$?
-    print -rn -- $'\e]133;D;'"$s"$'\a'
-    # Each prompt, as a theme that rebuilds PS1 on every precmd would have it.
-    [[ $PS1 == *'133;A'* ]] || PS1=$'%{\e]133;A\a%}'"$PS1"$'%{\e]133;B\a%}'
-    [[ $PS2 == *'133;A'* ]] || PS2=$'%{\e]133;A;k=s\a%}'"$PS2"$'%{\e]133;B\a%}'
+    { # (the group's stderr is dropped: nothing of this shows under setopt xtrace)
+      local s=$? pp=1
+      [[ -o prompt_percent ]] || pp=0   # with it off, %{ %} would be printed as they are: the marks go in bare
+      emulate -L zsh
+      setopt no_xtrace
+      builtin print -rn -- $'\e]133;D;'"$s"$'\a'
+      # Each prompt, as a theme that rebuilds PS1 on every precmd would have it.
+      local o=$'%{' c=$'%}'
+      (( pp )) || { o=; c=; }
+      [[ $PS1 == *'133;A'* ]] || PS1=${o}$'\e]133;A\a'${c}"$PS1"${o}$'\e]133;B\a'${c}
+      [[ $PS2 == *'133;A'* ]] || PS2=${o}$'\e]133;A;k=s\a'${c}"$PS2"${o}$'\e]133;B\a'${c}
+      return $s
+    } 2>/dev/null
   }
-  __trecs_preexec() { print -rn -- $'\e]133;C\a' }
+  __trecs_preexec() { { emulate -L zsh; setopt no_xtrace; builtin print -rn -- $'\e]133;C\a'; } 2>/dev/null }
   add-zsh-hook precmd __trecs_precmd
   add-zsh-hook preexec __trecs_preexec
 fi
+if (( __trecs_xt )); then unset __trecs_xt; setopt xtrace; else unset __trecs_xt; fi
 `
 
 const fishIntegration = `
 # --- trecs shell integration (prompt marks, OSC 133) ---
+# "builtin" throughout: a function of the person's called printf or string is theirs, and not what this means.
 if not set -q __trecs_marks
     set -g __trecs_marks 1
     # The prompt is run FIRST, and its output is what the marks are wrapped around: anything run before it (even a printf)
     # would reset $status, and a prompt that shows the last command's status would show a success.
-    if functions -q fish_prompt
-        functions -c fish_prompt __trecs_orig_prompt
+    if builtin functions -q fish_prompt
+        builtin functions -c fish_prompt __trecs_orig_prompt
         function fish_prompt
-            set -l __trecs_p (__trecs_orig_prompt)
-            printf '\e]133;A\a%s\e]133;B\a' (string join \n -- $__trecs_p)
+            # collected into one string: a prompt of several lines is several items otherwise, and printf would use its format for each
+            set -l __trecs_p (__trecs_orig_prompt | builtin string collect)
+            builtin printf '\e]133;A\a%s\e]133;B\a' "$__trecs_p"
         end
     else
         function fish_prompt
-            printf '\e]133;A\a\e]133;B\a'
+            builtin printf '\e]133;A\a\e]133;B\a'
         end
     end
     function __trecs_preexec --on-event fish_preexec
-        printf '\e]133;C\a'
+        builtin printf '\e]133;C\a'
     end
     function __trecs_postexec --on-event fish_postexec
-        printf '\e]133;D;%s\a' $status
+        builtin printf '\e]133;D;%s\a' $status
     end
 end
 `
@@ -102,10 +129,10 @@ const fishNativeIntegration = `
 # --- trecs shell integration: the end of the prompt (OSC 133;B); fish 4 marks the rest ---
 if not set -q __trecs_marks
     set -g __trecs_marks 1
-    functions -q fish_prompt; and functions -c fish_prompt __trecs_orig_prompt
+    builtin functions -q fish_prompt; and builtin functions -c fish_prompt __trecs_orig_prompt
     function fish_prompt
-        functions -q __trecs_orig_prompt; and __trecs_orig_prompt
-        printf '\e]133;B\a'
+        builtin functions -q __trecs_orig_prompt; and __trecs_orig_prompt
+        builtin printf '\e]133;B\a'
     end
 end
 `

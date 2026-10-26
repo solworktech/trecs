@@ -11,7 +11,7 @@ import (
 func TestTheStartWarningSaysWhatIsLeft(t *testing.T) {
 	n := int64(512 << 20)
 	got := livestreamWarning(&n)
-	want := "This will start a live stream. We will make an effort to detect and mask any detected secrets, but we cannot guarantee detection. You have 512 MB available on the server, if you exceed this amount, live streaming will end gracefully but you can continue recording, your recording will be saved locally and you upload it later."
+	want := "This will start a live stream. We will make an effort to detect and mask any detected secrets, but we cannot guarantee detection.\nYou have 512 MB available on the server, if you exceed this amount, live streaming will end gracefully but you can continue recording,\nyour recording will be saved locally and you upload it later."
 	if got != want {
 		t.Errorf("%q", got)
 	}

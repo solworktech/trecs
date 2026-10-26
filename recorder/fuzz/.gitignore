@@ -1,0 +1,5 @@
+trecs
+trecs.*
+work*/
+*.json
+__pycache__/

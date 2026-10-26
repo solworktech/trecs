@@ -177,7 +177,9 @@ func (tr *TerminalRecorderImpl) Start() error {
 	tr.interactive = tr.config.ScriptFile == ""
 
 	// Set stdin to raw mode so special keys (Tab, Ctrl+R, etc.) are forwarded to PTY
+	var outer *termSettings // the person's terminal as it is, before it is made raw: the shell's gets the same
 	if tr.interactive {
+		outer = readTermios(os.Stdin)
 		oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 		if err != nil {
 			return fmt.Errorf("failed to set terminal to raw mode: %w", err)
@@ -220,8 +222,12 @@ func (tr *TerminalRecorderImpl) Start() error {
 
 	// Use pty.Start which creates PTY and properly sets up process group and TTY control
 	tr.cmd.Env = append(tr.cmd.Env, shellEnv...)
-	ptmx, err := pty.Start(tr.cmd)
+	ptmx, err := startShell(tr.cmd, outer, func(p *os.File) {
+		tr.ptmx = p
+		_, _, _ = tr.setWindowSize() // before the shell runs; the size is read again below, for the recording's first line
+	})
 	if err != nil {
+		tr.ptmx = nil
 		if tr.oldState != nil {
 			_ = term.Restore(int(os.Stdin.Fd()), tr.oldState) // Ignore error
 		}

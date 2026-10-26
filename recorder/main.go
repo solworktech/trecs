@@ -148,6 +148,12 @@ func runRecord(terminal, audio, camera, screen *bool,
 	cameraDevice, cameraSize, screenDisplay, screenSize *string,
 	uploadAfter *bool, uploadVisibility *string, extras *recordExtras, live *liveRun) {
 
+	// The echo to standard output is for the person's screen and must never end the session: with nobody asking for SIGPIPE, a
+	// write to a pipe whose reader has gone (`trecs record | tee log`, the tee closed) kills the recorder - and the shell with
+	// it, and leaves the terminal raw. Asked for, the signal is dropped and the write just fails, which the echo ignores. (A
+	// handler, not SIG_IGN: the shell must not start with SIGPIPE ignored.)
+	signal.Notify(make(chan os.Signal, 1), syscall.SIGPIPE)
+
 	if *extras.humanLike && *extras.commandsFile == "" {
 		fmt.Fprintln(os.Stderr, "Error: -human-like only applies with -commands-file")
 		os.Exit(1)
