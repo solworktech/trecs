@@ -842,15 +842,15 @@ func TestAudioEditsForAChange(t *testing.T) {
 	}
 	for name, c := range map[string]struct {
 		old, now libtrecs.Annotation
-		want     []audioEdit
+		want     []libtrecs.AudioEdit
 	}{
-		"longer":    {mk(3000, 4), mk(3000, 9), []audioEdit{{at: 7000, dur: 5000}}},
-		"shorter":   {mk(3000, 4), mk(3000, 1), []audioEdit{{remove: true, at: 4000, dur: 3000}}},
+		"longer":    {mk(3000, 4), mk(3000, 9), []libtrecs.AudioEdit{{At: 7000, Dur: 5000}}},
+		"shorter":   {mk(3000, 4), mk(3000, 1), []libtrecs.AudioEdit{{Remove: true, At: 4000, Dur: 3000}}},
 		"the same":  {mk(3000, 4), mk(3000, 4), nil},
-		"moved":     {mk(3000, 4), mk(8000, 2), []audioEdit{{remove: true, at: 3000, dur: 4000}, {at: 8000, dur: 2000}}},
+		"moved":     {mk(3000, 4), mk(8000, 2), []libtrecs.AudioEdit{{Remove: true, At: 3000, Dur: 4000}, {At: 8000, Dur: 2000}}},
 		"unchanged": {mk(3000, 4), mk(3000, 4), nil},
 	} {
-		got := audioEditsForChange(c.old, c.now)
+		got := libtrecs.AudioEditsForChange(c.old, c.now)
 		if len(got) != len(c.want) {
 			t.Errorf("%s: %+v", name, got)
 			continue

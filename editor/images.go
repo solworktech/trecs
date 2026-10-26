@@ -547,19 +547,19 @@ func (em *EditorMode) saveImage() {
 
 	var (
 		out   []libtrecs.Command
-		audio []audioEdit
+		audio []libtrecs.AudioEdit
 		done  string
 	)
 	if m.editID == "" {
 		out, err = libtrecs.AddImage(em.commands, img)
-		audio = []audioEdit{{at: ms, dur: int64(seconds) * 1000}}
+		audio = []libtrecs.AudioEdit{{At: ms, Dur: int64(seconds) * 1000}}
 		done = fmt.Sprintf("Image added at %s for %d s.", libtrecs.ClockText(ms), seconds)
 	} else {
 		old, _ := em.imageByID(m.editID)
 		out, err = libtrecs.ReplaceImage(em.commands, m.editID, img)
 		if err == nil {
 			now, _, _ := libtrecs.FindImage(out, m.editID)
-			audio = audioEditsForChange(old, now)
+			audio = libtrecs.AudioEditsForChange(old, now)
 			ms = now.Timestamp
 		}
 		done = fmt.Sprintf("Image changed: %s for %d s.", libtrecs.ClockText(ms), seconds)
@@ -587,7 +587,7 @@ func (em *EditorMode) saveImage() {
 
 // commitImageChange makes the new commands the recording's, writes it, and then does what the sound needs. If the recording cannot be
 // written everything stays as it was, and the modal says why.
-func (em *EditorMode) commitImageChange(out []libtrecs.Command, host int, ts int64, done string, audio []audioEdit, show bool) {
+func (em *EditorMode) commitImageChange(out []libtrecs.Command, host int, ts int64, done string, audio []libtrecs.AudioEdit, show bool) {
 	prev := em.commands
 	em.commands = out
 	em.editedCommands[host] = true
@@ -645,7 +645,7 @@ func (em *EditorMode) deleteImage(id string) {
 		em.player.Pause()
 	}
 	em.commitImageChange(out, host, 0, fmt.Sprintf("Image %s (at %s) deleted.", imageLabelName(old), libtrecs.ClockText(old.Timestamp)),
-		[]audioEdit{{remove: true, at: old.Timestamp, dur: libtrecs.ImageDurationMs(old)}}, false)
+		[]libtrecs.AudioEdit{{Remove: true, At: old.Timestamp, Dur: libtrecs.ImageDurationMs(old)}}, false)
 	if !em.pages.HasPage(imageModalPage) {
 		em.app.SetFocus(em.playbackView)
 	}
