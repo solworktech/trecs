@@ -29,6 +29,11 @@ Commands:
                    to it, as <file>.gif; -o names it). See "export gif -h" for
                    the size, speed, font and colours
   info   <file>    Output recording's commands
+  -idle-trim <duration> <file>
+                   Cut the recording's long pauses down to the duration (as 3s
+                   or 500ms; 2s is what the GIF shows) and write it back: the
+                   recording as it was is kept as <file>.backup, its sound is cut
+                   to match (needs ffmpeg), and -o names a different file to write
   merge  -o <out> <file> <file> [<file>...]
                    Join recordings into one, in the order given: each starts
                    where the one before it ended (-gap ms of pause, default 1000,
@@ -76,6 +81,12 @@ func main() {
 		return
 	case "view", "info":
 	default:
+		if name := strings.TrimLeft(cmd, "-"); strings.HasPrefix(cmd, "-") && (name == "idle-trim" || strings.HasPrefix(name, "idle-trim=")) {
+			if err := runIdleTrim(os.Args[1:]); err != nil {
+				fatalf("%v", err)
+			}
+			return
+		}
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n%s", cmd, usage)
 		os.Exit(1)
 	}
@@ -258,5 +269,73 @@ func runMerge(args []string) error {
 		return err
 	}
 	fmt.Printf("Merged %d recordings into %s\n", len(files), *out)
+	return nil
+}
+
+// runIdleTrim is `-idle-trim 3s <file>`: the pauses of the recording longer than that are cut down to it, in the file (the recording as
+// it was is kept beside it as <file>.backup), and in its sound. The flags and the file may come in any order.
+func runIdleTrim(args []string) error {
+	flags := flag.NewFlagSet("idle-trim", flag.ContinueOnError)
+	limit := flags.Duration("idle-trim", libtrecs.DefaultIdleTrim, "longest pause to keep, as 2s or 500ms: longer pauses are cut down to it")
+	out := flags.String("o", "", "write the trimmed recording to this file, and leave the recording as it is (not for one that has sound)")
+	audioFlag := flags.String("audio", "", "the recording's sound, cut to match (default: audio.opus - or .mp3, .m4a, .ogg... - beside the recording)")
+	var files []string
+	for len(args) > 0 {
+		if err := flags.Parse(args); err != nil {
+			return fmt.Errorf("failed to parse flags: %w", err)
+		}
+		args = flags.Args()
+		if len(args) > 0 {
+			files, args = append(files, args[0]), args[1:]
+		}
+	}
+	if len(files) != 1 {
+		return fmt.Errorf("one recording is required: %s -idle-trim 3s <file>", os.Args[0])
+	}
+	file := files[0]
+	if err := libtrecs.CheckIdleTrim(*limit); err != nil {
+		return err
+	}
+	if fi, err := os.Stat(file); err != nil || fi.IsDir() {
+		return fmt.Errorf("cannot access recording file: %s", file)
+	}
+	sound := *audioFlag
+	if sound == "" {
+		sound = recordingAudio(file)
+	} else if fi, err := os.Stat(sound); err != nil || fi.IsDir() {
+		return fmt.Errorf("cannot read the audio file: %s", sound)
+	}
+	target, backup := file, file+".backup"
+	if *out != "" {
+		if sound != "" {
+			return fmt.Errorf("the recording has sound (%s), which goes with it where it is: trim it in place, or move the recording and its sound together first", sound)
+		}
+		if err := libtrecs.CopyFile(file, *out); err != nil {
+			return fmt.Errorf("the copy to %s could not be made: %w", *out, err)
+		}
+		// the recording as it is stays where it is, so the copy needs no backup of its own
+		tmp, err := os.MkdirTemp("", "trecs-idle-*")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = os.RemoveAll(tmp) }()
+		target, backup = *out, filepath.Join(tmp, "before")
+	}
+	res, err := libtrecs.TrimIdle(target, backup, sound, *limit)
+	if err != nil {
+		return err
+	}
+	if res.Pauses == 0 {
+		fmt.Printf("No pause is longer than %s: %s is as it was.\n", *limit, target)
+		return nil
+	}
+	fmt.Printf("Cut %s from %d long pauses: %s is now %s (it was %s).\n",
+		res.Removed.Round(time.Millisecond), res.Pauses, target, res.After.Round(time.Millisecond), res.Before.Round(time.Millisecond))
+	if *out == "" {
+		fmt.Printf("The recording as it was: %s\n", res.BackupPath)
+	}
+	if res.AudioBackup != "" {
+		fmt.Printf("The sound was cut to match; as it was: %s\n", res.AudioBackup)
+	}
 	return nil
 }

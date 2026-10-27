@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"image/gif"
 	"os"
 	"path/filepath"
@@ -87,4 +88,71 @@ func TestExportSaysWhatIsWrong(t *testing.T) {
 	if err := runExport([]string{"gif", f, "-fps", "99"}); err == nil || !strings.Contains(err.Error(), "frames a second") {
 		t.Errorf("-fps 99: %v", err)
 	}
+}
+
+func TestIdleTrimCutsThePausesInPlaceAndKeepsABackup(t *testing.T) {
+	f := pausedRecording(t, t.TempDir())
+	before, _ := os.ReadFile(f)
+	if err := runIdleTrim([]string{"-idle-trim", "1s", f}); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(f + ".backup"); err != nil || string(b) != string(before) {
+		t.Errorf("the backup is not the recording as it was: %v", err)
+	}
+	if after, _ := os.ReadFile(f); string(after) == string(before) {
+		t.Error("the recording was not changed")
+	}
+}
+
+func TestIdleTrimWithOKeepsTheRecordingAsItIs(t *testing.T) {
+	dir := t.TempDir()
+	f, out := pausedRecording(t, dir), filepath.Join(dir, "short.jsonl")
+	before, _ := os.ReadFile(f)
+	if err := runIdleTrim([]string{f, "-idle-trim", "1s", "-o", out}); err != nil { // the file may come first
+		t.Fatal(err)
+	}
+	if after, _ := os.ReadFile(f); string(after) != string(before) {
+		t.Error("the recording was changed")
+	}
+	if got, _ := os.ReadFile(out); string(got) == string(before) || len(got) == 0 {
+		t.Error("the trimmed recording was not written")
+	}
+	if _, err := os.Stat(out + ".backup"); err == nil {
+		t.Error("a backup was left beside the copy")
+	}
+}
+
+func TestIdleTrimNeedsAFileAndASaneLimit(t *testing.T) {
+	f := pausedRecording(t, t.TempDir())
+	for name, args := range map[string][]string{
+		"no file":      {"-idle-trim", "2s"},
+		"two files":    {"-idle-trim", "2s", f, f},
+		"too short":    {"-idle-trim", "10ms", f},
+		"missing file": {"-idle-trim", "2s", f + ".nope"},
+	} {
+		if err := runIdleTrim(args); err == nil {
+			t.Errorf("%s: no error", name)
+		}
+	}
+}
+
+// pausedRecording writes a recording of three commands, 8.5 s of quiet between them, and returns its path.
+func pausedRecording(t *testing.T, dir string) string {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString(`{"type":"meta","width":80,"height":24}` + "\n")
+	for k := 0; k < 3; k++ {
+		s := 1000 + k*10000
+		for _, f := range []struct {
+			at   int
+			data string
+		}{{s, `\u001b]133;A\u0007$ \u001b]133;B\u0007`}, {s + 500, "echo hi"}, {s + 900, `\r\n\u001b]133;C\u0007`}, {s + 1000, `hi\r\n`}, {s + 1500, `\u001b]133;D;0\u0007`}} {
+			fmt.Fprintf(&b, `{"timestamp":%d,"data":"%s"}`+"\n", f.at, strings.ReplaceAll(f.data, `"`, `\"`))
+		}
+	}
+	path := filepath.Join(dir, "a.jsonl")
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

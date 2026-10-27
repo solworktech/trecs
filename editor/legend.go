@@ -155,6 +155,7 @@ func playbackLegendItems() []legendItem {
 		{"^P/^N", "Prev/Next Command", 6},
 		{"^L", "Browse Commands", 2},
 		{"^F", "Full Screen", 7},
+		{"^Y", "Trim Pauses", 9},
 		{"Q", "Quit", 8},
 	}
 }
@@ -212,7 +213,7 @@ func helpRows(page string) (title string, rows []helpRow) {
 			{"^A", "Add or edit the cue cards of the command in focus"},
 			{"^D", "Delete the image in focus"},
 			{"Esc / ^L", "Close the list"},
-			{"?", "This help"},
+			{"? / F1", "This help"},
 			{"^C", "Quit"},
 		}
 	}
@@ -223,12 +224,13 @@ func helpRows(page string) (title string, rows []helpRow) {
 		{"^E", "Edit the command being played, or the image on show"},
 		{"^A", "Timed annotations: list them, edit one, or add one at this time"},
 		{"^G", "Add an image at this time"},
+		{"^Y", "Cut the long pauses down to a length (writes the recording, and its sound)"},
 		{"^T", "Show or hide the note of the command being played"},
 		{"^X", "Dismiss a note, a cue card or an annotation that is up"},
 		{"^F / Esc", "Full screen on / off"},
 		{"/", "Find in the commands and their output"},
 		{"Drag", "Paused: select text with the mouse; letting go copies it"},
-		{"?", "This help"},
+		{"? / F1", "This help"},
 		{"Q / ^C", "Quit"},
 	}
 }

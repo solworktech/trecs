@@ -122,6 +122,7 @@ type EditorMode struct {
 	soundReport    string      // how the last change of the sound went (the UI goroutine's)
 	lastImageDir   string      // where the last image was chosen from
 	help           *helpModal
+	idleTrim       *idleTrimModal
 	timedLast      int64 // the position of playback when they were last looked at: those since are shown
 	timedShown     bool
 	timedRemaining time.Duration // how long what is up has still to be shown: counted down by the progress clock, while playback is not paused
@@ -222,6 +223,7 @@ func (em *EditorMode) Run() error {
 	em.createTimedListModal() // and this one by Ctrl+A on the playback screen
 	em.createSearchModal()    // and this by / on the same screen
 	em.createImageModal()     // and this by Ctrl+G, or Ctrl+E on an image in the list of commands
+	em.createIdleTrimModal()  // and this by Ctrl+Y
 
 	em.previousPage = "playback"
 
@@ -755,6 +757,9 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	if pageName == imageModalPage {
 		return em.handleImageModalInput(event)
 	}
+	if pageName == idleTrimPage {
+		return em.handleIdleTrimInput(event)
+	}
 	if pageName == searchPage {
 		return em.handleSearchInput(event)
 	}
@@ -879,6 +884,15 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 		em.openImageEntry()
+		return nil
+	}
+	// Ctrl+Y cuts the long pauses of the recording down to a length.
+	if event.Key() == idleTrimKey {
+		if em.annotationModalVisible || em.cueActive {
+			em.setStatus("Dismiss what is showing first." + em.currentAnnotationHint())
+			return nil
+		}
+		em.openIdleTrim()
 		return nil
 	}
 	// Ctrl+X dismisses what is up: a preview, an annotation that was asked for, or cards that hold playback, or a timed annotation.

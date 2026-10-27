@@ -267,6 +267,8 @@ trecs-edit export gif <file>  Render the whole recording as an animated GIF
 trecs-edit info   <file>      List the recording's commands
 trecs-edit merge  -o <out> <file> <file> [<file>...]
                               Join recordings into one
+trecs-edit -idle-trim <duration> <file>
+                              Cut the long pauses down to the duration
 trecs-edit help
 ```
 
@@ -286,8 +288,9 @@ If the recording has a sound (`audio.opus`, or `.mp3`, `.m4a`, `.ogg`, beside it
 | Ctrl+E | Edit the current command |
 | Ctrl+A | Timed annotations: list, edit or add |
 | Ctrl+G | Add an image at this moment (or edit the one on show) |
+| Ctrl+Y | Cut the long pauses down to a length, and write the recording (see below) |
 | `/` | Find in the commands and what they printed (see below) |
-| `?` | Help: every key of the page (F1 on the edit screen) |
+| `?` or F1 | Help: every key of the page (on the edit screen, where `?` is text, only F1) |
 | Ctrl+T | Show or hide the annotation of the current command |
 | Ctrl+X | Dismiss what is on screen (an annotation, a cue card, a preview) |
 | Ctrl+F | Full screen |
@@ -352,6 +355,18 @@ trecs-edit merge -gap 2000 -o tutorial.jsonl part1.jsonl part2.jsonl
 ```
 
 Joins recordings in the order given: each starts where the one before it ended, after a pause of `-gap` milliseconds (default `1000`), and the screen is cleared. Annotations travel with their frames. The input files are not changed. Record a long tutorial in parts, re-record the part that went wrong, and merge.
+
+### Trimming long pauses
+
+```sh
+trecs-edit -idle-trim 3s session.jsonl
+```
+
+Time at the prompt, or a command that took a minute, is a long pause when the recording is played. `-idle-trim` cuts every pause longer than the duration (`3s`, `500ms`, `1m`; at least 100 ms) down to it, and moves everything after each one earlier by what was cut: the commands, the timed annotations, the images. How a command is paced inside itself is not changed, and the time an image is on show is not a pause. The recording is rewritten in place and the original is kept as `<file>.backup`, as for any other change; `-o other.jsonl` writes the trimmed recording to another file and leaves the first alone (not for a recording that has a sound, which goes with it where it is). Run again with the same duration, it finds nothing to cut.
+
+A sound beside the recording (`audio.opus`, `.mp3`, `.m4a`, `.ogg`; `-audio` names it) is cut at the same places, with `ffmpeg`, so that it stays with the picture; its original is kept as `<audio>.backup`. If `ffmpeg` is missing, nothing is changed.
+
+In the editor, Ctrl+Y on the playback screen does the same: a dialog explains it and asks for the duration (`2s` to begin with; a plain number is seconds). Enter writes the recording at once. Changes that are staged but not written (a command deleted, a field edited) have to be written, or discarded, first.
 
 ### Exporting
 

@@ -11,6 +11,7 @@ The editor allows you to:
 - Edit command input and output
 - Delete commands
 - Show an image over the terminal at a moment of the recording (Ctrl+G)
+- Cut the recording's long pauses down to a length (Ctrl+Y, or -idle-trim)
 - Save edited recordings with automatic timestamp compression
 
 Original recordings are backed up before editing.
@@ -35,6 +36,11 @@ Commands:
                    to it, as <file>.gif; -o names it). See "export gif -h" for
                    the size, speed, font and colours
   info   <file>    Output recording's commands
+  -idle-trim <duration> <file>
+                   Cut the recording's long pauses down to the duration (as 3s
+                   or 500ms; 2s is what the GIF shows) and write it back: the
+                   recording as it was is kept as <file>.backup, its sound is cut
+                   to match (needs ffmpeg), and -o names a different file to write
   merge  -o <out> <file> <file> [<file>...]
                    Join recordings into one, in the order given: each starts
                    where the one before it ended (-gap ms of pause, default 1000,
