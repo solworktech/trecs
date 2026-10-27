@@ -1,4 +1,5 @@
-# Builds the recorder and the editor on Linux and macOS, then makes a real
+# Builds the recorder and the editor on Linux and macOS, runs the transparency
+# fuzzer and the fault-injection suite (recorder/fuzz) on each, then makes a real
 # recording on each:
 # logs in to a trecs server, has the recorder type a file of commands
 # into a shell
@@ -31,6 +32,16 @@ name: recorder
         type: choice
         options: [unlisted, private, public]
         default: unlisted
+      fuzz_seeds:
+        description: "Seeds for the transparency fuzzer, N-M (each seed is a session in every shell, about 40 s each)"
+        default: "1-12"
+      fuzz_shells:
+        description: "Shells for the transparency fuzzer"
+        default: "bash,zsh,fish"
+      fuzz_strict:
+        description: "Fail on any difference the fuzzer finds, including the cosmetic ones (default: only the serious ones)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -80,6 +91,102 @@ jobs:
             trecs
             trecs-edit
           if-no-files-found: error
+
+  # Does the recorder only record? recorder/fuzz runs the same random sessions
+  # in a shell on a pseudo-terminal with and without the recorder and compares
+  # them, then injects faults (signals, a full disk, a dead stdout...). No server
+  # or secrets are needed, so this job has no `environment:`.
+  # macOS: the system bash is 3.2 and cannot mark its prompts, so the harness is
+  # given a newer one (TRECS_FUZZ_BASH); zsh is the system's, fish comes from brew.
+  fuzz:
+    name: fuzz (${{ matrix.os }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    env:
+      TRECS_BIN: ${{ github.workspace }}/trecs
+      FUZZ_SEEDS: ${{ inputs.fuzz_seeds || '1-12' }}
+      FUZZ_SHELLS: ${{ inputs.fuzz_shells || 'bash,zsh,fish' }}
+      FUZZ_STRICT: ${{ inputs.fuzz_strict && '--strict' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bin-${{ runner.os }}
+          path: .
+
+      - name: Make the binaries executable (artifacts do not keep the mode)
+        run: chmod +x trecs trecs-edit
+
+      - name: Install the shells
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux)
+              sudo apt-get update && sudo apt-get install -y zsh fish vim less
+              ;;
+            macOS)
+              brew install bash fish
+              echo "TRECS_FUZZ_BASH=$(brew --prefix)/bin/bash" >> "$GITHUB_ENV"
+              ;;
+          esac
+
+      - name: Which shells these are
+        shell: bash
+        working-directory: recorder/fuzz
+        run: |
+          python3 --version
+          python3 -c 'import ptyrun; [print(k, v) for k, v in ptyrun.SHELLS.items()]'
+          for s in $(python3 -c 'import ptyrun; print(" ".join(ptyrun.SHELLS.values()))'); do
+            echo "$s: $("$s" --version | head -1)"
+          done
+
+      - name: Fuzz the recorder against the bare shell
+        shell: bash
+        working-directory: recorder/fuzz
+        run: |
+          python3 recfuzz.py --seeds "$FUZZ_SEEDS" --shells "$FUZZ_SHELLS" --jobs 2 $FUZZ_STRICT \
+            --work "$RUNNER_TEMP/fuzz-work" --json "$RUNNER_TEMP/fuzz.json" 2>&1 | tee "$RUNNER_TEMP/fuzz.log"
+
+      # runs even if the fuzzer found something: the two are separate questions
+      - name: Inject faults
+        if: always()
+        shell: bash
+        working-directory: recorder/fuzz
+        run: python3 recfaults.py 2>&1 | tee "$RUNNER_TEMP/faults.log"
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### fuzz / $RUNNER_OS (seeds $FUZZ_SEEDS, shells $FUZZ_SHELLS)"
+            echo '```'
+            sed -n '/^==== /,$p' "$RUNNER_TEMP/fuzz.log" 2>/dev/null | head -80
+            echo '```'
+            echo "### faults / $RUNNER_OS"
+            echo '```'
+            sed -n '/^==== summary/,$p' "$RUNNER_TEMP/faults.log" 2>/dev/null | head -60
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # the raw bytes of every session that differed, for the failing seeds
+      - name: Keep the logs and the failing sessions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-${{ runner.os }}
+          path: |
+            ${{ runner.temp }}/fuzz.log
+            ${{ runner.temp }}/fuzz.json
+            ${{ runner.temp }}/faults.log
+            ${{ runner.temp }}/fuzz-work/fail
+          if-no-files-found: warn
 
   record:
     name: record (${{ matrix.os }}, ${{ matrix.shell }})
