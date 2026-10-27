@@ -30,7 +30,7 @@ import time
 import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ptyrun import IS_LINUX, LOCALE, SHELLS, Run, processes_in, tool_path  # noqa: E402
+from ptyrun import IS_LINUX, LOCALE, SHELLS, Run, processes_in, tool_path, undouble_cr  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TRECS = os.environ.get("TRECS_BIN", os.path.join(HERE, "trecs"))
@@ -140,6 +140,10 @@ def write_profile(shell, home, lines):
     elif shell == "zsh":
         base = "PROMPT='P> '\nHISTFILE=$HOME/.zsh_history\nSAVEHIST=100\nHISTSIZE=100\nunsetopt BEEP\nzshexit() { echo $? > \"$OBS/exitstatus\"; }\n"
         open(os.path.join(home, ".zshrc"), "w").write(base + "\n".join(lines) + "\n")
+        # Debian and Ubuntu's /etc/zsh/zshrc runs compinit, which stops to ask about "insecure directories" if one of the directories
+        # it reads from (on a CI runner, several) can be written by the group: the shell then waits for an answer at a prompt that is
+        # not ours. The person's own rc is read after it, so it cannot be turned off from there; .zshenv is read before it.
+        open(os.path.join(home, ".zshenv"), "w").write("skip_global_compinit=1\n")
     else:
         d = os.path.join(home, ".config", "fish")
         os.makedirs(d, exist_ok=True)
@@ -748,6 +752,7 @@ TRAILER = re.compile(rb"\r?\nRecording (?:completed successfully|ended early)!?.
 
 
 def norm(b, root, run_tag):
+    b = undouble_cr(b)  # a CR the OS's pty doubled under load (only where a control run, with no recorder, has seen it do so)
     b = OSC133.sub(b"", b)
     b = BANNER.sub(b"", b)
     b = b.replace(root.encode(), b"@R@")

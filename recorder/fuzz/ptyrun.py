@@ -313,3 +313,57 @@ def processes_in(path):
         if cwd.startswith(path) or path in cmd:
             out.append((int(d), cmd.strip()[:80]))
     return out
+
+
+_CR_DOUBLING = None
+
+
+def pty_cr_doubling():
+    """How many times a bare pty, with no recorder anywhere, turned "\\n" into "\\r\\r\\n" in a few floods read slowly. 0 on Linux. On BSD
+    kernels (macOS) the line discipline can write the "\\r" of an NL -> CRNL translation, find its queue full, and write the "\\r" again
+    when the "\\n" is retried: a stream that is read slower than it is written then has a doubled CR now and then. That is the OS, and a
+    comparison between a bare shell and a recorded one has to know it is there (the recorded shell has two ptys, and is more exposed).
+    Measured once per process, only where it can happen."""
+    global _CR_DOUBLING
+    if _CR_DOUBLING is not None:
+        return _CR_DOUBLING
+    if IS_LINUX:
+        _CR_DOUBLING = 0
+        return 0
+    import pty
+    total = 0
+    for _ in range(3):
+        pid, fd = pty.fork()
+        if pid == 0:
+            os.execv("/bin/sh", ["sh", "-c", "seq 1 400000"])
+        buf = bytearray()
+        end = time.time() + 20
+        while time.time() < end:
+            r, _, _ = select.select([fd], [], [], 0.5)
+            if not r:
+                break
+            try:
+                data = os.read(fd, 700)
+            except OSError:
+                break
+            if not data:
+                break
+            buf += data
+            time.sleep(0.0004)  # slower than the flood: the pty's queue fills
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            os.waitpid(pid, 0)
+        except OSError:
+            pass
+        os.close(fd)
+        total += bytes(buf).count(b"\r\r\n")
+    _CR_DOUBLING = total
+    return total
+
+
+def undouble_cr(b):
+    """b with the CRs that the OS doubled taken out, if this OS is seen to double them (see pty_cr_doubling)."""
+    return b.replace(b"\r\r\n", b"\r\n") if pty_cr_doubling() > 0 else b

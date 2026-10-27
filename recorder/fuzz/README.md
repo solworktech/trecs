@@ -14,6 +14,8 @@ need a fix or two. Not covered by anything here: fish 4 (the container had fish 
   comes from `ps`, `ulimit -a` and `/dev/fd`, and what the system does not tell (signal masks, the session id) is left out of the comparison.
 - Commands the sessions type that macOS lacks (`md5sum`, `sha256sum`, `setsid`) are stood in for by small scripts in `shims/`, made on first
   use and put on the sessions' `PATH` (not on Linux, which has them).
+- On macOS a bare pty can turn `\n` into `\r\r\n` when its queue is full (the BSD line discipline writes the CR again when it retries the LF). `ptyrun.pty_cr_doubling()` floods a bare shell's pty with a slow reader and counts them; only if it sees any are doubled CRs taken out of the streams before they are compared.
+- zsh: Debian and Ubuntu's global `zshrc` runs `compinit`, which asks a question at a prompt if a directory it reads is group-writable (CI runners have some); the harness's `.zshenv` sets `skip_global_compinit`.
 - The disk-full scenario mounts a 64 KB tmpfs, which needs Linux and root; elsewhere it falls back to `RLIMIT_FSIZE`.
 
 ## Exit status

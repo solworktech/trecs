@@ -20,7 +20,7 @@ import time
 import hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ptyrun import Run, is_zombie, processes_in  # noqa: E402
+from ptyrun import Run, is_zombie, processes_in, pty_cr_doubling, undouble_cr  # noqa: E402
 import recfuzz as rf  # noqa: E402
 
 BASH = rf.SHELLS["bash"]  # a bash that can mark its prompts (not macOS's 3.2): see ptyrun.find_shell
@@ -682,7 +682,7 @@ def test_job_control_pgrp():
 def test_slow_consumer():
     """Output is produced faster than the terminal reads it (a slow ssh link): nothing may be lost or reordered, and ^C must
     still reach the job while the recorder is blocked writing to the terminal."""
-    digest, sizes, bodies = {}, {}, {}
+    digest, sizes, bodies, raw_sizes = {}, {}, {}, {}
     for mode in ("bare", "rec"):
         run = start(f"slow-{mode}", mode)
         pos = len(run.buf)
@@ -695,6 +695,8 @@ def test_slow_consumer():
         data = bytes(run.buf[pos:])
         m = re.search(rb"S-2-S\r?\n(.*)E-2-E", rf.OSC133.sub(b"", data), re.S)
         body = m.group(1) if m else b""
+        raw_sizes[mode] = len(body)
+        body = undouble_cr(body)
         digest[mode] = hashlib.md5(body).hexdigest()
         sizes[mode] = len(body)
         bodies[mode] = body
@@ -704,8 +706,9 @@ def test_slow_consumer():
         b, r = bodies["bare"], bodies["rec"]
         i = next((k for k in range(min(len(b), len(r))) if b[k] != r[k]), min(len(b), len(r)))
         where = f"; first difference at byte {i}: bare {b[max(0, i - 20):i + 20]!r} recorded {r[max(0, i - 20):i + 20]!r}"
+    os_note = f"; this OS doubled {pty_cr_doubling()} CRs in the control (bare, slow reader): doubled CRs taken out before comparing" if pty_cr_doubling() else ""
     result("PASS" if digest["bare"] == digest["rec"] and sizes["bare"] > 3_000_000 else "FAIL", "consumer stops reading for 2 s during a 4 MB flood",
-           f"bytes bare={sizes['bare']} recorded={sizes['rec']}; digests bare={digest['bare'][:8]} recorded={digest['rec'][:8]}{where}")
+           f"bytes bare={raw_sizes['bare']} recorded={raw_sizes['rec']}; digests bare={digest['bare'][:8]} recorded={digest['rec'][:8]}{where}{os_note}")
     res = {}
     for mode in ("bare", "rec"):
         run = start(f"slowc-{mode}", mode)

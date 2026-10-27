@@ -154,24 +154,25 @@ jobs:
         run: |
           python3 - <<'PY'
           import os, pty, select, tempfile, time
-          import ptyrun
+          import ptyrun, recfuzz
           for name, path in ptyrun.SHELLS.items():
               home = tempfile.mkdtemp()
-              rc = {"bash": ".bashrc", "zsh": ".zshrc", "fish": ".config/fish/config.fish"}[name]
-              os.makedirs(os.path.dirname(os.path.join(home, rc)), exist_ok=True)
-              open(os.path.join(home, rc), "w").write("PS1='P> '\n" if name == "bash" else "PROMPT='P> '\n" if name == "zsh" else "function fish_prompt; printf 'P> '; end\n")
+              recfuzz.write_profile(name, home, [])  # the same rc files the fuzzer gives a shell
               pid, fd = pty.fork()
               if pid == 0:
-                  env = dict(os.environ, HOME=home, TERM="xterm-256color")
+                  env = dict(os.environ, HOME=home, TERM="xterm-256color", XDG_CONFIG_HOME=os.path.join(home, ".config"))
                   env.pop("ZDOTDIR", None)
                   os.execve(path, [path, "-i"], env)
-              out, end = b"", time.time() + 6
+              out, end = b"", time.time() + 10
               while time.time() < end and b"P> " not in out:
                   if select.select([fd], [], [], 0.3)[0]:
                       try:
-                          out += os.read(fd, 4096)
+                          chunk = os.read(fd, 4096)
                       except OSError:
                           break
+                      out += chunk
+                      if b"\x1b[0c" in chunk:  # fish 4 asks the terminal what it is, and waits for the answer
+                          os.write(fd, b"\x1b[?62;c")
               print(f"{name}: prompt={'yes' if b'P> ' in out else 'NO'}  user={os.getuid()}  {out[-300:]!r}")
               os.kill(pid, 9)
           PY

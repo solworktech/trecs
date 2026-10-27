@@ -967,15 +967,25 @@ func reconstructInputByKeystrokes(frames []TerminalFrame) string {
 				}
 				continue
 			} else if i < len(data) && data[i] == ']' {
-				// OSC sequence: ESC ] ... BEL
+				// OSC sequence: ESC ] ... BEL or ESC \
 				i++
-				for i < len(data) && data[i] != '\x07' {
+				for i < len(data) && data[i] != '\x07' && (data[i] != '\x1b' || i+1 >= len(data) || data[i+1] != '\\') {
 					i++
 				}
-				if i < len(data) {
+				if i < len(data) && data[i] == '\x07' {
 					i++
+				} else if i < len(data) {
+					i += 2
 				}
 				continue
+			}
+			// ESC, any intermediates, a final byte: a charset selection (ESC ( B, which fish writes after every colour) is three
+			// bytes, not an ESC and the text "(B"
+			for i < len(data) && data[i] >= 0x20 && data[i] <= 0x2f {
+				i++
+			}
+			if i < len(data) {
+				i++
 			}
 			continue
 		}

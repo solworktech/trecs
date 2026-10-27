@@ -36,3 +36,12 @@ func TestBareEraseBelowKeepsThePrompt(t *testing.T) {
 		t.Errorf("after ESC[J got %q", got)
 	}
 }
+
+func TestKeystrokeReaderSkipsCharsetSelectionAndStringTerminators(t *testing.T) {
+	// the line no longer starts with the prompt, so the keystrokes are followed: ESC ( B is not the text "(B"
+	frames := []TerminalFrame{{Data: "\x1b[1mls\x1b(B\x1b[m -l\x1b]0;title\x1b\\"}}
+	got := reconstructInputCols(frames, TerminalFrame{Data: "different> "}, "", 0)
+	if got != "ls -l" {
+		t.Errorf("got %q", got)
+	}
+}
