@@ -512,6 +512,10 @@ type lineEditor struct {
 	rows [][]rune
 	r    int
 	col  int
+	// insert is insert mode (ESC [ 4 h): a character that is written pushes the rest of the row to the right instead of
+	// replacing the one under the cursor. Readline puts the terminal in it for the one character it types in the middle of a
+	// line (a space, then back, then the character: ESC [ 4 h, space, ESC [ 4 l, BS, c), and Ctrl-R does so at every key.
+	insert bool
 	// The start of an escape sequence whose end is in the next frame: the terminal's output is cut into frames wherever a read
 	// happened to end, so "ESC [" may be the end of one and "m" the start of the next. Read as two things, the "m" is typed text.
 	pending string
@@ -571,7 +575,9 @@ func (e *lineEditor) put(ch rune) {
 	for len(row) < e.col {
 		row = append(row, ' ')
 	}
-	if e.col < len(row) {
+	if e.col < len(row) && e.insert {
+		row = append(row[:e.col], append([]rune{ch}, row[e.col:]...)...)
+	} else if e.col < len(row) {
 		row[e.col] = ch
 	} else {
 		row = append(row, ch)
@@ -640,6 +646,14 @@ func (e *lineEditor) csi(params string, final rune) {
 	}
 	row := e.rows[e.r]
 	switch final {
+	case 'h', 'l': // modes: only insert mode (4) matters to a line; the private ones (bracketed paste...) do not
+		if !strings.ContainsAny(params, "?>=!") {
+			for _, f := range strings.Split(params, ";") {
+				if f == "4" {
+					e.insert = final == 'h'
+				}
+			}
+		}
 	case 'K': // erase in line
 		mode := 0
 		if has {
@@ -836,9 +850,9 @@ func reconstructInputByKeystrokes(frames []TerminalFrame) string {
 			// Skip entire escape sequence
 			i++
 			if i < len(data) && data[i] == '[' {
-				// CSI sequence: ESC [ ... letter
+				// CSI sequence: ESC [ ... final byte (@ to ~)
 				i++
-				for i < len(data) && (data[i] < 'A' || data[i] > 'Z') && (data[i] < 'a' || data[i] > 'z') {
+				for i < len(data) && (data[i] < '@' || data[i] > '~') { // the final byte is @ to ~, not only a letter (ESC [ 2 @)
 					i++
 				}
 				if i < len(data) {
@@ -1354,11 +1368,11 @@ func FilterForDisplay(data string) string {
 	var result strings.Builder
 	i := 0
 	for i < len(data) {
-		// CSI sequence: ESC [ ... letter
+		// CSI sequence: ESC [ ... final byte (@ to ~)
 		if i < len(data)-1 && data[i] == '\x1b' && data[i+1] == '[' {
 			start := i
 			i += 2
-			for i < len(data) && (data[i] < 'A' || data[i] > 'Z') && (data[i] < 'a' || data[i] > 'z') {
+			for i < len(data) && (data[i] < '@' || data[i] > '~') { // the final byte is @ to ~, not only a letter (ESC [ 2 @)
 				i++
 			}
 			if i < len(data) {
@@ -1456,6 +1470,8 @@ type DisplayBuffer struct {
 	// ever appear to change; everything else the person actually navigated
 	// past would look frozen even though the emulated cursor moved correctly.
 	cursorVisible bool
+	// insert is insert mode (ESC [ 4 h): see lineEditor.
+	insert bool
 
 	fgColor string
 	bgColor string
@@ -1836,6 +1852,27 @@ func (db *DisplayBuffer) applyCSI(params string, final byte) {
 			db.clearRange(db.cursorRow, 0, db.cursorRow, lastCol)
 		}
 
+	case '@', 'P', 'X': // insert, delete and erase characters at the cursor: how a line editor changes a line in the middle
+		k := paramOr(nums, 0, 1)
+		db.ensureRow(db.cursorRow)
+		db.ensureCol(db.cursorRow, db.cursorCol)
+		row := db.grid[db.cursorRow]
+		blank := cell{ch: ' ', tag: "-:-:-"}
+		switch final {
+		case '@':
+			out := append([]cell(nil), row[:db.cursorCol]...)
+			for range k {
+				out = append(out, blank)
+			}
+			db.grid[db.cursorRow] = append(out, row[db.cursorCol:]...)
+		case 'P':
+			end := min(db.cursorCol+k, len(row))
+			db.grid[db.cursorRow] = append(row[:db.cursorCol], row[end:]...)
+		case 'X':
+			for c := db.cursorCol; c < db.cursorCol+k && c < len(row); c++ {
+				row[c] = blank
+			}
+		}
 	default:
 		// Scroll-region (r) and window manipulation (t) have no
 		// representation in this model and are safely ignored.
@@ -1850,6 +1887,13 @@ func (db *DisplayBuffer) applyCSI(params string, final byte) {
 			for _, n := range nums {
 				if n == 25 {
 					db.cursorVisible = final == 'h'
+				}
+			}
+		}
+		if !private && (final == 'h' || final == 'l') {
+			for _, n := range nums {
+				if n == 4 {
+					db.insert = final == 'h'
 				}
 			}
 		}
@@ -1880,7 +1924,8 @@ func (db *DisplayBuffer) Feed(data string) {
 			case '[':
 				start := i + 1
 				j := start
-				for j < n && (data[j] < 'A' || data[j] > 'Z') && (data[j] < 'a' || data[j] > 'z') {
+				// the final byte is any of @ to ~ (not just a letter: ESC [ 2 @ inserts two blanks)
+				for j < n && (data[j] < '@' || data[j] > '~') {
 					j++
 				}
 				if j < n {
@@ -1944,6 +1989,12 @@ func (db *DisplayBuffer) Feed(data string) {
 		}
 
 		r, size := utf8.DecodeRuneInString(data[i:])
+		if db.insert {
+			db.ensureRow(db.cursorRow)
+			db.ensureCol(db.cursorRow, db.cursorCol)
+			row := db.grid[db.cursorRow]
+			db.grid[db.cursorRow] = append(row[:db.cursorCol], append([]cell{{ch: ' ', tag: "-:-:-"}}, row[db.cursorCol:]...)...)
+		}
 		db.put(db.cursorRow, db.cursorCol, r)
 		db.cursorCol++
 		i += size

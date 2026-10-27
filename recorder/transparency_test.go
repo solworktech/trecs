@@ -24,6 +24,13 @@ var anyMark = regexp.MustCompile(`\x1b\]133;[^\x07]*\x07`)
 // the prompt marks taken out.
 func typeInto(t *testing.T, shell string, args, env []string, lines []string) (string, bool) {
 	t.Helper()
+	raw, alive := typeIntoRaw(t, shell, args, env, lines)
+	return anyMark.ReplaceAllString(raw, ""), alive
+}
+
+// typeIntoRaw is typeInto with the prompt marks left in.
+func typeIntoRaw(t *testing.T, shell string, args, env []string, lines []string) (string, bool) {
+	t.Helper()
 	cmd := exec.Command(shell, args...)
 	cmd.Env = append(os.Environ(), env...)
 	ptmx, err := pty.Start(cmd)
@@ -58,7 +65,7 @@ func typeInto(t *testing.T, shell string, args, env []string, lines []string) (s
 		}
 	}
 	quiet(200 * time.Millisecond)
-	return anyMark.ReplaceAllString(buf.String(), ""), alive
+	return buf.String(), alive
 }
 
 func bufCopy(dst *syncBuffer, src *os.File) (int64, error) {

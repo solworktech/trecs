@@ -30,11 +30,10 @@ import time
 import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ptyrun import Run, processes_in  # noqa: E402
+from ptyrun import IS_LINUX, LOCALE, SHELLS, Run, processes_in, tool_path  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TRECS = os.environ.get("TRECS_BIN", os.path.join(HERE, "trecs"))
-SHELLS = {"bash": "/usr/bin/bash", "zsh": "/usr/bin/zsh", "fish": "/usr/bin/fish"}
 
 # ---------------------------------------------------------------------------------------------- profiles
 
@@ -215,6 +214,33 @@ echo "--- cwd/jobs"; pwd; jobs
 echo "--- size"; stty size
 end > $OBS/probe.$argv[1] 2>&1
 '''
+
+
+
+def portable(probe, fish=False):
+    """The probes read /proc, which only Linux has. Elsewhere the same facts come from ps, ulimit and /dev/fd, and what a system does
+    not tell (the signal masks, the session id) is left out: the comparison is still bare against recorded, line by line."""
+    if IS_LINUX:
+        return probe
+    out = []
+    pid = "$fish_pid" if fish else "$$"
+    for line in probe.splitlines():
+        if 'echo "--- fds"' in line:
+            line = 'echo "--- fds"; ls /dev/fd | sort -n | sed \'s/^[0-9]*$/fd/\''
+        elif "/proc/" in line and "--- limits" in line:
+            line = 'echo "--- limits"; ulimit -a'
+        elif "/proc/" in line:
+            continue
+        elif "env -0" in line:
+            line = line.replace("env -0 | tr '\\0' '\\n' | sort", "env | sort")
+        elif "ps -o pgid=,tpgid=,sid=,stat=" in line:
+            line = line.replace("ps -o pgid=,tpgid=,sid=,stat=", "ps -o pgid=,tpgid=,stat=").replace(
+                '" sess=" ($3==me) " stat=" $4', '" stat=" $3')
+        out.append(line)
+    return "\n".join(out) + "\n"
+
+
+PROBE_BASH, PROBE_ZSH, PROBE_FISH = portable(PROBE_BASH), portable(PROBE_ZSH), portable(PROBE_FISH, fish=True)
 
 # ------------------------------------------------------------------------------------------------ steps
 # A step: (label, [(delay_before, bytes), ...]); when the parts are done the harness types a sync line
@@ -641,7 +667,9 @@ def gen_steps(rng, shell, n):
 
     @g(1)
     def tty_name():
-        typed("ttyname", "tty | sed 's/[0-9]*$/N/'; ps -o pgid=,tpgid=,sid= -p $$ | awk -v me=$$ '{print ($1==me), ($1==$2), ($3==me)}'\n" if not fish else "tty | sed 's/[0-9]*$/N/'\n")
+        ps_ids = ("ps -o pgid=,tpgid=,sid= -p $$ | awk -v me=$$ '{print ($1==me), ($1==$2), ($3==me)}'" if IS_LINUX  # macOS ps has no session id
+                  else "ps -o pgid=,tpgid= -p $$ | awk -v me=$$ '{print ($1==me), ($1==$2)}'")
+        typed("ttyname", f"tty | sed 's/[0-9]*$/N/'; {ps_ids}\n" if not fish else "tty | sed 's/[0-9]*$/N/'\n")
 
     @g(2)
     def procs_tree():
@@ -767,8 +795,8 @@ class Setup:
 
 def env_for(shell, root):
     return {
-        "PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": f"{root}/home", "TMPDIR": f"{root}/tmp", "TERM": "xterm-256color",
-        "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "USER": "root", "LOGNAME": "root", "SHELL": SHELLS[shell], "OBS": f"{root}/obs",
+        "PATH": tool_path(), "HOME": f"{root}/home", "TMPDIR": f"{root}/tmp", "TERM": "xterm-256color",
+        "LANG": LOCALE, "LC_ALL": LOCALE, "USER": "root", "LOGNAME": "root", "SHELL": SHELLS[shell], "OBS": f"{root}/obs",
     }
 
 
@@ -1049,7 +1077,9 @@ def main():
     ap.add_argument("--work", default=os.path.join(HERE, "work"))
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--json", default=None)
+    ap.add_argument("--strict", action="store_true", help="the exit status is 1 for any HIGH or MED finding, not only the gated kinds")
     a = ap.parse_args()
+    a.work = os.path.abspath(a.work)  # the sessions run in other directories: HOME and the like must not be relative
     lo, hi = map(int, a.seeds.split("-"))
     os.makedirs(a.work, exist_ok=True)
     jobs = [(s, sh, a.steps, a.work, a.keep) for s in range(lo, hi + 1) for sh in a.shells.split(",")]
@@ -1065,6 +1095,36 @@ def main():
     if a.json:
         json.dump(results, open(a.json, "w"), default=lambda o: o.decode("latin1") if isinstance(o, bytes) else str(o))
     report(results, time.time() - t0)
+    bad = gate(results, a.strict)
+    print(f"\n==== gate ({'strict: any HIGH or MED' if a.strict else 'the kinds that change what the shell does'}): "
+          f"{'FAILED' if bad else 'passed'} ====")
+    for line in bad:
+        print("  " + line)
+    sys.exit(1 if bad else 0)
+
+
+# What changes what the shell or a program in it DOES - not only what is printed. These fail the run (exit status 1). The other
+# differences (the bytes the terminal gets, the state of the shell, the observation files) are listed in the report but do not, unless
+# --strict: a few of them are known and cosmetic (bash prints four call lines under `set -x`, fish repaints its line editor in an
+# order of its own, zsh counts the marks in a prompt it cannot mark as zero-width), and the Go tests hold the rest in place.
+GATED = {
+    "hang-under-recorder", "startup-output-differs", "files-differ", "integration-text-leaked", "input-corrupted", "does-not-end",
+    "leftover-processes", "terminal-left-changed", "shell-exit-status-differs",
+}
+
+
+def gate(results, strict):
+    bad = []
+    for r in results:
+        who = f"{r['shell']} seed {r['seed']}"
+        if r.get("error"):
+            bad.append(f"{who}: harness error")
+        for sev, sig, detail in r["findings"]:
+            if sig in ("integration-text-leaked", "startup-output-differs") and r["shell"] == "bash" and "set_x" in (r.get("profile") or []) and not strict:
+                continue  # the four call lines bash prints for the prompt functions under `set -x`: known, and not fixable from the shell
+            if sig in GATED or (strict and sev in ("HIGH", "MED")):
+                bad.append(f"{who}: [{sev}] {sig} - {detail.splitlines()[0][:140]}")
+    return bad
 
 
 def report(results, secs):

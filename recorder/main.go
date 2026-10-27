@@ -126,6 +126,9 @@ func main() {
 	case "scan":
 		runScan(os.Args[2:])
 
+	case "shell-init":
+		os.Exit(runShellInit(os.Args[2:], os.Stdout, os.Stderr))
+
 	case "play":
 		if err := playCmd.Parse(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to parse play flags: %v\n", err)
@@ -433,6 +436,8 @@ Usage:
                                Change an uploaded recording: its terminal file, audio, Markdown, name,
                                description or visibility (ID is the one in its link, or the link)
   %[1]s scan PATH              Check a recording for secrets (API keys, tokens, private keys, passwords in URLs...)
+  %[1]s shell-init [SHELL]     Print a file that marks the prompts of a shell you did not start here (one on a
+                               server after ssh); see its comments, and "shell-init -h"
   %[1]s version                Show the version (also -version, --version)
   %[1]s help                   Show this help message
 

@@ -290,12 +290,12 @@ func (em *EditorMode) openSearch() {
 	if m.stopped {
 		em.player.Pause() // to read it, it has to hold still
 	}
-	frames, _, _, err := libtrecs.LoadFrames(em.filePath)
+	frames, _, meta, err := libtrecs.LoadFrames(em.filePath)
 	if err != nil {
 		em.setStatus(fmt.Sprintf("Cannot search: %v", err))
 		return
 	}
-	m.index = libtrecs.BuildSearchIndex(em.commands, frames)
+	m.index = libtrecs.BuildSearchIndexFor(em.commands, frames, meta.Height)
 	if em.pages.HasPage(searchPage) {
 		em.pages.RemovePage(searchPage)
 	}

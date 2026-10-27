@@ -9,11 +9,82 @@ import fcntl
 import os
 import re
 import select
+import shutil
 import signal
 import struct
 import subprocess
+import sys
 import termios
 import time
+
+# The harness reads /proc where it can and asks ps and lsof where it cannot (macOS), and finds the shells and the GNU tools the
+# sessions use (md5sum, sha256sum, setsid) on the machine it runs on.
+IS_LINUX = sys.platform.startswith("linux")
+LOCALE = "C.UTF-8" if IS_LINUX else "en_US.UTF-8"
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def find_shell(name):
+    """The shell to test: $TRECS_FUZZ_BASH (ZSH, FISH) if set, else the first on PATH, else /usr/bin. macOS ships bash 3.2, which cannot
+    mark its prompts: put a newer one first (brew install bash) or name it in TRECS_FUZZ_BASH."""
+    return os.environ.get("TRECS_FUZZ_" + name.upper()) or shutil.which(name) or "/usr/bin/" + name
+
+
+SHELLS = {n: find_shell(n) for n in ("bash", "zsh", "fish")}
+
+
+def shim_dir():
+    """A directory of stand-ins for the commands the sessions type that this system does not have: md5sum, sha256sum, setsid.
+    Created on first use; "" if nothing is missing (Linux)."""
+    need = {n: shutil.which(n) is None for n in ("md5sum", "sha256sum", "setsid")}
+    if not any(need.values()):
+        return ""
+    d = os.path.join(_HERE, "shims")
+    os.makedirs(d, exist_ok=True)
+    body = {
+        "md5sum": "#!/bin/sh\nexec md5 -r \"$@\"\n",
+        "sha256sum": "#!/bin/sh\nexec shasum -a 256 \"$@\"\n",
+        "setsid": "#!/usr/bin/env python3\nimport os, sys\nos.setsid() if os.getpid() != os.getpgid(0) else None\nos.execvp(sys.argv[1], sys.argv[1:])\n",
+    }
+    for n, missing in need.items():
+        if missing:
+            f = os.path.join(d, n)
+            with open(f, "w") as fh:
+                fh.write(body[n])
+            os.chmod(f, 0o755)
+    return d
+
+
+def tool_path():
+    """PATH for the sessions: the shells' directories and python3's first (they are not in /usr/bin on macOS), then the usual."""
+    dirs = [shim_dir()]
+    for tool in [*SHELLS.values(), shutil.which("python3") or ""]:
+        if tool:
+            dirs.append(os.path.dirname(tool))
+    for extra in ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"):
+        if os.path.isdir(extra):
+            dirs.append(extra)
+    seen = []
+    for d in dirs:
+        if d and d not in seen:
+            seen.append(d)
+    return ":".join(seen)
+
+
+def is_zombie(pid):
+    """True if the process is gone or has ended and not been waited for."""
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return True
+    if IS_LINUX:
+        try:
+            with open(f"/proc/{pid}/stat") as f:
+                return f.read().split(")")[-1].split()[0] == "Z"
+        except OSError:
+            return True
+    r = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
+    return r.returncode != 0 or r.stdout.strip().startswith("Z") or not r.stdout.strip()
 
 ANSWERS = [  # what a terminal answers to what a program asks it
     (re.compile(rb"\x1b\[6n"), b"\x1b[5;10R"),              # cursor position
@@ -213,6 +284,24 @@ def processes_in(path):
     """pids of the processes whose working directory or command line lies under path (leftovers of a run)."""
     out = []
     me = os.getpid()
+    if not IS_LINUX:
+        cwds = {}
+        r = subprocess.run(["lsof", "-a", "-d", "cwd", "-Fpn"], capture_output=True, text=True)
+        pid = None
+        for line in r.stdout.splitlines():
+            if line.startswith("p"):
+                pid = int(line[1:])
+            elif line.startswith("n") and pid is not None:
+                cwds[pid] = line[1:]
+        r = subprocess.run(["ps", "-axo", "pid=,command="], capture_output=True, text=True)
+        for line in r.stdout.splitlines():
+            parts = line.strip().split(None, 1)
+            if len(parts) != 2 or not parts[0].isdigit() or int(parts[0]) == me:
+                continue
+            pid, cmd = int(parts[0]), parts[1]
+            if cwds.get(pid, "").startswith(path) or path in cmd:
+                out.append((pid, cmd.strip()[:80]))
+        return out
     for d in os.listdir("/proc"):
         if not d.isdigit() or int(d) == me:
             continue

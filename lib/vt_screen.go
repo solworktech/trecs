@@ -74,6 +74,8 @@ const (
 type VTScreen struct {
 	term  vt10x.Terminal
 	carry string // the start of an escape sequence cut by the end of the last frame (see sanitizeForVT), or of a graphic
+	// insert is insert mode (ESC [ 4 h), which vt10x notes and does not do: see insertMode.
+	insert bool
 
 	// Sixel pictures (see vt_images.go).
 	images       []*vtImage
@@ -246,8 +248,75 @@ func (s *VTScreen) feedText(text string, last bool) {
 		clean += carry
 	}
 	if clean != "" {
-		_, _ = s.term.Write([]byte(clean))
+		_, _ = s.term.Write([]byte(s.insertMode(clean)))
 	}
+}
+
+// insertMode makes the text do what it does in insert mode (IRM, ESC [ 4 h), which the emulator reads and then ignores ("insert mode
+// not implemented"): a character that is written pushes the rest of the row to the right. Readline puts the terminal in it to type
+// one character in the middle of a line (ESC [ 4 h, a space, ESC [ 4 l, back, the character), and Ctrl-R at every key: left out, each
+// such character replaces the one under the cursor, and "fetch" is shown as "feth". So while the mode is on, a blank is inserted
+// (ESC [ @) before each character; the mode itself is passed on, and its state kept from one frame to the next.
+func (s *VTScreen) insertMode(text string) string {
+	if !s.insert && !strings.Contains(text, "4h") && !strings.Contains(text, "4l") {
+		return text // the usual frame: no mode is set and none is going to be
+	}
+	var b strings.Builder
+	for i := 0; i < len(text); {
+		c := text[i]
+		switch {
+		case c == 0x1b && i+1 < len(text) && text[i+1] == '[':
+			j := i + 2
+			for j < len(text) && (text[j] < 0x40 || text[j] > 0x7e) {
+				j++
+			}
+			if j < len(text) {
+				params := text[i+2 : j]
+				if text[j] == 'h' || text[j] == 'l' {
+					if !strings.ContainsAny(params, "?<=>") {
+						for _, f := range strings.Split(params, ";") {
+							if f == "4" {
+								s.insert = text[j] == 'h'
+							}
+						}
+					}
+				}
+				j++
+			}
+			b.WriteString(text[i:j])
+			i = j
+		case c == 0x1b && i+1 < len(text) && (text[i+1] == ']' || text[i+1] == 'P' || text[i+1] == '_' || text[i+1] == '^'):
+			// a string (a title...): up to BEL or ESC \, and not text for the screen
+			j := i + 2
+			for j < len(text) && text[j] != 0x07 && (text[j] != 0x1b || j+1 >= len(text) || text[j+1] != '\\') {
+				j++
+			}
+			if j < len(text) {
+				if text[j] == 0x07 {
+					j++
+				} else {
+					j += 2
+				}
+			}
+			b.WriteString(text[i:j])
+			i = j
+		case c == 0x1b:
+			end := min(i+2, len(text))
+			b.WriteString(text[i:end])
+			i = end
+		case c < 0x20 || c == 0x7f:
+			b.WriteByte(c)
+			i++
+		default:
+			_, size := utf8.DecodeRuneInString(text[i:])
+			if s.insert {
+				b.WriteString("\x1b[@")
+			}
+			b.WriteString(text[i : i+size])
+			i += size
+		}
+	}
+	return b.String()
 }
 
 // IsBlank reports whether nothing visible is on the screen: every cell is an

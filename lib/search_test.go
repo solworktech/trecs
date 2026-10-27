@@ -19,7 +19,7 @@ func TestLinesAreReadAsTheExportReadsThem(t *testing.T) {
 		{data: "a\tb\r\n", ts: 20, fi: 2, upto: 2},
 		{data: "loading 10%\rloading 100%\r\n", ts: 30, fi: 3, upto: 3},
 		{data: "no newline at the end", ts: 40, fi: 4, upto: 4},
-	})
+	}, 0)
 	want := []string{"one", "a       b", "loading 100%", "no newline at the end"}
 	if got := texts(ls); strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("got %q, want %q", got, want)
@@ -30,14 +30,14 @@ func TestLinesAreReadAsTheExportReadsThem(t *testing.T) {
 }
 
 func TestALineThatTakesFramesToWriteIsPlacedAtTheLastOne(t *testing.T) {
-	ls := linesOfFrames([]searchFrame{{data: "par", ts: 1, fi: 1, upto: 1}, {data: "tial\r\n", ts: 5, fi: 2, upto: 2}})
+	ls := linesOfFrames([]searchFrame{{data: "par", ts: 1, fi: 1, upto: 1}, {data: "tial\r\n", ts: 5, fi: 2, upto: 2}}, 0)
 	if len(ls) != 1 || ls[0].Text != "partial" || ls[0].TS != 5 || ls[0].Upto != 2 {
 		t.Errorf("%+v", ls)
 	}
 }
 
 func TestMultibyteTextSurvives(t *testing.T) {
-	ls := linesOfFrames([]searchFrame{{data: "héllo → wörld\r\n", ts: 1, fi: 0, upto: 1}})
+	ls := linesOfFrames([]searchFrame{{data: "héllo → wörld\r\n", ts: 1, fi: 0, upto: 1}}, 0)
 	if len(ls) != 1 || ls[0].Text != "héllo → wörld" {
 		t.Errorf("%+v", ls)
 	}
@@ -229,5 +229,70 @@ func TestRunSearchStopsAtTheLimit(t *testing.T) {
 	got := RunSearch(idx, re, 30)
 	if got.MatchedLines != 30 || !got.Truncated {
 		t.Errorf("%d lines, truncated %v", got.MatchedLines, got.Truncated)
+	}
+}
+
+func frames(data ...string) []searchFrame {
+	var out []searchFrame
+	for i, d := range data {
+		out = append(out, searchFrame{data: d, ts: int64(i * 10), fi: i, upto: i})
+	}
+	return out
+}
+
+func TestAPastedAddressDrawnAfterSkippedColumnsLeavesTheCommand(t *testing.T) {
+	// what bash writes for "fetch <paste>": the address is written after a run of cursor-right over the text already there
+	got := texts(linesOfFrames(frames(
+		"$ ", "f", "e", "tch ", "\x1b[7mhttp://x/y.tgz\x1b[27m", "\r\x1b[8Chttp://x/y.tgz", "\r\n"), 0))
+	if len(got) != 1 || got[0] != "$ fetch http://x/y.tgz" {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestALineTheShellDrewAgainIsTheLineItEndedAs(t *testing.T) {
+	got := texts(linesOfFrames(frames(
+		"$ df -h | ./zaje -l df", "\r\x1b[K$ ./zaje /etc/rc.d/sshd", "\x1b[3D\x1b[P\x1b[P", "\r\n", "out\r\n"), 0))
+	want := "$ ./zaje /etc/rc.d/sd"
+	if len(got) != 2 || got[0] != want || got[1] != "out" {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestInsertModeInTheMiddleOfALine(t *testing.T) {
+	// bash on FreeBSD types in front of text with: insert mode, a space, insert mode off, back, the character
+	got := texts(linesOfFrames(frames("./zaje /etc", "\r\x1b[2C", "\x1b[4h \x1b[4l\x08-", "\x1b[4h \x1b[4l\x08l", "\r\n"), 0))
+	if len(got) != 1 || got[0] != "./-lzaje /etc" {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestInsertAndEraseInALine(t *testing.T) {
+	got := texts(linesOfFrames(frames("abcdef", "\x1b[4D\x1b[2@XY", "\x1b[2C\x1b[1X", "\r\n"), 0))
+	if len(got) != 1 || got[0] != "abXYcd f" {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestAProgramThatPaintsTheScreenLeavesNoLines(t *testing.T) {
+	got := texts(linesOfFrames(frames(
+		"before\r\n",
+		"\x1b[H\x1b[2J\x1b[1;1HPID USER\x1b[2;1H  1 root\x1b[3;1H  2 jesse",
+		"\x1b[24;1HF10Quit",
+		"\x1b[H\x1b[2J\x1b[24;1H",
+		"\r\n$ next\r\n"), 24))
+	for _, l := range got {
+		if strings.Contains(l, "PID") || strings.Contains(l, "root") || strings.Contains(l, "F10") {
+			t.Errorf("a painting was taken for output: %q", got)
+		}
+	}
+	if len(got) == 0 || got[0] != "before" || got[len(got)-1] != "$ next" {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestTheAlternateScreenIsNotPartOfTheLog(t *testing.T) {
+	got := texts(linesOfFrames(frames("a\r\n", "\x1b[?1049hmenu\r\nitems\r\n\x1b[?1049l", "b\r\n"), 24))
+	if strings.Join(got, "|") != "a|b" {
+		t.Errorf("%q", got)
 	}
 }

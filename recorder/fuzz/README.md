@@ -3,9 +3,31 @@
 The recorder's one promise about the shell is that it **only records**: a session run under `trecs record` must be
 indistinguishable, to the shell and to every program in it, from the same session run bare. These tools test that.
 
-Linux only as written (they read `/proc`, and use the `pty`, `termios` and `fcntl` modules). Not covered by anything here:
-macOS (bash 3.2 and zsh as the login shell, `TIOCGETA`), fish 4 (the container had fish 3.7, so `fishNativeIntegration` is
-untested), Windows.
+Written on Linux; made to run on macOS as well (see *Platforms*), where it has not been run by its author: the first run on a Mac may
+need a fix or two. Not covered by anything here: fish 4 (the container had fish 3.7, so `fishNativeIntegration` is untested), Windows.
+
+## Platforms
+
+- **Shells** are found on `PATH` (`bash`, `zsh`, `fish`), or named in `TRECS_FUZZ_BASH`, `TRECS_FUZZ_ZSH`, `TRECS_FUZZ_FISH`. macOS's own
+  bash is 3.2, which cannot mark its prompts: `brew install bash` and set `TRECS_FUZZ_BASH=$(brew --prefix)/bin/bash`.
+- **Linux** reads `/proc` for the state of the shell (signal masks, limits, descriptors, the session). **macOS** has no `/proc`: the state
+  comes from `ps`, `ulimit -a` and `/dev/fd`, and what the system does not tell (signal masks, the session id) is left out of the comparison.
+- Commands the sessions type that macOS lacks (`md5sum`, `sha256sum`, `setsid`) are stood in for by small scripts in `shims/`, made on first
+  use and put on the sessions' `PATH` (not on Linux, which has them).
+- The disk-full scenario mounts a 64 KB tmpfs, which needs Linux and root; elsewhere it falls back to `RLIMIT_FSIZE`.
+
+## Exit status
+
+`recfuzz.py` exits 1 for a harness error or a difference of a kind that changes what the shell or a program in it **does**: a hang, a shell
+that does not end, files that differ, corrupted input, text of the integration in the output, leftover processes, a changed terminal or
+another exit status. Differences in the bytes printed, in the shell's state and in the observation files are in the report but do not fail
+the run, because a few are known and cosmetic (see *What remains* in `AUDIT.md`); `--strict` fails on any HIGH or MED finding.
+`recfaults.py` exits 1 for a FAIL or an ERROR, except those in `KNOWN_FAILURES` at the top of the file, which are listed as `KNOWN`.
+
+## CI
+
+The `fuzz` job of the `recorder` workflow runs both on Linux and on macOS: `workflow_dispatch` inputs `fuzz_seeds`, `fuzz_shells`
+and `fuzz_strict`. Seeds 1-12 in three shells take about ten minutes per OS on two jobs.
 
 ## recfuzz.py: a differential fuzzer
 

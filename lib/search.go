@@ -111,9 +111,11 @@ type searchFrame struct {
 	upto int
 }
 
-// linesOfFrames are the lines of a stream of frames, as the export reads them (escapes dropped, tabs to 8-column stops, a carriage
-// return starts the line over), each with the frame in which it was completed.
-func linesOfFrames(frames []searchFrame) []SearchLine {
+// linesOfFrames are the lines of a stream of frames, as a person reads them off the screen (see screenLog): the escapes dropped, tabs
+// to 8-column stops, a carriage return starting the line over, and the movements of a line editor followed, so that a line the shell
+// drew again is the line it ended as. Each line has the frame in which it was completed. rows is the height of the terminal the
+// frames were recorded in; 0 if it is not known.
+func linesOfFrames(frames []searchFrame, rows int) []SearchLine {
 	if len(frames) == 0 {
 		return nil
 	}
@@ -123,57 +125,19 @@ func linesOfFrames(frames []searchFrame) []SearchLine {
 		starts[i] = raw.Len()
 		raw.WriteString(f.data)
 	}
-	s := raw.String()
-	var lines []SearchLine
-	var cur strings.Builder
-	curRunes := 0
 	fr := 0
-	frameAt := func(pos int) searchFrame {
+	scr := newScreenLog(rows)
+	scr.run(raw.String(), func(pos int) int {
 		for fr+1 < len(frames) && starts[fr+1] <= pos {
 			fr++
 		}
-		return frames[fr]
-	}
-	push := func(pos int) {
-		f := frameAt(pos)
-		lines = append(lines, SearchLine{Text: strings.TrimRightFunc(cur.String(), unicode.IsSpace), TS: f.ts, FI: f.fi, Upto: f.upto})
-		cur.Reset()
-		curRunes = 0
-	}
-	for i := 0; i < len(s); {
-		ch := s[i]
-		switch {
-		case ch == 0x1b && i+1 < len(s):
-			i = skipEscape(s, i)
-			continue
-		case ch == '\n':
-			push(i)
-		case ch == '\r':
-			if i+1 >= len(s) || s[i+1] != '\n' {
-				cur.Reset()
-				curRunes = 0
-			}
-		case ch == '\t':
-			n := 8 - curRunes%8
-			cur.WriteString(strings.Repeat(" ", n))
-			curRunes += n
-		case ch >= ' ' && ch != 0x7f:
-			_, size := utf8.DecodeRuneInString(s[i:])
-			cur.WriteString(s[i : i+size])
-			curRunes++
-			i += size
-			continue
-		}
-		i++
-	}
-	if strings.TrimSpace(cur.String()) != "" {
-		push(len(s) - 1)
-	}
-	for len(lines) > 0 && lines[0].Text == "" {
-		lines = lines[1:]
-	}
-	for len(lines) > 0 && lines[len(lines)-1].Text == "" {
-		lines = lines[:len(lines)-1]
+		return fr
+	})
+	text, which := scr.lines()
+	lines := make([]SearchLine, len(text))
+	for i, t := range text {
+		f := frames[which[i]]
+		lines[i] = SearchLine{Text: t, TS: f.ts, FI: f.fi, Upto: f.upto}
 	}
 	return lines
 }
@@ -219,6 +183,12 @@ func locator(frames []TerminalFrame, lo, hi int) func(TerminalFrame) int {
 // output that was edited has frames of its own making), so the place of a line in the recording is found by its time, among the
 // frames the command spans. frames is the whole recording, as the player has it.
 func BuildSearchIndex(commands []Command, frames []TerminalFrame) []SearchEntry {
+	return BuildSearchIndexFor(commands, frames, 0)
+}
+
+// BuildSearchIndexFor is BuildSearchIndex for a recording made in a terminal of rows rows (RecordingMeta.Height; 0 if it is not
+// known): it is what tells a line of output from a program that draws on the screen where it likes.
+func BuildSearchIndexFor(commands []Command, frames []TerminalFrame, rows int) []SearchEntry {
 	var out []SearchEntry
 	for idx := range commands {
 		c := &commands[idx]
@@ -274,7 +244,7 @@ func BuildSearchIndex(commands []Command, frames []TerminalFrame) []SearchEntry 
 				}
 				own = append(own, searchFrame{data: f.Data, ts: f.Timestamp, fi: at(f.TerminalFrame), upto: i + 1})
 			}
-			lines = linesOfFrames(own)
+			lines = linesOfFrames(own, rows)
 		}
 		out = append(out, SearchEntry{Idx: idx, Command: command, Time: time, Input: input, Lines: lines})
 	}

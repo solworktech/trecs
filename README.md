@@ -120,6 +120,36 @@ For bash (4.4 and later), zsh and fish the recorder starts the shell with *promp
 
 Those marks are what let the player and the editor jump from command to command, and let `trecs` extract a command list. Other shells (sh, dash, ksh and so on) are recorded too, but without marks the command boundaries have to be inferred from the prompt, which is less reliable. If the shell integration gets in the way of a prompt framework of yours, `-no-marks` turns it off.
 
+### Marking a shell on a server (over ssh)
+
+The marks are made by the shell the recorder starts. If the first thing you do in a recording is `ssh` to another machine, the shell you then type in is not one the recorder started: it has no marks, so the whole visit is one command (the `ssh`), and the player and the editor cannot jump between the commands you ran there. Search still finds the text, but not command by command.
+
+`trecs shell-init` prints a file that gives that remote shell the same marks. **Nothing is done unless you load it**; by default your servers are left exactly as they are.
+
+```
+trecs shell-init bash > trecs-marks.bash        # bash, zsh or fish; with no argument, your login shell's
+scp trecs-marks.bash server:                    # or: trecs shell-init bash | ssh server 'cat > ~/.trecs-marks.bash'
+ssh server
+source ./trecs-marks.bash                        # this shell, this session only
+```
+
+The commands you type after that are commands of the recording. The file starts with comments that say all of what is below, so whoever finds it on a server knows what it is.
+
+**What it does.** Before and after each prompt, and when a command starts and ends, the shell writes a short invisible escape sequence (OSC 133, the one kitty, iTerm2, WezTerm and VS Code use). The sequences hold no command text and go only to the terminal. To write them it changes the prompt (`PS1`, `PS2`, and in bash `PS0` and `PROMPT_COMMAND`; in zsh two hooks; in fish the prompt function and two event handlers) and defines functions named `__trecs_*`. It does not change `$?`, the shell's options, aliases or history, or what any command does. It is the code the recorder uses for its own shell.
+
+**When it does nothing.** The file checks, itself, that the shell is interactive and that its output is a terminal. A script, `scp`, `ssh host command` or a cron job that loads it is not affected. It also does nothing if the prompt already has marks (VS Code's or a terminal's own integration), or in a bash older than 4.4.
+
+**If you load it from a startup file** (`~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`) it is on in every interactive session of that account, recorded or not. That is your decision to make, and it is why it is not the default. What it can do then:
+
+- Terminals that understand OSC 133 use it; most others ignore it. A very basic terminal (a serial console, a very old emulator) may print it as text and make the prompt look odd.
+- Anything that reads the terminal's output sees the marks: a session log, `script`, and automation that waits for the end of a prompt with a pattern (expect, pexpect, some deployment tools), which may then not match.
+- A second tool that adds marks (VS Code's shell integration, a terminal's own) and loads after this one doubles them. Load this one last.
+- A script of yours that replaces the prompt hook outright (a prompt theme or framework, loaded later) removes the hooks and leaves half of the marks, so that a recording sees commands that never end.
+- Where `PS1` is exported, a different shell started from this one (`sh`, `dash`, `ksh`) can show the marks as text.
+- In bash, `set -x` shows four extra lines for the prompt functions at each prompt.
+
+To undo it, remove the line you added and start a new shell. Bash: put the line in `~/.bashrc`, not `~/.profile`, which other shells read too and cannot parse this file.
+
 ### Scripted recordings
 
 `-commands-file` makes the recorder type the commands itself instead of reading the keyboard. It needs no terminal at all, so it works in CI, and it is how you keep a tutorial reproducible: change the script, record again.

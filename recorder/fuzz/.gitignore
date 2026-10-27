@@ -3,3 +3,4 @@ trecs.*
 work*/
 *.json
 __pycache__/
+shims/

@@ -38,6 +38,8 @@ Usage:
                                Change an uploaded recording: its terminal file, audio, Markdown, name,
                                description or visibility (ID is the one in its link, or the link)
   trecs scan PATH              Check a recording for secrets (exits 1 if any are found)
+  trecs shell-init [SHELL]     Print a file that marks the prompts of a shell you did not start here (one on a
+                               server after ssh); bash, zsh or fish. It does nothing until a shell loads it.
   trecs version                Show the version (also -version, --version)
   trecs help                   Show this help message
 
