@@ -211,7 +211,7 @@ func attachAnnotations(commands []Command, annotations []Annotation) {
 // ParseRecording reads a terminal.jsonl file, extracts commands, and
 // attaches any annotations to the command each belongs to.
 func ParseRecording(filePath string) ([]Command, error) {
-	frames, annotations, _, err := LoadFrames(filePath)
+	frames, annotations, meta, err := LoadFrames(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -230,8 +230,31 @@ func ParseRecording(filePath string) ([]Command, error) {
 	}
 
 	attachAnnotations(commands, annotations)
+	applyTerminalWidth(commands, meta.Width)
 
 	return commands, nil
+}
+
+// applyTerminalWidth reads the commands' input again for a terminal of that width: a line that is longer than it goes on in the next
+// row, and a line editor that goes back up over a suggestion of several lines (fish) counts those rows. Only an input that was read
+// off the line is read again - one that the shell reported itself, or that was edited, is as it is.
+func applyTerminalWidth(commands []Command, cols int) {
+	if cols <= 0 {
+		return
+	}
+	for i := range commands {
+		c := &commands[i]
+		c.Cols = cols
+		if len(c.InputFrames) == 0 {
+			continue
+		}
+		if _, ok := markedCommandLine(c.OutputFrames); ok {
+			continue
+		}
+		if reconstructInputCols(c.InputFrames, c.PromptFrame, c.ContinuationPrompt, 0) == c.InputText {
+			c.InputText = reconstructInputCols(c.InputFrames, c.PromptFrame, c.ContinuationPrompt, cols)
+		}
+	}
 }
 
 // extractPrompt gets the shell prompt from the first frame
@@ -512,6 +535,11 @@ type lineEditor struct {
 	rows [][]rune
 	r    int
 	col  int
+	// width is the terminal's: a line that runs into the right margin goes on in the next row, as it does on the screen, and the
+	// cursor movements that count rows (fish going back up over a multi-line suggestion) count the same ones. 0 = no margin.
+	width int
+	// wrap[i] is that row i goes on in row i+1 because it ran into the margin (not because of a line break).
+	wrap []bool
 	// insert is insert mode (ESC [ 4 h): a character that is written pushes the rest of the row to the right instead of
 	// replacing the one under the cursor. Readline puts the terminal in it for the one character it types in the middle of a
 	// line (a space, then back, then the character: ESC [ 4 h, space, ESC [ 4 l, BS, c), and Ctrl-R does so at every key.
@@ -523,8 +551,38 @@ type lineEditor struct {
 
 func newLineEditor() *lineEditor { return &lineEditor{rows: [][]rune{nil}} }
 
+// newLineEditorWidth is a line editor for a terminal width columns wide (0: no margin).
+func newLineEditorWidth(width int) *lineEditor {
+	e := newLineEditor()
+	e.width = max(width, 0)
+	return e
+}
+
 func (e *lineEditor) reset() {
-	e.rows, e.r, e.col = [][]rune{nil}, 0, 0
+	e.rows, e.wrap, e.r, e.col = [][]rune{nil}, nil, 0, 0
+}
+
+func (e *lineEditor) setWrapped(i int, v bool) {
+	for len(e.wrap) <= i {
+		e.wrap = append(e.wrap, false)
+	}
+	e.wrap[i] = v
+}
+
+func (e *lineEditor) wrapped(i int) bool { return i < len(e.wrap) && e.wrap[i] }
+
+// logical is the lines as they were written: the rows that one line ran over are joined (not trimmed: the spaces in them are the line's).
+func (e *lineEditor) logical() []string {
+	var out []string
+	for i := 0; i < len(e.rows); i++ {
+		line := string(e.rows[i])
+		for e.wrapped(i) && i+1 < len(e.rows) {
+			i++
+			line += string(e.rows[i])
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
 // maxLineEditorCarry is the most of an unfinished sequence that is kept for the next frame; more than that is not one.
@@ -561,7 +619,7 @@ func (e *lineEditor) write(data string) {
 				e.rows = append(e.rows, nil)
 			}
 		case ch == '\b':
-			e.col = max(0, e.col-1)
+			e.left(1)
 		case ch >= 32 && ch != 0x7f:
 			e.put(ch)
 		}
@@ -570,7 +628,22 @@ func (e *lineEditor) write(data string) {
 	}
 }
 
+// left moves the cursor k columns left; after the last column it is on that column (the margin is not yet passed), not beyond it.
+func (e *lineEditor) left(k int) {
+	if e.width > 0 && e.col >= e.width {
+		e.col = e.width - 1
+	}
+	e.col = max(0, e.col-k)
+}
+
 func (e *lineEditor) put(ch rune) {
+	if e.width > 0 && e.col >= e.width { // the margin: the line goes on in the next row
+		e.setWrapped(e.r, true)
+		if e.r++; e.r >= len(e.rows) {
+			e.rows = append(e.rows, nil)
+		}
+		e.col = 0
+	}
 	row := e.rows[e.r]
 	for len(row) < e.col {
 		row = append(row, ' ')
@@ -664,6 +737,9 @@ func (e *lineEditor) csi(params string, final rune) {
 			if e.col < len(row) {
 				row = row[:e.col]
 			}
+			if e.wrapped(e.r) {
+				e.setWrapped(e.r, false) // what ran on to the next row is erased
+			}
 		case 1:
 			for c := 0; c <= e.col && c < len(row); c++ {
 				row[c] = ' '
@@ -695,18 +771,44 @@ func (e *lineEditor) csi(params string, final rune) {
 		for len(e.rows) <= e.r {
 			e.rows = append(e.rows, nil)
 		}
-	case 'J': // clear screen
-		if !has || n == 2 || n == 3 {
+	case 'J': // erase in display: below the cursor (the default), above it, or all (Ctrl-L: the screen is cleared)
+		switch {
+		case has && (n == 2 || n == 3):
 			e.reset()
+		case has && n == 1:
+			for r := 0; r < e.r; r++ {
+				e.rows[r] = nil
+			}
+			for c := 0; c <= e.col && c < len(row); c++ {
+				row[c] = ' '
+			}
+			e.rows[e.r] = row
+		default:
+			// Fish writes ESC [ J after it has drawn the listing of the completions and gone back up to the line: what is below goes, and
+			// the line, with its prompt, stays. (A reader that took it for "clear the screen" lost the prompt, and with it the command.)
+			if e.col < len(row) {
+				row = row[:e.col]
+			}
+			e.rows = append(e.rows[:e.r], row)
+			if len(e.wrap) > e.r {
+				e.wrap = e.wrap[:e.r+1]
+				e.wrap[e.r] = false
+			}
 		}
 	case 'H', 'f': // cursor home
 		e.r, e.col = 0, 0
 	case 'C':
 		e.col += k
+		if e.width > 0 {
+			e.col = min(e.col, e.width-1)
+		}
 	case 'D':
-		e.col = max(0, e.col-k)
+		e.left(k)
 	case 'G':
 		e.col = max(0, k-1)
+		if e.width > 0 {
+			e.col = min(e.col, e.width-1)
+		}
 	}
 	switch final {
 	case 'A', 'B', 'J', 'H', 'f': // these moved the cursor off this row (or cleared it)
@@ -722,7 +824,12 @@ func (e *lineEditor) csi(params string, final rune) {
 // prompt ("> ") the shell drew in front of each line after the first, which is
 // not part of the command.
 func reconstructInput(frames []TerminalFrame, promptFrame TerminalFrame, ps2 string) string {
-	e := newLineEditor()
+	return reconstructInputCols(frames, promptFrame, ps2, 0)
+}
+
+// reconstructInputCols is reconstructInput for a terminal cols columns wide (0: no margin).
+func reconstructInputCols(frames []TerminalFrame, promptFrame TerminalFrame, ps2 string, cols int) string {
+	e := newLineEditorWidth(cols)
 	promptData := promptFrame.Data
 	e.write(promptData[strings.LastIndex(promptData, "\n")+1:])
 	prompt := e.lines()[0]
@@ -743,7 +850,7 @@ func reconstructInput(frames []TerminalFrame, promptFrame TerminalFrame, ps2 str
 	for _, f := range frames {
 		e.write(f.Data)
 	}
-	lines := e.lines()
+	lines := e.logical()
 	if prompt != "" && !strings.HasPrefix(lines[0], prompt) {
 		// The line no longer starts with the prompt (one that changes between
 		// draws, say): fall back to following the keystrokes.

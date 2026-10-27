@@ -20,7 +20,8 @@ need a fix or two. Not covered by anything here: fish 4 (the container had fish 
 
 `recfuzz.py` exits 1 for a harness error or a difference of a kind that changes what the shell or a program in it **does**: a hang, a shell
 that does not end, files that differ, corrupted input, text of the integration in the output, leftover processes, a changed terminal or
-another exit status. Differences in the bytes printed, in the shell's state and in the observation files are in the report but do not fail
+another exit status, or a bare shell that never gives a prompt under the plain rc that every seed starts from (the shell is then
+not being tested at all). Differences in the bytes printed, in the shell's state and in the observation files are in the report but do not fail
 the run, because a few are known and cosmetic (see *What remains* in `AUDIT.md`); `--strict` fails on any HIGH or MED finding.
 `recfaults.py` exits 1 for a FAIL or an ERROR, except those in `KNOWN_FAILURES` at the top of the file, which are listed as `KNOWN`.
 
@@ -28,6 +29,10 @@ the run, because a few are known and cosmetic (see *What remains* in `AUDIT.md`)
 
 The `fuzz` job of the `recorder` workflow runs both on Linux and on macOS: `workflow_dispatch` inputs `fuzz_seeds`, `fuzz_shells`
 and `fuzz_strict`. Seeds 1-12 in three shells take about ten minutes per OS on two jobs.
+
+The run keeps an artifact per OS (`fuzz-Linux`, `fuzz-macOS`, 14 days): the two logs, the JSON report, `fuzz-work/fail` (the raw bytes of
+every fuzz session that differed) and `faultwork/logs` (the first and last 64 kB of every fault-suite session, one `.bin` per test).
+Before the fuzzer, a step prints what each shell gives under a bare pty, so a shell that never reaches a prompt shows itself at once.
 
 ## recfuzz.py: a differential fuzzer
 

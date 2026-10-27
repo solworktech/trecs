@@ -28,6 +28,9 @@ BASH = rf.SHELLS["bash"]  # a bash that can mark its prompts (not macOS's 3.2): 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORK = os.path.join(HERE, "faultwork")
 RESULTS = []
+# 1.5 MB of environment on Linux; macOS refuses to start anything with more than ARG_MAX (1 MB, arguments and environment together)
+HUGE_VARS = 50 if sys.platform.startswith("linux") else 15
+LOGS = os.path.join(WORK, "logs")
 
 
 # FAILs that are the design: the recorder tells the person, once, in the terminal, that it can no longer write the recording, and the
@@ -96,7 +99,21 @@ def gone(pid, wait=3.0):
     return False
 
 
+def keep_log(run):
+    """The first and last 64 kB of what the session printed, kept so that a failure in CI can be looked at afterwards."""
+    try:
+        os.makedirs(LOGS, exist_ok=True)
+        data = bytes(run.buf)
+        if len(data) > 131072:
+            data = data[:65536] + b"\n[... %d bytes left out ...]\n" % (len(data) - 131072) + data[-65536:]
+        with open(os.path.join(LOGS, os.path.basename(run.root) + ".bin"), "wb") as f:
+            f.write(data)
+    except (OSError, AttributeError):
+        pass
+
+
 def finish(run):
+    keep_log(run)
     run.kill()
     time.sleep(0.2)
     left = processes_in(run.root)
@@ -120,6 +137,9 @@ def raw_state(run):
 
 # -------------------------------------------------------------------------------------------------------
 
+ENDING = {signal.SIGHUP, signal.SIGTERM, signal.SIGINT, signal.SIGQUIT}  # the ones the recorder answers by ending the recording
+
+
 def test_signals_to_recorder():
     """A signal sent to the recorder (a window manager's HUP, a kill, a stray USR1) must not leave the person's terminal
     in raw mode or the shell running on without a terminal."""
@@ -133,6 +153,11 @@ def test_signals_to_recorder():
         os.kill(rec, sg)
         time.sleep(0.8)
         run.pump(0.1)
+        # A signal that ends the recording is answered by a proper shutdown (hang up the shell, finish the files), which takes a
+        # moment: give it time to finish before calling it alive.
+        t_end = time.time() + 10
+        while run.p.poll() is None and time.time() < t_end and sg in ENDING:
+            run.pump(0.2)
         rec_alive = run.p.poll() is None
         sh_alive = sp is not None and not gone(sp, 0.1)
         usable = rec_alive and alive(run)
@@ -387,7 +412,7 @@ def test_environments():
         "LANG=C": lambda e, r: e.update(LANG="C", LC_ALL="C"),
         "SHELL unset": lambda e, r: e.pop("SHELL"),
         "PATH minimal": lambda e, r: e.update(PATH="/usr/bin:/bin"),
-        "huge environment (1.5 MB)": lambda e, r: [e.update({f"BIG{i}": "x" * 30000}) for i in range(50)],
+        f"huge environment ({HUGE_VARS * 30000 // 1000} kB)": lambda e, r: [e.update({f"BIG{i}": "x" * 30000}) for i in range(HUGE_VARS)],
         "env var with newline and utf8": lambda e, r: e.update(WEIRD="a\nbé─", **{"X-Y": "1"}),
         "PS1 exported": lambda e, r: e.update(PS1="E> "),
         "PROMPT_COMMAND exported": lambda e, r: e.update(PROMPT_COMMAND="echo exported-pc"),
@@ -409,7 +434,7 @@ def test_environments():
             m = run.expect(rb"ENDMARK2\r?\n", pos, 6)
             seg = bytes(run.buf[pos:])
             envs = run.root
-            run.send(("env -0 | tr '\\0' '\\n' | grep -a -v -E '^(_|SHLVL|PWD|OLDPWD|PS1|PROMPT_COMMAND|TRECS_RECORDING|ZDOTDIR|TRECS_USER_ZDOTDIR|OBS|TMPDIR|HOME|SHELL)=' | sed 's#" + envs + "#@R@#g' | md5sum | cut -c1-12 | sed 's/^/ENVSUM-/'; echo ENDMARK$((2+1))\n").encode())
+            run.send(("env -0 | tr '\\0' '\\n' | grep -a -v -E '^(_|SHLVL|PWD|OLDPWD|PS1|PROMPT_COMMAND|TRECS_RECORDING|ZDOTDIR|TRECS_USER_ZDOTDIR|OBS|TMPDIR|HOME|SHELL)=' | sed 's#" + envs + "#@R@#g' | cksum | awk '{printf \"%012d\\n\", $1}' | sed 's/^/ENVSUM-/'; echo ENDMARK$((2+1))\n").encode())
             m2 = run.expect(rb"ENDMARK3\r?\n", pos, 8)
             outs[mode] = (bool(m), re.findall(rb"ENVSUM-([0-9a-f]{12})", bytes(run.buf[pos:])), bytes(run.buf)[:200])
             run.send(b"exit\n")
@@ -494,45 +519,6 @@ def test_throughput_and_latency():
         finish(run)
     (bm, bp), (rm, rp) = lat["bare"], lat["rec"]
     result("PASS" if rm - bm < 5 and rp - bp < 20 else "NOTE", "keystroke echo latency (300 keys)", f"bare p50 {bm:.2f}ms p99 {bp:.2f}ms; recorded p50 {rm:.2f}ms p99 {rp:.2f}ms")
-
-
-def test_slow_consumer():
-    """Output is produced faster than the terminal reads it (a slow ssh link): nothing may be lost or reordered, and ^C must
-    still reach the job while the recorder is blocked writing to the terminal."""
-    digest = {}
-    for mode in ("bare", "rec"):
-        run = start(f"slow-{mode}", mode)
-        pos = len(run.buf)
-        run.send(b"seq 1 600000 | tee /dev/null | md5sum; seq 1 600000; echo SLOWEND\n")
-        t0 = time.time()
-        run.paused = False
-        run.pump(0.2)
-        run.paused = True           # stop reading: the recorder's write to us blocks, the pty fills
-        time.sleep(2.0)
-        run.paused = False
-        run.expect(rb"SLOWEND\r?\n", pos, 60)
-        data = bytes(run.buf[pos:])
-        digest[mode] = hashlib.md5(rf.OSC133.sub(b"", data).split(b"SLOWEND")[0].split(b"\n", 1)[1] if b"\n" in data else data).hexdigest()
-        finish(run)
-    result("PASS" if digest["bare"] == digest["rec"] else "FAIL", "consumer stops reading for 2 s during a 4 MB flood", f"output digests bare={digest['bare'][:8]} recorded={digest['rec'][:8]}")
-    # ^C while blocked
-    res = {}
-    for mode in ("bare", "rec"):
-        run = start(f"slowc-{mode}", mode)
-        run.send(b"yes | cat\n")
-        time.sleep(0.5)
-        run.paused = True
-        time.sleep(1.0)
-        run.send(b"\x03")
-        time.sleep(0.5)
-        run.paused = False
-        t0 = time.time()
-        pos = len(run.buf)
-        run.send(b"\necho CTRLC-$((6*7))\n")
-        got = run.expect(rb"CTRLC-42\r?\n", pos, 10)
-        res[mode] = (bool(got), time.time() - t0)
-        finish(run)
-    result("PASS" if res["rec"][0] else "FAIL", "^C typed while the consumer is not reading and the output is blocked", f"bare returns={res['bare'][0]} ({res['bare'][1]:.2f}s), recorded returns={res['rec'][0]} ({res['rec'][1]:.2f}s)")
 
 
 def test_typeahead_and_paste():
@@ -696,7 +682,7 @@ def test_job_control_pgrp():
 def test_slow_consumer():
     """Output is produced faster than the terminal reads it (a slow ssh link): nothing may be lost or reordered, and ^C must
     still reach the job while the recorder is blocked writing to the terminal."""
-    digest, sizes = {}, {}
+    digest, sizes, bodies = {}, {}, {}
     for mode in ("bare", "rec"):
         run = start(f"slow-{mode}", mode)
         pos = len(run.buf)
@@ -711,9 +697,15 @@ def test_slow_consumer():
         body = m.group(1) if m else b""
         digest[mode] = hashlib.md5(body).hexdigest()
         sizes[mode] = len(body)
+        bodies[mode] = body
         finish(run)
+    where = ""
+    if digest["bare"] != digest["rec"]:
+        b, r = bodies["bare"], bodies["rec"]
+        i = next((k for k in range(min(len(b), len(r))) if b[k] != r[k]), min(len(b), len(r)))
+        where = f"; first difference at byte {i}: bare {b[max(0, i - 20):i + 20]!r} recorded {r[max(0, i - 20):i + 20]!r}"
     result("PASS" if digest["bare"] == digest["rec"] and sizes["bare"] > 3_000_000 else "FAIL", "consumer stops reading for 2 s during a 4 MB flood",
-           f"bytes bare={sizes['bare']} recorded={sizes['rec']}; digests bare={digest['bare'][:8]} recorded={digest['rec'][:8]}")
+           f"bytes bare={sizes['bare']} recorded={sizes['rec']}; digests bare={digest['bare'][:8]} recorded={digest['rec'][:8]}{where}")
     res = {}
     for mode in ("bare", "rec"):
         run = start(f"slowc-{mode}", mode)

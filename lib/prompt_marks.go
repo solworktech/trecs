@@ -77,7 +77,7 @@ func commandInputText(cmd *Command) string {
 	if text, ok := markedCommandLine(cmd.OutputFrames); ok {
 		return text
 	}
-	return reconstructInput(cmd.InputFrames, cmd.PromptFrame, cmd.ContinuationPrompt)
+	return reconstructInputCols(cmd.InputFrames, cmd.PromptFrame, cmd.ContinuationPrompt, cmd.Cols)
 }
 
 // markPiece is a stretch of a frame: plain text (kind 0) or one mark.

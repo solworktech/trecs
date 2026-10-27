@@ -195,6 +195,10 @@ type Command struct {
 	// otherwise. Needed to read the command back from InputFrames.
 	ContinuationPrompt string
 
+	// Cols is the width of the terminal the command was typed in (0 if it is not known): a line longer than it goes on in the next row,
+	// and the cursor movements of a line editor count those rows. Needed to read the command back from InputFrames.
+	Cols int
+
 	// TypedAhead lists the OutputFrames that are the echo of keystrokes typed while
 	// the command was still running (the start of the next command), which are in
 	// the recording but not in the command's output. See markTypedAhead.

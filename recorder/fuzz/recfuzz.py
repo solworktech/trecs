@@ -944,6 +944,11 @@ def compare(shell, A1, A2, R, steps, profile_names):
     for r, nm in ((A1, "A1"), (A2, "A2")):
         if r["hang"]:
             F.append(("note", "bare-hang", f"{nm}: {r['hang']}"))
+    if A1["hang"] and not profile_names:
+        # A plain rc (the one every other seed starts from) that gives no prompt is the test setup that is broken - the shell is
+        # not being tested at all - and not a quirk of a random profile (an rc that sets a prompt the pattern cannot see).
+        F.append(("HIGH", "no-prompt-with-plain-rc",
+                  f"{shell}: the bare shell printed no prompt in the first seconds; what it printed: {A1.get('raw', b'')[-300:]!r}"))
     if R["hang"] and not A1["hang"]:
         F.append(("HIGH", "hang-under-recorder", R["hang"]))
         return F, 0, known
@@ -1109,7 +1114,7 @@ def main():
 # order of its own, zsh counts the marks in a prompt it cannot mark as zero-width), and the Go tests hold the rest in place.
 GATED = {
     "hang-under-recorder", "startup-output-differs", "files-differ", "integration-text-leaked", "input-corrupted", "does-not-end",
-    "leftover-processes", "terminal-left-changed", "shell-exit-status-differs",
+    "leftover-processes", "terminal-left-changed", "shell-exit-status-differs", "no-prompt-with-plain-rc",
 }
 
 

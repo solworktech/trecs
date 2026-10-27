@@ -146,6 +146,36 @@ jobs:
             echo "$s: $("$s" --version | head -1)"
           done
 
+      # Evidence for the next failure, whatever it is: what each shell prints in a bare pty before any recorder is involved. A shell
+      # that gives no prompt here is a problem with the shell or the setup, and the fuzzer would only show it as a timeout.
+      - name: Does each shell give a prompt under a pty (bare, no recorder)
+        shell: bash
+        working-directory: recorder/fuzz
+        run: |
+          python3 - <<'PY'
+          import os, pty, select, tempfile, time
+          import ptyrun
+          for name, path in ptyrun.SHELLS.items():
+              home = tempfile.mkdtemp()
+              rc = {"bash": ".bashrc", "zsh": ".zshrc", "fish": ".config/fish/config.fish"}[name]
+              os.makedirs(os.path.dirname(os.path.join(home, rc)), exist_ok=True)
+              open(os.path.join(home, rc), "w").write("PS1='P> '\n" if name == "bash" else "PROMPT='P> '\n" if name == "zsh" else "function fish_prompt; printf 'P> '; end\n")
+              pid, fd = pty.fork()
+              if pid == 0:
+                  env = dict(os.environ, HOME=home, TERM="xterm-256color")
+                  env.pop("ZDOTDIR", None)
+                  os.execve(path, [path, "-i"], env)
+              out, end = b"", time.time() + 6
+              while time.time() < end and b"P> " not in out:
+                  if select.select([fd], [], [], 0.3)[0]:
+                      try:
+                          out += os.read(fd, 4096)
+                      except OSError:
+                          break
+              print(f"{name}: prompt={'yes' if b'P> ' in out else 'NO'}  user={os.getuid()}  {out[-300:]!r}")
+              os.kill(pid, 9)
+          PY
+
       - name: Fuzz the recorder against the bare shell
         shell: bash
         working-directory: recorder/fuzz
@@ -175,7 +205,9 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # the raw bytes of every session that differed, for the failing seeds
+      # download from the run page (Artifacts: fuzz-Linux, fuzz-macOS). In it: the two logs and the JSON report; fuzz-work/fail holds
+      # the raw bytes of every fuzz session that differed; fault-logs holds the first and last 64 kB of every fault-suite session
+      # (one .bin per test, named after it), so a failing test can be looked at without running it again.
       - name: Keep the logs and the failing sessions
         if: always()
         uses: actions/upload-artifact@v4
@@ -186,7 +218,9 @@ jobs:
             ${{ runner.temp }}/fuzz.json
             ${{ runner.temp }}/faults.log
             ${{ runner.temp }}/fuzz-work/fail
+            recorder/fuzz/faultwork/logs
           if-no-files-found: warn
+          retention-days: 14
 
   record:
     name: record (${{ matrix.os }}, ${{ matrix.shell }})
