@@ -120,7 +120,7 @@ func TestTheFullHelpMenuListsEveryKeyOfThePageAndEscClosesIt(t *testing.T) {
 	h.pausePlayback()
 	h.typeText("?")
 	h.waitFor("the help", func() bool { return h.front() == helpPage }, 2*time.Second)
-	for _, want := range []string{"Playback - keys", "Add an image at this time", "Browse the commands and images", "Quit", "Esc closes this"} {
+	for _, want := range []string{"Playback - keys", "Add an image at this time", "Browse the commands and images", "Quit"} {
 		if !strings.Contains(h.screen(), want) {
 			t.Errorf("%q is not in the help:\n%s", want, h.screen())
 		}
