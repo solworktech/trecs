@@ -731,6 +731,11 @@ def test_slow_consumer():
 def main():
     os.makedirs(WORK, exist_ok=True)
     only = sys.argv[1:]
+    # A test that never ends is a finding too: after this long the stacks of the threads are printed (where it is stuck) and the run
+    # ends, rather than holding a CI job for hours.
+    import faulthandler
+    faulthandler.dump_traceback_later(int(os.environ.get("TRECS_FUZZ_WATCHDOG", "1500")), exit=True)
+    print(f"control: a bare pty with a slow reader doubled {pty_cr_doubling()} CRs (macOS: see ptyrun.pty_cr_doubling)", flush=True)
     tests = [(n[5:], f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     for nm, f in tests:
         if only and nm not in only:

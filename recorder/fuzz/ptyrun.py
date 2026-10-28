@@ -350,15 +350,25 @@ def pty_cr_doubling():
                 break
             buf += data
             time.sleep(0.0004)  # slower than the flood: the pty's queue fills
+        # The master is closed FIRST: a process that is killed while its output is waiting in the pty does not finish exiting until
+        # the pty is drained or closed (BSD waits for it as the slave closes), so a wait with the master still open never ends.
+        try:
+            os.close(fd)
+        except OSError:
+            pass
         try:
             os.kill(pid, signal.SIGKILL)
         except OSError:
             pass
-        try:
-            os.waitpid(pid, 0)
-        except OSError:
-            pass
-        os.close(fd)
+        give_up = time.time() + 5
+        while time.time() < give_up:
+            try:
+                done, _ = os.waitpid(pid, os.WNOHANG)
+            except OSError:
+                break
+            if done:
+                break
+            time.sleep(0.05)
         total += bytes(buf).count(b"\r\r\n")
     _CR_DOUBLING = total
     return total

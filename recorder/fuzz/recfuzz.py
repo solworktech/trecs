@@ -30,7 +30,7 @@ import time
 import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ptyrun import IS_LINUX, LOCALE, SHELLS, Run, processes_in, tool_path, undouble_cr  # noqa: E402
+from ptyrun import IS_LINUX, LOCALE, SHELLS, Run, processes_in, pty_cr_doubling, tool_path, undouble_cr  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TRECS = os.environ.get("TRECS_BIN", os.path.join(HERE, "trecs"))
@@ -774,6 +774,7 @@ KNOWN_STATE = [
     (re.compile(r"133;[ABCD]"), "prompt variables carry OSC 133 marks"),
     (re.compile(r"^(declare -x|declare --|declare -a|declare -\w+) (PS0|PS1|PS2|PROMPT_COMMAND)=|^(PS0|PS1|PS2|PROMPT_COMMAND|PROMPT|PROMPT2)=|^typeset .*(PS1|PS2|PROMPT)"), "prompt variables changed"),
     (re.compile(r"^(PS0|PS1|PS2|PROMPT_COMMAND|TRECS_RECORDING|PROMPT|PROMPT2)$"), "variable name list"),
+    (re.compile(r"^(export|typeset -x) (PS0|PS1|PS2|PROMPT|PROMPT2)="), "prompt variables changed"),  # an exported prompt, as the shell lists it
 ]
 
 
@@ -1095,6 +1096,8 @@ def main():
     jobs = [(s, sh, a.steps, a.work, a.keep) for s in range(lo, hi + 1) for sh in a.shells.split(",")]
     results = []
     t0 = time.time()
+    # measured here, once, so that the workers (forked below) have it: see ptyrun.pty_cr_doubling
+    print(f"control: a bare pty with a slow reader doubled {pty_cr_doubling()} CRs", flush=True)
     with cf.ProcessPoolExecutor(a.jobs, mp_context=mp.get_context('fork')) as ex:
         for r in ex.map(one, jobs):
             results.append(r)
