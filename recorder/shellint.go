@@ -93,10 +93,13 @@ fi
 if (( __trecs_xt )); then unset __trecs_xt; setopt xtrace; else unset __trecs_xt; fi
 `
 
-// fishDefaultPrompt: a person who has erased fish_prompt (functions -e) still gets fish's own prompt, as fish does not look for the function
-// again, so the wrapper must not take the erased one for no prompt at all: it loads the file the prompt comes from.
-const fishDefaultPrompt = `    if not builtin functions -q fish_prompt; and test -r "$__fish_data_dir/functions/fish_prompt.fish"
-        builtin source "$__fish_data_dir/functions/fish_prompt.fish"
+// fishDefaultPrompt: a person who has erased fish_prompt (functions -e) still gets a prompt, as fish falls back to one of its own when
+// the function is missing, and the wrapper must not take the erased one for no prompt at all. It is the prompt fish falls back to
+// (the same line as in its reader), and not the one from fish_prompt.fish: fish 4 does not keep that file on disk.
+const fishDefaultPrompt = `    if not builtin functions -q fish_prompt
+        function fish_prompt
+            builtin echo -n "$USER@$hostname $PWD "'> '
+        end
     end`
 
 const fishIntegration = `

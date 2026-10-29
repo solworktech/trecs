@@ -281,6 +281,33 @@ func TestZshXtraceShowsNothingOfTheIntegration(t *testing.T) {
 	}
 }
 
+func TestAnErasedFishPromptIsStillAPromptWithTheMarks(t *testing.T) {
+	fish, err := exec.LookPath("fish")
+	if err != nil {
+		t.Skip("no fish")
+	}
+	home := t.TempDir()
+	cfg := filepath.Join(home, ".config", "fish")
+	_ = os.MkdirAll(cfg, 0o755)
+	if err := os.WriteFile(filepath.Join(cfg, "config.fish"), []byte("functions -e fish_prompt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, ".config"), "TERM=xterm-256color"}
+	integ, err := setupShellIntegration(fish)
+	if err != nil || integ == nil {
+		t.Fatalf("no integration: %v", err)
+	}
+	defer integ.cleanup()
+	raw, alive := typeIntoRaw(t, fish, integ.args, append(env, integ.env...), []string{"echo hi"})
+	if !alive {
+		t.Fatal("the shell ended")
+	}
+	// fish prints a prompt of its own when the function is gone ("user@host cwd> ", cut at the left when it is long), and the marks go round it
+	if !regexp.MustCompile(`\x1b\]133;A[^\x07\x1b]*(?:\x07|\x1b\\)[^\x1b]* > \x1b\]133;B`).MatchString(raw) {
+		t.Errorf("no prompt between the marks: %q", raw)
+	}
+}
+
 func TestAMultiLineFishPromptKeepsItsLines(t *testing.T) {
 	fish, err := exec.LookPath("fish")
 	if err != nil {
