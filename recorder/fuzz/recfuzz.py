@@ -29,6 +29,11 @@ import sys
 import time
 import traceback
 
+try:
+    import pyte  # optional: with it, output that differs as bytes is also compared as the screen it draws
+except ImportError:
+    pyte = None
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ptyrun import IS_LINUX, LOCALE, SHELLS, Run, preflight, processes_in, pty_cr_doubling, tool_path, undouble_cr  # noqa: E402
 
@@ -778,6 +783,52 @@ KNOWN_STATE = [
 ]
 
 
+SCREEN_ROWS, MAX_RENDER = 400, 300_000
+
+
+def screen_of(data, cols):
+    """What the bytes draw: the lines of a screen that starts empty, the cursor in the middle of it (so that moving up has room), with the
+    cursor's place; blank lines at the end left out."""
+    scr = pyte.Screen(cols, SCREEN_ROWS)
+    st = pyte.ByteStream(scr)
+    st.feed(b"\x1b[200;1H" + data)
+    lines = [ln.rstrip() for ln in scr.display]
+    while lines and not lines[-1]:
+        lines.pop()
+    return lines, (scr.cursor.y, scr.cursor.x)
+
+
+def same_screen(bare, rec, cols):
+    """True if two byte streams draw the same screen and leave the cursor in the same place. False without pyte, and for large streams."""
+    if pyte is None or len(bare) > MAX_RENDER or len(rec) > MAX_RENDER:
+        return False
+    try:
+        return screen_of(bare, cols) == screen_of(rec, cols)
+    except Exception:
+        return False
+
+
+BELLS_WHY = "BSD terminal bells (IMAXBEL) when the input queue is full, in a flood typed at a program"
+FLOOD_WHY = "the echo of a flood typed at cat is longer or shorter: the terminal's echo is timing, and the file it made is compared on its own"
+SCREEN_WHY = "the same screen and cursor, drawn in another order (compared with pyte)"
+
+
+def explain_difference(shell, profile_names, label, bare, rec, cols):
+    """Why two outputs that differ as bytes are not a difference the recorder makes, or None. Matched to be listed, not hidden."""
+    flood = not IS_LINUX and label.startswith(("big-paste", "raw-bytes"))
+    if flood and rec.count(b"\x07") > bare.count(b"\x07"):
+        # A flood typed at a program that is not reading yet fills the terminal's input queue, and a BSD terminal rings the bell for each
+        # byte it cannot take (IMAXBEL); through the recorder the flood arrives in larger pieces. Bells only: the rest is compared on.
+        if bare == rec.replace(b"\x07", b""):
+            return BELLS_WHY
+        bare, rec = bare.replace(b"\x07", b""), rec.replace(b"\x07", b"")
+    if flood and label.startswith("big-paste"):
+        squash = lambda b: re.sub(rb"(?:x+\r?\n)+x*", b"x*\r\n", b)  # noqa: E731 - the lines of x that cat's input is echoed as
+        if squash(bare) == squash(rec):
+            return FLOOD_WHY
+    return known_output_difference(shell, profile_names, bare, rec) or (SCREEN_WHY if same_screen(bare, rec, cols) else None)
+
+
 def known_output_difference(shell, profile_names, bare, rec):
     """Why a step's output differs although the recorder did nothing wrong, or None. Matched to be listed, not hidden."""
     if {"xtrace", "set_x"} & set(profile_names or []) and sorted(bare.split(b"\r\n")) == sorted(rec.split(b"\r\n")):
@@ -996,17 +1047,17 @@ def compare(shell, A1, A2, R, steps, profile_names):
     if s1 == s2 and s1 != sr:
         F.append(("HIGH", "startup-output-differs", f"bare {s1[-250:]!r}\n rec  {sr[-250:]!r}"))
     n = min(len(A1["segments"]), len(R["segments"]))
+    cols = 100  # the width of the terminal, as a resize step changes it
     for i in range(n):
         label = A1["segments"][i][0]
+        if m := re.match(r"resize-(\d+)x(\d+)", label):
+            cols = int(m.group(2))
         a1 = norm(A1["segments"][i][1], root_a, "A1")
         a2 = norm(A2["segments"][i][1], A2["root"], "A2") if i < len(A2["segments"]) else b""
         r = norm(R["segments"][i][1], root_r, "R")
         if a1 == a2:
-            if a1 != r and not IS_LINUX and label.startswith(("big-paste", "raw-bytes")) and a1 == r.replace(b"\x07", b"") and r.count(b"\x07") > a1.count(b"\x07"):
-                # Nothing but bells more: a flood typed at a program that is not reading yet fills the terminal's input queue, and a BSD
-                # terminal rings the bell for each byte it cannot take (IMAXBEL). Through the recorder the flood arrives in larger pieces.
-                known["BSD terminal bells (IMAXBEL) when the input queue is full, in a flood typed at a program"] = known.get("BSD terminal bells (IMAXBEL) when the input queue is full, in a flood typed at a program", 0) + 1
-            elif a1 != r and (why := known_output_difference(shell, profile_names, a1, r)):
+            why = explain_difference(shell, profile_names, label, a1, r, cols) if a1 != r else None
+            if why:
                 known[why] = known.get(why, 0) + 1
             elif a1 != r:
                 k = next((j for j in range(min(len(a1), len(r))) if a1[j] != r[j]), min(len(a1), len(r)))
@@ -1135,6 +1186,8 @@ def main():
     t0 = time.time()
     # measured here, once, so that the workers (forked below) have it: see ptyrun.pty_cr_doubling
     print(f"control: a bare pty with a slow reader doubled {pty_cr_doubling()} CRs", flush=True)
+    print("control: " + ("pyte found: output that differs as bytes is also compared as the screen it draws" if pyte else
+                         "pyte not found (pip install pyte): output is compared as bytes only"), flush=True)
     with cf.ProcessPoolExecutor(a.jobs, mp_context=mp.get_context('fork')) as ex:
         for r in ex.map(one, jobs):
             results.append(r)

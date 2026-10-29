@@ -10,6 +10,12 @@ need a fix or two. Not covered by anything here: fish 4 (the container had fish 
 
 - **Shells** are found on `PATH` (`bash`, `zsh`, `fish`), or named in `TRECS_FUZZ_BASH`, `TRECS_FUZZ_ZSH`, `TRECS_FUZZ_FISH`. macOS's own
   bash is 3.2, which cannot mark its prompts: `brew install bash` and set `TRECS_FUZZ_BASH=$(brew --prefix)/bin/bash`.
+- **Programs the harness runs** are checked before anything starts, and a missing one ends the run once, with a message: the shells and the
+  recorder, `python3`, and on systems without `/proc` also `ps` and `lsof` (`pkg install lsof`, `apt install lsof`). `mount` and `umount` are
+  optional (the disk-full test falls back to a file size limit).
+- **`pyte`** (`pip install pyte`) is optional. With it, output that differs as bytes is also drawn on a screen and compared as that: fish and
+  zsh repaint a line in an order of their own, and the same screen is not a difference the recorder makes. Those are counted under
+  "known" in the report. Without it, only the bytes are compared, and more of those differences are listed as findings.
 - **Linux** reads `/proc` for the state of the shell (signal masks, limits, descriptors, the session). **macOS** has no `/proc`: the state
   comes from `ps`, `ulimit -a` and `/dev/fd`, and what the system does not tell (signal masks, the session id) is left out of the comparison.
 - Commands the sessions type that macOS lacks (`md5sum`, `sha256sum`, `setsid`) are stood in for by small scripts in `shims/`, made on first
