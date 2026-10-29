@@ -769,13 +769,39 @@ KNOWN_STATE = [
     (re.compile(r"^ZDOTDIR=|^TRECS_USER_ZDOTDIR="), "zsh: ZDOTDIR / TRECS_USER_ZDOTDIR in the environment (restored in the shell itself)"),
     (re.compile(r"^TERM=xterm-256color$"), "TERM replaced for dumb/unset terminals"),
     (re.compile(r"PS0: not found|PROMPT_COMMAND: not found|no such variable: (precmd_functions|preexec_functions)|^(precmd_functions|preexec_functions|zshexit_functions|chpwd_functions)$"), "hook arrays / PS0 exist (the integration's precmd/preexec hooks, PS0)"),
-    (re.compile(r"^add-zsh-hook$|command not found: add-zsh-hook|^_?add-zsh-hook"), "zsh: add-zsh-hook is autoloaded by the integration"),
+    (re.compile(r"^add-zsh-hook$|command not found: add-zsh-hook|^_?add-zsh-hook|^\++add-zsh-hook:\d+>"), "zsh: add-zsh-hook is autoloaded by the integration (and shows under setopt xtrace when the probe calls it)"),
     (re.compile(r"__trecs"), "integration functions / hooks are defined in the shell (names start with __trecs)"),
     (re.compile(r"133;[ABCD]"), "prompt variables carry OSC 133 marks"),
     (re.compile(r"^(declare -x|declare --|declare -a|declare -\w+) (PS0|PS1|PS2|PROMPT_COMMAND)=|^(PS0|PS1|PS2|PROMPT_COMMAND|PROMPT|PROMPT2)=|^typeset .*(PS1|PS2|PROMPT)"), "prompt variables changed"),
     (re.compile(r"^(PS0|PS1|PS2|PROMPT_COMMAND|TRECS_RECORDING|PROMPT|PROMPT2)$"), "variable name list"),
     (re.compile(r"^(export|typeset -x) (PS0|PS1|PS2|PROMPT|PROMPT2)="), "prompt variables changed"),  # an exported prompt, as the shell lists it
 ]
+
+
+def known_output_difference(shell, profile_names, bare, rec):
+    """Why a step's output differs although the recorder did nothing wrong, or None. Matched to be listed, not hidden."""
+    if {"xtrace", "set_x"} & set(profile_names or []) and sorted(bare.split(b"\r\n")) == sorted(rec.split(b"\r\n")):
+        # The stages of a pipeline are processes of their own, and each writes its trace line when it starts: their order is a race.
+        return "the trace lines (set -x) of the stages of a pipeline come in another order: the same lines"
+    if shell == "fish" and b"Unknown command: fish_prompt" in bare and b"Unknown command: fish_prompt" not in rec:
+        # With fish_prompt erased, fish itself reports an error when it repaints after a job has ended. The recorded shell has a prompt
+        # function (the one fish falls back to), so it does not.
+        return "fish: with fish_prompt erased, the bare shell prints an error at a repaint that the recorded one (with a prompt function) does not"
+    return None
+
+
+def hook_array_with_integration(line, rec_lines):
+    """A hook array (precmd_functions=( _u1 )) the recorded shell lists with the integration's hook added: the person's hooks are all still in it."""
+    m = re.match(r"(.*?=\()(.*)\)\s*$", line)
+    if not m:
+        return None
+    mine = m.group(2).split()
+    for rl in rec_lines:
+        if rl.startswith(m.group(1)) and "__trecs" in rl:
+            theirs = rl[len(m.group(1)):].rstrip().rstrip(")").split()
+            if all(x in theirs for x in mine):
+                return "hook arrays list the integration's hooks as well as the person's (all of theirs are in it)"
+    return None
 
 
 def known_state_line(line):
@@ -976,7 +1002,13 @@ def compare(shell, A1, A2, R, steps, profile_names):
         a2 = norm(A2["segments"][i][1], A2["root"], "A2") if i < len(A2["segments"]) else b""
         r = norm(R["segments"][i][1], root_r, "R")
         if a1 == a2:
-            if a1 != r:
+            if a1 != r and not IS_LINUX and label.startswith(("big-paste", "raw-bytes")) and a1 == r.replace(b"\x07", b"") and r.count(b"\x07") > a1.count(b"\x07"):
+                # Nothing but bells more: a flood typed at a program that is not reading yet fills the terminal's input queue, and a BSD
+                # terminal rings the bell for each byte it cannot take (IMAXBEL). Through the recorder the flood arrives in larger pieces.
+                known["BSD terminal bells (IMAXBEL) when the input queue is full, in a flood typed at a program"] = known.get("BSD terminal bells (IMAXBEL) when the input queue is full, in a flood typed at a program", 0) + 1
+            elif a1 != r and (why := known_output_difference(shell, profile_names, a1, r)):
+                known[why] = known.get(why, 0) + 1
+            elif a1 != r:
                 k = next((j for j in range(min(len(a1), len(r))) if a1[j] != r[j]), min(len(a1), len(r)))
                 F.append(("HIGH" if not label.startswith(("PROBE",)) else "info", f"output-differs:{label.split(':')[0]}",
                           f"step {i} {label} (first difference at byte {k} of {len(a1)}/{len(r)})\n bare: {a1[max(0, k-120):k+160]!r}\n rec : {r[max(0, k-120):k+160]!r}"))
@@ -994,7 +1026,7 @@ def compare(shell, A1, A2, R, steps, profile_names):
             stable = set(la1) & set(la2)
             for ln in la1:
                 if ln in stable and ln not in lr:
-                    why = known_state_line(ln)
+                    why = known_state_line(ln) or hook_array_with_integration(ln, lr)
                     if why:
                         known[why] = known.get(why, 0) + 1
                     else:
