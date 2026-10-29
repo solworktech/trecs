@@ -849,7 +849,10 @@ def run_session(workdir, tag, shell, profile_lines, steps, end, mode, size=(30, 
                 elif data:
                     run.send(data, chunk=None)
             if not nosync:
-                run.settle(0.25, 1.5)
+                # A signal key (^C, ^Z, ^backslash) is echoed by the terminal at once, and the shell answers it when it next runs: on a busy
+                # machine that is later than a quarter of a second, and a line typed in the meantime is thrown away with the typeahead.
+                signalled = any(c in d for _, d in parts for c in (b"\x03", b"\x1a", b"\x1c"))
+                run.settle(0.8 if signalled else 0.25, 2.5 if signalled else 1.5)
                 run.send(f"builtin printf 'ZZ%sZZ\\n' {i}\n".encode())
                 m = run.expect(b"ZZ" + str(i).encode() + b"ZZ\r?\n", pos, timeout)
                 if not m:
@@ -958,7 +961,8 @@ def compare(shell, A1, A2, R, steps, profile_names):
     if R["hang"] and not A1["hang"]:
         F.append(("HIGH", "hang-under-recorder", f"{R['hang']}; the end of what the recorded shell printed: {R.get('raw', b'')[-300:]!r}"))
         return F, 0, known
-    if A1["hang"]:
+    if A1["hang"] or A2["hang"]:
+        # no state was written by a bare run that did not finish, and with one bare run alone nothing says what is noise
         return F, 0, known
 
     noisy = 0
@@ -1059,7 +1063,7 @@ def one(args):
     try:
         A1 = run_session(workdir, tag + "-a1", shell, plines, steps, end, "bare")
         A2 = run_session(workdir, tag + "-a2", shell, plines, steps, end, "bare")
-        R = run_session(workdir, tag + "-r", shell, plines, steps, end, "rec")
+        R = run_session(workdir, tag + "-r1", shell, plines, steps, end, "rec")
         F, noisy, known = compare(shell, A1, A2, R, steps, pnames)
     except Exception:
         return {"seed": seed, "shell": shell, "error": traceback.format_exc(), "findings": [], "profile": pnames}
@@ -1069,12 +1073,12 @@ def one(args):
     if F and any(f[0] in ("HIGH", "MED") for f in F):
         d = os.path.join(workdir, "fail", tag)
         os.makedirs(d, exist_ok=True)
-        for nm, r in (("a1", A1), ("a2", A2), ("r", R)):
+        for nm, r in (("a1", A1), ("a2", A2), ("r1", R)):
             open(f"{d}/{nm}.raw", "wb").write(r.get("raw", b""))
         json.dump({"seed": seed, "shell": shell, "profile": pnames, "profile_lines": plines, "steps": [s[0] for s in steps], "ending": end[0]},
                   open(f"{d}/case.json", "w"), indent=1)
     if not keep:
-        for suf in ("-a1", "-a2", "-r"):
+        for suf in ("-a1", "-a2", "-r1"):
             shutil.rmtree(os.path.join(workdir, tag + suf), ignore_errors=True)
     return out
 
