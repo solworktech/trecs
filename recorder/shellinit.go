@@ -90,7 +90,7 @@ func shellInitScript(kind, version string) (string, error) {
 		// Aliases are off for the whole of it, and that is done before the code is read as one command: a function body is
 		// expanded when it is read, and an alias of the person's for printf would be in it. The code turns them off itself, but
 		// by then the case below has been read in whole.
-		return head + `__trecs_a0=$(shopt -p expand_aliases 2>/dev/null || :); shopt -u expand_aliases 2>/dev/null
+		return head + `__trecs_a0=$(\shopt -p expand_aliases 2>/dev/null || :); \shopt -u expand_aliases 2>/dev/null
 case $- in
 *i*)
   if [ -t 1 ]; then

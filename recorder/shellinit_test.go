@@ -84,6 +84,29 @@ func TestTheBashFileMarksAnInteractiveShellAndKeepsTheStatusAndTheAliases(t *tes
 	}
 }
 
+func TestAnAliasOfThePersonsForAWordOfTheBashFileChangesNothing(t *testing.T) {
+	bash := testBash(t)
+	file := initFile(t, "bash")
+	// not "builtin": the probe that asks typeIntoRaw whether the shell is alive types it
+	for _, word := range []string{"case", "if", "set", "shopt", "eval", "unset", "esac", "fi"} {
+		t.Run(word, func(t *testing.T) {
+			home := t.TempDir()
+			rc := "PS1='P> '\nHISTFILE=/dev/null\nalias " + word + "='echo ALIAS-BROKE'\n. " + file + "\n"
+			if err := os.WriteFile(filepath.Join(home, ".bashrc"), []byte(rc), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			env := []string{"HOME=" + home, "TERM=xterm-256color", "LC_ALL=C.UTF-8"}
+			raw, alive := typeIntoRaw(t, bash, nil, env, []string{"echo hi"})
+			if !alive {
+				t.Fatal("the shell ended")
+			}
+			if strings.Contains(raw, "ALIAS-BROKE") || strings.Contains(raw, "syntax error") || !strings.Contains(strings.Join(marksIn(raw), " "), "A") {
+				t.Errorf("the alias reached the file, or the marks are gone: %q", raw)
+			}
+		})
+	}
+}
+
 func TestTheBashFileCanBeEvaluatedAtThePromptToo(t *testing.T) {
 	bash := testBash(t)
 	file := initFile(t, "bash")

@@ -34,8 +34,8 @@ const bashIntegration = `
 #  - they are called as "f && :": a command that fails there is not the last of its list, so set -e does not end the shell over
 #    the status of the command before it (false && true leaves 1), an ERR trap does not fire for it, and $? is still that status;
 #  - a PROMPT_COMMAND that is readonly (an audit setup) cannot be wrapped: then nothing is done, and the shell is left alone.
-{ __trecs_xt=$-; set +x; } 2>/dev/null   # nor does loading it show under set -x
-__trecs_alias=$(shopt -p expand_aliases || :); shopt -u expand_aliases
+{ __trecs_xt=$-; \set +x; } 2>/dev/null   # nor does loading it show under set -x
+__trecs_alias=$(\shopt -p expand_aliases || :); \shopt -u expand_aliases
 __trecs_pc=$(builtin declare -p PROMPT_COMMAND 2>/dev/null || :); __trecs_pc=${__trecs_pc#declare }; __trecs_pc=${__trecs_pc%% *}
 if { [ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }; } && [[ $__trecs_pc != -*r* ]]; then
   case ${PS1-} in
@@ -60,8 +60,8 @@ if { [ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "
     ;;
   esac
 fi
-builtin eval "$__trecs_alias"; builtin unset __trecs_alias __trecs_pc
-case $__trecs_xt in *x*) builtin unset __trecs_xt; builtin set -x ;; *) builtin unset __trecs_xt ;; esac
+# One line: the next one would be read with the person's aliases back on, and an alias for case would be in it.
+builtin eval "$__trecs_alias"; builtin unset __trecs_alias __trecs_pc; case $__trecs_xt in *x*) builtin unset __trecs_xt; builtin set -x ;; *) builtin unset __trecs_xt ;; esac
 `
 
 const zshIntegration = `
@@ -93,11 +93,18 @@ fi
 if (( __trecs_xt )); then unset __trecs_xt; setopt xtrace; else unset __trecs_xt; fi
 `
 
+// fishDefaultPrompt: a person who has erased fish_prompt (functions -e) still gets fish's own prompt, as fish does not look for the function
+// again, so the wrapper must not take the erased one for no prompt at all: it loads the file the prompt comes from.
+const fishDefaultPrompt = `    if not builtin functions -q fish_prompt; and test -r "$__fish_data_dir/functions/fish_prompt.fish"
+        builtin source "$__fish_data_dir/functions/fish_prompt.fish"
+    end`
+
 const fishIntegration = `
 # --- trecs shell integration (prompt marks, OSC 133) ---
 # "builtin" throughout: a function of the person's called printf or string is theirs, and not what this means.
 if not set -q __trecs_marks
     set -g __trecs_marks 1
+` + fishDefaultPrompt + `
     # The prompt is run FIRST, and its output is what the marks are wrapped around: anything run before it (even a printf)
     # would reset $status, and a prompt that shows the last command's status would show a success.
     if builtin functions -q fish_prompt
@@ -129,6 +136,7 @@ const fishNativeIntegration = `
 # --- trecs shell integration: the end of the prompt (OSC 133;B); fish 4 marks the rest ---
 if not set -q __trecs_marks
     set -g __trecs_marks 1
+` + fishDefaultPrompt + `
     builtin functions -q fish_prompt; and builtin functions -c fish_prompt __trecs_orig_prompt
     function fish_prompt
         builtin functions -q __trecs_orig_prompt; and __trecs_orig_prompt

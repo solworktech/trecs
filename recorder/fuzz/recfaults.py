@@ -20,7 +20,7 @@ import time
 import hashlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ptyrun import Run, is_zombie, processes_in, pty_cr_doubling, undouble_cr  # noqa: E402
+from ptyrun import Run, is_zombie, preflight, processes_in, pty_cr_doubling, undouble_cr  # noqa: E402
 import recfuzz as rf  # noqa: E402
 
 BASH = rf.SHELLS["bash"]  # a bash that can mark its prompts (not macOS's 3.2): see ptyrun.find_shell
@@ -244,6 +244,8 @@ def test_terminal_closed():
 def can_mount_tmpfs():
     d = os.path.join(WORK, "mnt")
     os.makedirs(d, exist_ok=True)
+    if not (shutil.which("mount") and shutil.which("umount")):
+        return None
     r = subprocess.run(["mount", "-t", "tmpfs", "-o", "size=64k", "tmpfs", d], capture_output=True)
     if r.returncode == 0:
         subprocess.run(["umount", d])
@@ -729,6 +731,7 @@ def test_slow_consumer():
 
 
 def main():
+    preflight(binaries=[rf.TRECS])
     os.makedirs(WORK, exist_ok=True)
     only = sys.argv[1:]
     # A test that never ends is a finding too: after this long the stacks of the threads are printed (where it is stuck) and the run

@@ -159,6 +159,8 @@ func TestAnAliasOrAFunctionOfThePersonsDoesNotChangeTheIntegration(t *testing.T)
 		"alias declare":  "alias declare='echo ALIASED'",
 		"alias local":    "alias local='echo ALIASED'",
 		"alias case":     "alias case='echo ALIASED'",
+		"alias set":      "alias set='echo ALIASED'",
+		"alias shopt":    "alias shopt='echo ALIASED'",
 		"set -u":         "set -u",
 		"unset PS2":      "unset PS2",
 		"set -u, no PS2": "unset PS2; set -u",
@@ -167,6 +169,10 @@ func TestAnAliasOrAFunctionOfThePersonsDoesNotChangeTheIntegration(t *testing.T)
 			bare, marked, _, ma := bothWays(t, rc, []string{"echo one", "false", "echo $?"})
 			if !ma {
 				t.Fatalf("the marked shell ended:\n%q", marked)
+			}
+			// An alias for a word of the integration makes it a syntax error, which prints no "ALIASED" at all.
+			if strings.Contains(marked, "syntax error") != strings.Contains(bare, "syntax error") {
+				t.Errorf("the integration does not parse:\n bare   %q\n marked %q", bare, marked)
 			}
 			if strings.Contains(marked, "ALIASED") != strings.Contains(bare, "ALIASED") || strings.Contains(marked, "my printf") != strings.Contains(bare, "my printf") ||
 				strings.Contains(marked, "unbound") != strings.Contains(bare, "unbound") {

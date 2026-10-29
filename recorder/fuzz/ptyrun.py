@@ -33,6 +33,26 @@ def find_shell(name):
 SHELLS = {n: find_shell(n) for n in ("bash", "zsh", "fish")}
 
 
+def preflight(shells=None, binaries=()):
+    """Exit once, with one message, if a program the harness runs is missing, instead of failing in every session. shells: the names
+    in use (default all); binaries: paths that must be executable (the recorder). ps and lsof are needed only where /proc cannot be
+    read (everywhere but Linux); mount and umount are optional (without them the disk-full test uses a file size limit instead)."""
+    missing = []
+    for n in shells or SHELLS:
+        if n not in SHELLS:
+            missing.append(f"{n}: not a shell the harness knows (bash, zsh, fish)")
+        elif not (os.path.isfile(SHELLS[n]) and os.access(SHELLS[n], os.X_OK)):
+            missing.append(f"{n}: {SHELLS[n]} is not an executable (set TRECS_FUZZ_{n.upper()})")
+    for b in binaries:
+        if not (os.path.isfile(b) and os.access(b, os.X_OK)):
+            missing.append(f"{b} is not an executable")
+    for n in ("python3",) if IS_LINUX else ("python3", "ps", "lsof"):
+        if shutil.which(n) is None:
+            missing.append(f"{n}: not on PATH" + (" (install it: pkg install lsof, apt install lsof, ...)" if n == "lsof" else ""))
+    if missing:
+        sys.exit("The harness cannot run on this system:\n  " + "\n  ".join(missing))
+
+
 def shim_dir():
     """A directory of stand-ins for the commands the sessions type that this system does not have: md5sum, sha256sum, setsid.
     Created on first use; "" if nothing is missing (Linux)."""

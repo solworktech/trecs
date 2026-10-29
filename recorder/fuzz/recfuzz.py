@@ -30,7 +30,7 @@ import time
 import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ptyrun import IS_LINUX, LOCALE, SHELLS, Run, processes_in, pty_cr_doubling, tool_path, undouble_cr  # noqa: E402
+from ptyrun import IS_LINUX, LOCALE, SHELLS, Run, preflight, processes_in, pty_cr_doubling, tool_path, undouble_cr  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TRECS = os.environ.get("TRECS_BIN", os.path.join(HERE, "trecs"))
@@ -950,13 +950,13 @@ def compare(shell, A1, A2, R, steps, profile_names):
     for r, nm in ((A1, "A1"), (A2, "A2")):
         if r["hang"]:
             F.append(("note", "bare-hang", f"{nm}: {r['hang']}"))
-    if A1["hang"] and not profile_names:
+    if A1["hang"] == "no prompt at start" and not profile_names:
         # A plain rc (the one every other seed starts from) that gives no prompt is the test setup that is broken - the shell is
         # not being tested at all - and not a quirk of a random profile (an rc that sets a prompt the pattern cannot see).
         F.append(("HIGH", "no-prompt-with-plain-rc",
                   f"{shell}: the bare shell printed no prompt in the first seconds; what it printed: {A1.get('raw', b'')[-300:]!r}"))
     if R["hang"] and not A1["hang"]:
-        F.append(("HIGH", "hang-under-recorder", R["hang"]))
+        F.append(("HIGH", "hang-under-recorder", f"{R['hang']}; the end of what the recorded shell printed: {R.get('raw', b'')[-300:]!r}"))
         return F, 0, known
     if A1["hang"]:
         return F, 0, known
@@ -1092,6 +1092,7 @@ def main():
     a = ap.parse_args()
     a.work = os.path.abspath(a.work)  # the sessions run in other directories: HOME and the like must not be relative
     lo, hi = map(int, a.seeds.split("-"))
+    preflight(a.shells.split(","), [TRECS])
     os.makedirs(a.work, exist_ok=True)
     jobs = [(s, sh, a.steps, a.work, a.keep) for s in range(lo, hi + 1) for sh in a.shells.split(",")]
     results = []
@@ -1135,6 +1136,8 @@ def gate(results, strict):
         for sev, sig, detail in r["findings"]:
             if sig in ("integration-text-leaked", "startup-output-differs") and r["shell"] == "bash" and "set_x" in (r.get("profile") or []) and not strict:
                 continue  # the four call lines bash prints for the prompt functions under `set -x`: known, and not fixable from the shell
+            if sig == "startup-output-differs" and r["shell"] == "zsh" and {"no_prompt_percent", "right_prompt"} <= set(r.get("profile") or []) and not strict:
+                continue  # the right prompt is placed by a width that counts the marks, in a prompt zsh is told not to expand: known
             if sig in GATED or (strict and sev in ("HIGH", "MED")):
                 bad.append(f"{who}: [{sev}] {sig} - {detail.splitlines()[0][:140]}")
     return bad
