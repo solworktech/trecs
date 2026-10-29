@@ -18,7 +18,9 @@ import (
 // run the same typed lines in a shell bare and in one with the integration, in situations in which the integration once
 // changed what the person saw or what the shell did (see recorder/fuzz for the fuzzer that found them).
 
-var anyMark = regexp.MustCompile(`\x1b\]133;[^\x07]*\x07`)
+// anyMark is a prompt mark (OSC 133), ended by BEL or by ESC \ : bash, zsh and the integration end theirs with BEL, and fish 4 the ones it
+// writes itself with ESC \ . Group 1 is what it says ("A", "D;0").
+var anyMark = regexp.MustCompile(`\x1b\]133;([^\x07\x1b]*)(?:\x07|\x1b\\)`)
 
 // typeInto runs the shell on a terminal, types each line when the output has gone quiet, and returns all that was printed with
 // the prompt marks taken out.
@@ -68,14 +70,25 @@ func typeIntoRaw(t *testing.T, shell string, args, env []string, lines []string)
 	return buf.String(), alive
 }
 
+// bufCopy copies what a terminal prints into dst, and answers what a shell asks of the terminal, as a terminal does: fish 4.1 and
+// later asks for the terminal's primary device attributes at startup, and waits ten seconds for the answer before it goes on (a
+// shell asked by a recorder gets the same answer: see deviceAttributesReply).
 func bufCopy(dst *syncBuffer, src *os.File) (int64, error) {
 	b := make([]byte, 4096)
 	var n int64
+	var tail string // the end of what was read before: a question can be cut between two reads
 	for {
 		k, err := src.Read(b)
 		if k > 0 {
 			_, _ = dst.Write(b[:k])
 			n += int64(k)
+			text := tail + string(b[:k])
+			for _, at := range deviceAttributesQuery.FindAllStringIndex(text, -1) {
+				if at[1] > len(tail) { // not one that was answered when it was read
+					_, _ = src.WriteString(deviceAttributesReply)
+				}
+			}
+			tail = text[max(0, len(text)-8):]
 		}
 		if err != nil {
 			return n, err
@@ -286,8 +299,9 @@ func TestAMultiLineFishPromptKeepsItsLines(t *testing.T) {
 	}
 	// what the person sees, without the escape sequences (fish repaints in an order of its own): the same lines, and the
 	// first line of the prompt is still on a line of its own above the second
+	// (a sequence ends as it is told to: fish 4 ends the ones it writes with ESC \, not BEL, and asks the terminal things of its own)
 	seen := func(x string) string {
-		return regexp.MustCompile(`\x1b(\[[0-9;?]*[A-Za-z]|\][^\x07]*\x07|\(B)`).ReplaceAllString(x, "")
+		return regexp.MustCompile(`\x1b(\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|P[^\x1b]*\x1b\\|\(B|[=>])`).ReplaceAllString(x, "")
 	}
 	lines := regexp.MustCompile(`top\s*\r?\n\s*P> `)
 	if !lines.MatchString(seen(marked)) || strings.Count(seen(bare), "top") != strings.Count(seen(marked), "top") {

@@ -26,8 +26,8 @@ func initFile(t *testing.T, kind string) string {
 
 func marksIn(raw string) []string {
 	var out []string
-	for _, m := range anyMark.FindAllString(raw, -1) {
-		out = append(out, strings.TrimSuffix(strings.TrimPrefix(m, "\x1b]133;"), "\a"))
+	for _, m := range anyMark.FindAllStringSubmatch(raw, -1) {
+		out = append(out, m[1])
 	}
 	return out
 }
