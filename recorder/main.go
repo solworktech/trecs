@@ -348,6 +348,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 	if metadata.ScreenFile != "" {
 		fmt.Printf("Screen: %s\n", metadata.ScreenFile)
 	}
+	fmt.Print(viewHint(metadata.TerminalFile))
 
 	// What was on the screen is checked for secrets, whether it is to be uploaded or not: the file holds them either way.
 	var secretHits []secretHit
@@ -388,6 +389,8 @@ func runRecord(terminal, audio, camera, screen *bool,
 				Name: *sessionName, Visibility: *uploadVisibility,
 				TerminalPath: metadata.TerminalFile, AudioPath: metadata.AudioFile,
 			}, false)
+		} else {
+			fmt.Printf("You can always upload it later with:\ntrecs upload -name %s %s\n", *sessionName, metadata.TerminalFile)
 		}
 	}
 	os.Exit(exitCode)

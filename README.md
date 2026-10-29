@@ -1,11 +1,11 @@
 # Trecs
 
-A screen video of a terminal is a blurry, unsearchable blob. A Trecs recording is the session itself: sharp at any size, a few kilobytes instead of hundreds of megabytes, and every command is a jump point — so viewers go straight to the step they need instead of scrubbing a timeline.
+A screen video of a terminal is a blurry, unsearchable blob. A Trecs recording is the session itself: sharp at any size, a few kilobytes instead of hundreds of megabytes, and every command is a jump point - so viewers go straight to the step they need instead of scrubbing a timeline.
 
 - **Copy, don't retype.** Select and copy commands straight out of the player.
 - **Annotate the moments that matter.** Notes attach to commands and pause playback where you want attention.
 - **Narrate if you like.** Optional audio stays in sync as you jump between commands.
-- **Better than docs alone.** Show the real output, the real errors, the real fix — embedded right next to your written instructions.
+- **Better than docs alone.** Show the real output, the real errors, the real fix - embedded right next to your written instructions.
 
 This repository holds the two command-line tools:
 
@@ -100,8 +100,8 @@ When the recording ends you get its session ID, duration and the path of `termin
 
 By default, recordings are kept in `trecs/recordings` under `$XDG_CONFIG_HOME` (or under `$HOME` when that is not set). Each recording gets its own session directory holding:
 
-- `terminal.jsonl` — the recording: plain text, one JSON object per line, easy to inspect, `grep` and diff;
-- `metadata.json` — session ID, start and end times, the shell used, and the paths of any audio file.
+- `terminal.jsonl` - the recording: plain text, one JSON object per line, easy to inspect, `grep` and diff;
+- `metadata.json` - session ID, start and end times, the shell used, and the paths of any audio file.
 
 ### What the recorder does to your shell
 
@@ -159,7 +159,7 @@ trecs record -commands-file setup.txt -name nginx-setup
 trecs record -commands-file setup.txt -human-like -cols 100 -rows 30
 ```
 
-- **The file is checked before anything runs.** It is read as a script (bash, sh and ksh are parsed; fish and the rest are read more roughly) and what is in it that does damage which cannot be undone, or hides what it does, **stops the recording**: a download that is run (`curl … | sh`, `bash -c "$(curl …)"`), text that is decoded and run, `rm -rf` of `/`, the home directory, `*` or a variable that may be empty, a write to a disk, to `/etc`, to `~/.ssh` or to a startup file (`~/.bashrc`...), `chmod u+s`, a shutdown, `kill -1`, a reverse shell (`/dev/tcp`, `nc -e`), a fork bomb, a secret (a key, the environment) sent to another machine, and characters that make a line read differently from what it does. The lines are listed with the reason; nothing has been run. Give `-allow-risky` if you have read them and they are meant. Other things (`sudo`, `&`, `read`, `eval`, `git push --force`...) are only listed. This is a seat belt and not a sandbox: a script written to hide what it does (with `eval` and a variable) will get past it, so it still has to be read. If [ShellCheck](https://www.shellcheck.net) is installed, what it says about the file is shown too (it never blocks).
+- **The file is checked before anything runs.** It is read as a script (bash, sh and ksh are parsed; fish and the rest are read more roughly) and what is in it that does damage which cannot be undone, or hides what it does, **stops the recording**: a download that is run (`curl ... | sh`, `bash -c "$(curl ...)"`), text that is decoded and run, `rm -rf` of `/`, the home directory, `*` or a variable that may be empty, a write to a disk, to `/etc`, to `~/.ssh` or to a startup file (`~/.bashrc`...), `chmod u+s`, a shutdown, `kill -1`, a reverse shell (`/dev/tcp`, `nc -e`), a fork bomb, a secret (a key, the environment) sent to another machine, and characters that make a line read differently from what it does. The lines are listed with the reason; nothing has been run. Give `-allow-risky` if you have read them and they are meant. Other things (`sudo`, `&`, `read`, `eval`, `git push --force`...) are only listed. This is a seat belt and not a sandbox: a script written to hide what it does (with `eval` and a variable) will get past it, so it still has to be read. If [ShellCheck](https://www.shellcheck.net) is installed, what it says about the file is shown too (it never blocks).
 - **Use a shell with prompt marks.** A script is typed into bash, zsh or fish, which the recorder makes mark their prompts: that is how it knows the shell is ready for the next line and not waiting for the answer to a `read` of the script. A shell that cannot do this (`dash`, plain `sh`, `ksh`) or `-no-marks` is **refused** for `-commands-file`, and the message lists the shells on your machine that will do (`-cmd bash` runs a POSIX `sh` script too). If you must, `-allow-unmarked` types the lines when the shell is quiet, which goes wrong when the script asks for input. Recording **by hand** in such a shell works, but the recording cannot tell where one command ends and the next begins; `trecs record` says so and lists the shells on your machine that can do it, numbered from 0, with the shell you asked for as the last number: press a number to record in that shell, or any other key to abort (`-allow-unmarked` goes on in the shell you asked for without asking).
 - **Read the file before you run it.** The commands are typed into a real shell with your permissions, exactly as if they were a shell script: nothing reviews them. The recorder says so in a warning and asks you to type `YES` before it starts (anything else exits). What the audit (and ShellCheck) had to say is shown in yellow, and if there was any, a red line just before the question counts it: `3 warnings were triggered when auditing setup.txt. Review carefully before typing 'YES'.` When standard input is not a terminal (CI, a pipe) there is nobody to ask: the warning is printed and the recording goes ahead.
 - One command per line. Blank lines and lines starting with `#` are skipped. A line ending in a backslash, or leaving a quote open, is continued by the next one.
@@ -167,7 +167,7 @@ trecs record -commands-file setup.txt -human-like -cols 100 -rows 30
 - The lines are a script's, not a person's keystrokes: history expansion (`!word`) is off in bash and zsh, a tab is typed as a tab and not as a request to complete, and a file with a control character in it (Ctrl+C, Escape...: keys, which cannot be seen when the file is read) is refused.
 - When the script goes through, `trecs` exits with the status of the shell, which is that of the last command, as a script would: a failing last command fails the job in CI. (A recording made by hand always exits 0.)
 - By default each command is entered at once. `-human-like` types with the pauses a person makes, between characters and between commands.
-- `-cols` and `-rows` set the terminal size (default: the size of the current terminal, or 172×38 when there is none). They only apply with `-commands-file`; a person at the keyboard is recorded at the size of their own terminal.
+- `-cols` and `-rows` set the terminal size (default: the size of the current terminal, or 172x38 when there is none). They only apply with `-commands-file`; a person at the keyboard is recorded at the size of their own terminal.
 
 ### Narration
 
@@ -182,6 +182,18 @@ Records your voice alongside the terminal, started at the same moment so the two
 | `-audio-device` | `default` | The input device |
 | `-audio-codec` | `libopus` | `libopus` (Ogg), `libmp3lame` or `aac` |
 | `-audio-bitrate` | 32k for Opus | The bitrate |
+
+#### On macOS
+
+`default` is the input macOS has chosen (System Settings -> Sound -> Input). To record from another, list the inputs and give the name or the number `ffmpeg` shows for it, under "AVFoundation audio devices":
+
+```sh
+ffmpeg -f avfoundation -list_devices true -i ""
+trecs record -audio -audio-device "MacBook Pro Microphone"
+trecs record -audio -audio-device 1
+```
+
+The listing ends with an error line: `ffmpeg` has nothing to record, it only lists. The first time, macOS asks whether the terminal you run `trecs` in may use the microphone. If you said no, allow it under System Settings -> Privacy & Security -> Microphone, and start again. A recording that cannot begin ends with what `ffmpeg` said. An `ffmpeg` built without the Opus encoder says `Unknown encoder 'libopus'`: record with `-audio-codec aac`.
 
 ### Playing back in the terminal
 
@@ -464,7 +476,7 @@ Trecs is free software, released under the [GNU Affero General Public License, v
 
 > **If you distribute Trecs, you must distribute its source.**
 >
-> Whenever you give anyone a copy of Trecs, or of anything that contains it — a binary, a package, a container image, an installer, a copy bundled into your product or appliance — the people who receive it must also receive the **complete source code**, under the AGPLv3. That includes every change you made. If Trecs is built into a larger program, the whole program is covered, not just the Trecs part. (Shipping Trecs *beside* separate, unrelated programs is fine, provided its source comes with it.)
+> Whenever you give anyone a copy of Trecs, or of anything that contains it - a binary, a package, a container image, an installer, a copy bundled into your product or appliance - the people who receive it must also receive the **complete source code**, under the AGPLv3. That includes every change you made. If Trecs is built into a larger program, the whole program is covered, not just the Trecs part. (Shipping Trecs *beside* separate, unrelated programs is fine, provided its source comes with it.)
 >
 > In short: you can redistribute Trecs, but you cannot make it closed, rebrand it as your own proprietary product, or bundle it into one. If that is what you need, you need an [enterprise licence](#enterprise-licences).
 
@@ -508,7 +520,7 @@ Contributions are welcome (see [CONTRIBUTING.md](CONTRIBUTING.md) for the detail
 - Keep a change focused, add tests where you can, and make sure `go test ./...` passes.
 - Contributions are made under the contributor licence agreement in [CONTRIBUTING.md](CONTRIBUTING.md): you keep your copyright, the project stays AGPLv3, and Solwork may also offer your contribution under its enterprise licences.
 
-A note on the AGPLv3 and your changes: nothing obliges you to send them to us, but if you distribute a modified Trecs, or run one as a service for others, you have to publish its source under the AGPLv3 anyway. Sending your change upstream means you don't have to carry a fork — and everyone benefits from it.
+A note on the AGPLv3 and your changes: nothing obliges you to send them to us, but if you distribute a modified Trecs, or run one as a service for others, you have to publish its source under the AGPLv3 anyway. Sending your change upstream means you don't have to carry a fork - and everyone benefits from it.
 
 ## Licence
 
