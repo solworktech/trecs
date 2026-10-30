@@ -141,8 +141,11 @@ if not set -q __trecs_marks
     set -g __trecs_marks 1
 ` + fishDefaultPrompt + `
     builtin functions -q fish_prompt; and builtin functions -c fish_prompt __trecs_orig_prompt
+    builtin functions -q __trecs_orig_prompt; or function __trecs_orig_prompt; end
+    # The prompt is run FIRST, with nothing before it: a command run before it (even functions -q) would make $status 0 and $pipestatus
+    # its own, and a prompt that shows the status of the last command would show a success.
     function fish_prompt
-        builtin functions -q __trecs_orig_prompt; and __trecs_orig_prompt
+        __trecs_orig_prompt
         builtin printf '\e]133;B\a'
     end
 end

@@ -281,6 +281,35 @@ func TestZshXtraceShowsNothingOfTheIntegration(t *testing.T) {
 	}
 }
 
+func TestAFishPromptShowsTheStatusOfTheLastCommand(t *testing.T) {
+	fish, err := exec.LookPath("fish")
+	if err != nil {
+		t.Skip("no fish")
+	}
+	home := t.TempDir()
+	cfg := filepath.Join(home, ".config", "fish")
+	_ = os.MkdirAll(cfg, 0o755)
+	if err := os.WriteFile(filepath.Join(cfg, "config.fish"), []byte("function fish_prompt\n echo -n \"[$status] P> \"\nend\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"HOME=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, ".config"), "TERM=xterm-256color"}
+	integ, err := setupShellIntegration(fish)
+	if err != nil || integ == nil {
+		t.Fatalf("no integration: %v", err)
+	}
+	defer integ.cleanup()
+	raw, alive := typeIntoRaw(t, fish, integ.args, append(env, integ.env...), []string{"false", "sh -c 'exit 7'"})
+	if !alive {
+		t.Fatal("the shell ended")
+	}
+	// the prompt is drawn after each command and shows its status: 1 after false, 7 after the next
+	for _, want := range []string{"[1] P> ", "[7] P> "} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("the prompt does not show %q:\n%q", want, raw)
+		}
+	}
+}
+
 func TestAnErasedFishPromptIsStillAPromptWithTheMarks(t *testing.T) {
 	fish, err := exec.LookPath("fish")
 	if err != nil {
