@@ -172,7 +172,7 @@ echo "--- functions"; declare -F
 echo "--- traps"; trap -p
 echo "--- umask"; umask
 echo "--- fds"; for f in /proc/$$/fd/*; do case "$(readlink "$f")" in /dev/pts/*) echo "$(basename $f) -> pts";; *) echo "$(basename $f) -> $(readlink "$f")";; esac; done | grep -v '\.zwc$' | sed 's/^[0-9]* -> //' | sort
-echo "--- proc status"; grep -E '^(SigBlk|SigIgn|SigCgt|NoNewPrivs|Seccomp|CapEff|CapBnd|Uid|Gid|Groups)' /proc/$$/status
+echo "--- proc status"; grep -E '^(SigIgn|SigCgt|NoNewPrivs|Seccomp|CapEff|CapBnd|Uid|Gid|Groups)' /proc/$$/status; grep -E '^SigBlk' /proc/self/status | sed 's/^/child /'
 echo "--- limits"; cat /proc/$$/limits
 echo "--- nice/oom"; ps -o ni= -p $$; cat /proc/$$/oom_score_adj
 echo "--- stty"; stty -a
@@ -196,7 +196,7 @@ echo "--- hooks"; add-zsh-hook -L 2>&1 | sort
 echo "--- traps"; trap
 echo "--- umask"; umask
 echo "--- fds"; for f in /proc/$$/fd/*; do case "$(readlink "$f")" in /dev/pts/*) echo "$(basename $f) -> pts";; *) echo "$(basename $f) -> $(readlink "$f")";; esac; done | grep -v '\.zwc$' | sed 's/^[0-9]* -> //' | sort
-echo "--- proc status"; grep -E '^(SigBlk|SigIgn|SigCgt|NoNewPrivs|Seccomp|CapEff|CapBnd|Uid|Gid|Groups)' /proc/$$/status
+echo "--- proc status"; grep -E '^(SigIgn|SigCgt|NoNewPrivs|Seccomp|CapEff|CapBnd|Uid|Gid|Groups)' /proc/$$/status; grep -E '^SigBlk' /proc/self/status | sed 's/^/child /'
 echo "--- limits"; cat /proc/$$/limits
 echo "--- stty"; stty -a
 echo "--- tty"; ps -o pgid=,tpgid=,sid=,stat= -p $$ | awk -v me=$$ '{print "leader=" ($1==me) " fg=" ($1==$2) " sess=" ($3==me) " stat=" $4}'
@@ -213,8 +213,8 @@ echo "--- variables"; set -n | grep -v -E '^(_|history|fish_pid|last_pid|status|
 echo "--- env"; env | sort
 echo "--- functions"; functions -n | string split ', ' | sort
 echo "--- abbr"; abbr
-echo "--- fds"; for f in /proc/$fish_pid/fd/*; set -l t (readlink $f); if string match -q '/dev/pts/*' -- $t; echo (basename $f) "-> pts"; else; echo (basename $f) "->" $t; end; end | grep -v '\.zwc$' | sed 's/^[0-9]* -> //' | sort
-echo "--- proc status"; grep -E '^(SigBlk|SigIgn|SigCgt|NoNewPrivs|Seccomp|CapEff|CapBnd|Uid|Gid|Groups)' /proc/$fish_pid/status
+echo "--- fds"; for f in /proc/$fish_pid/fd/*; set -l t (readlink $f); if string match -q '/dev/pts/*' -- $t; echo (basename $f) "-> pts"; else; echo (basename $f) "->" $t; end; end | grep -v '\.zwc$' | grep -v -E '^[0-9]+ ->$' | sed 's/^[0-9]* -> //' | sort
+echo "--- proc status"; grep -E '^(SigIgn|SigCgt|NoNewPrivs|Seccomp|CapEff|CapBnd|Uid|Gid|Groups)' /proc/$fish_pid/status; grep -E '^SigBlk' /proc/self/status | sed 's/^/child /'
 echo "--- limits"; cat /proc/$fish_pid/limits
 echo "--- stty"; stty -a
 echo "--- tty"; ps -o pgid=,tpgid=,sid=,stat= -p $fish_pid | awk -v me=$fish_pid '{print "leader=" ($1==me) " fg=" ($1==$2) " sess=" ($3==me) " stat=" $4}'
@@ -834,10 +834,31 @@ def known_output_difference(shell, profile_names, bare, rec):
     if {"xtrace", "set_x"} & set(profile_names or []) and sorted(bare.split(b"\r\n")) == sorted(rec.split(b"\r\n")):
         # The stages of a pipeline are processes of their own, and each writes its trace line when it starts: their order is a race.
         return "the trace lines (set -x) of the stages of a pipeline come in another order: the same lines"
+    if shell == "fish" and "func_functions" in (profile_names or []) and (b"call stack limit" in bare or b"call stack limit" in rec):
+        # The profile gives the shell a function of its own called `functions`, which fish's own functions call: fish_command_not_found
+        # then calls itself until the stack is full, in the bare shell as well, and how far it gets in the time is not the same twice.
+        return "fish: a function called `functions` makes fish_command_not_found loop (in the bare shell too): the length of the flood is timing"
     if shell == "fish" and b"Unknown command: fish_prompt" in bare and b"Unknown command: fish_prompt" not in rec:
         # With fish_prompt erased, fish itself reports an error when it repaints after a job has ended. The recorded shell has a prompt
         # function (the one fish falls back to), so it does not.
         return "fish: with fish_prompt erased, the bare shell prints an error at a repaint that the recorded one (with a prompt function) does not"
+    return None
+
+
+INTEGRATION_NAME = re.compile(r"^(TRECS_\w+|precmd_functions|preexec_functions|chpwd_functions|zshexit_functions|__trecs_\w+|_?add-zsh-hook)$")
+
+
+def list_with_integration_names(line, other_lines, line_is_bare):
+    """A line that lists names (print -l on one line, as an alias for print makes it) which has, in the other run, the same names and the
+    integration's own: its variables and functions. True if that is all the difference."""
+    mine = set(line.split())
+    if len(mine) < 3:
+        return None
+    for other in other_lines:
+        theirs = set(other.split())
+        small, big = (mine, theirs) if line_is_bare else (theirs, mine)
+        if small < big and all(INTEGRATION_NAME.match(x) for x in big - small):
+            return "a list of names has the integration's variables and functions in it as well (and the person's are all there)"
     return None
 
 
@@ -982,6 +1003,13 @@ def run_session(workdir, tag, shell, profile_lines, steps, end, mode, size=(30, 
         res["leftover_early"] = None
         time.sleep(0.4)
         left = [x for x in processes_in(root)]
+        # A process that is on its way out (a shell that was sent SIGHUP, with the machine busy) is not left over: one that is still
+        # there two seconds later is.
+        for _ in range(10):
+            if not left:
+                break
+            time.sleep(0.2)
+            left = [x for x in processes_in(root)]
         res["leftover"] = sorted(set(c.split(" ")[0].split("/")[-1] for _, c in left))
         for pid, _ in left:
             try:
@@ -1082,14 +1110,14 @@ def compare(shell, A1, A2, R, steps, profile_names):
             stable = set(la1) & set(la2)
             for ln in la1:
                 if ln in stable and ln not in lr:
-                    why = known_state_line(ln) or hook_array_with_integration(ln, lr)
+                    why = known_state_line(ln) or hook_array_with_integration(ln, lr) or list_with_integration_names(ln, lr, True)
                     if why:
                         known[why] = known.get(why, 0) + 1
                     else:
                         F.append(("HIGH" if fn.startswith("probe.") else "MED", f"state-missing:{fn.split('.')[0]}", f"{fn}: only in bare: {ln[:200]}"))
             for ln in lr:
                 if ln not in la1 and ln not in la2:
-                    why = known_state_line(ln)
+                    why = known_state_line(ln) or list_with_integration_names(ln, la1, False)
                     if why:
                         known[why] = known.get(why, 0) + 1
                     else:
