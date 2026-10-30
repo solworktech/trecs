@@ -153,6 +153,8 @@ class Run:
         self.answer = answer
         self.eof = False
         self.paused = False
+        self.hold = False          # while set, the answers to queries are kept, not sent (see release)
+        self.held = []
 
     # -- reading
     def pump(self, timeout=0.05):
@@ -195,11 +197,25 @@ class Run:
         for rx, reply in ANSWERS:
             for m in rx.finditer(tail):
                 if base + m.end() > self.answered:
+                    if self.hold:
+                        self.held.append(reply)
+                        continue
                     try:
                         os.write(self.master, reply)
                     except OSError:
                         pass
         self.answered = len(self.buf)
+
+    def release(self):
+        """Stop holding the answers, and send the ones kept. A terminal answers a query when it is asked, and the shell that asked reads
+        the answer; one that comes late, with a program running that reads its input, is typed into that program."""
+        self.hold = False
+        held, self.held = self.held, []
+        for reply in held:
+            try:
+                os.write(self.master, reply)
+            except OSError:
+                pass
 
     def expect(self, rx, start=0, timeout=10.0):
         """Wait until rx (bytes regex) matches in buf[start:]. Returns the match or None. Looks only at what is new

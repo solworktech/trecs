@@ -915,6 +915,10 @@ def run_session(workdir, tag, shell, profile_lines, steps, end, mode, size=(30, 
                 nprobe += 1
                 cmd = f". ./probe.{ext} {nprobe}\n" if shell != "fish" else f"source probe.fish {nprobe}\n"
                 parts = [(0, cmd.encode())]
+            # The answers to the terminal queries of the shell wait while a flood is typed at a program, and go out when it is all typed: an answer
+            # that comes in the middle of it is read by that program, and is in the file it writes (fish asks at each prompt, and a shell
+            # that is busy with a flood of its own is slow to be answered).
+            run.hold = label.startswith(("big-paste", "raw-bytes", "allbytes", "utf8-split-in"))
             for delay, data in parts:
                 if delay:
                     t0 = time.time()
@@ -925,6 +929,7 @@ def run_session(workdir, tag, shell, profile_lines, steps, end, mode, size=(30, 
                     run.resize(int(r), int(c))
                 elif data:
                     run.send(data, chunk=None)
+            run.release()  # what was typed at the program is typed: a shell that asks and waits for its answer is not kept waiting
             if not nosync:
                 # A signal key (^C, ^Z, ^backslash) is echoed by the terminal at once, and the shell answers it when it next runs: on a busy
                 # machine that is later than a quarter of a second, and a line typed in the meantime is thrown away with the typeahead.
