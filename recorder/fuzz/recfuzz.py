@@ -38,7 +38,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ptyrun import IS_LINUX, LOCALE, SHELLS, Run, preflight, processes_in, pty_cr_doubling, tool_path, undouble_cr  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TRECS = os.environ.get("TRECS_BIN", os.path.join(HERE, "trecs"))
+# Absolute: the sessions run in their own directories, where a relative path (TRECS_BIN=../trecs) names nothing.
+TRECS = os.path.abspath(os.environ.get("TRECS_BIN", os.path.join(HERE, "trecs")))
 
 # ---------------------------------------------------------------------------------------------- profiles
 
@@ -791,6 +792,9 @@ def screen_of(data, cols):
     cursor's place; blank lines at the end left out."""
     scr = pyte.Screen(cols, SCREEN_ROWS)
     st = pyte.ByteStream(scr)
+    # Sequences that change what the terminal does with keys and not what it shows, which pyte does not know and would print (the kitty
+    # keyboard protocol, CSI = 0 u, and xterm's modifyOtherKeys, CSI > 4 ; 0 m).
+    data = re.sub(rb"\x1b\[[=>?<]\d*(?:;\d*)*u|\x1b\[>\d*(?:;\d*)*m", b"", data)
     st.feed(b"\x1b[200;1H" + data)
     lines = [ln.rstrip() for ln in scr.display]
     while lines and not lines[-1]:
