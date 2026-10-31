@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -294,5 +295,67 @@ func TestTheAlternateScreenIsNotPartOfTheLog(t *testing.T) {
 	got := texts(linesOfFrames(frames("a\r\n", "\x1b[?1049hmenu\r\nitems\r\n\x1b[?1049l", "b\r\n"), 24))
 	if strings.Join(got, "|") != "a|b" {
 		t.Errorf("%q", got)
+	}
+}
+
+func TestATextFilmKeepsItsNarrationWhileThePictureAboveIsRedrawn(t *testing.T) {
+	// A film made of text: the top of the screen is a title and a picture, drawn by address between the words and put back with
+	// ESC 7 / ESC 8; below a rule is the scroll region, where the narration is typed and scrolls. What scrolls out of the region
+	// is the log; the picture is a painting and is not.
+	d := []string{"\x1b[2J\x1b[H\x1b[?25l", "\x1b[22;1H------", "\x1b[23;31r\x1b[31;1H$ ", "cat film", "\r\n"}
+	var want []string
+	want = append(want, "$ cat film")
+	for i := 1; i <= 45; i++ { // more than the screen has rows
+		d = append(d, fmt.Sprintf("\x1b7\x1b[3;40HWEST COAST %d\x1b8", i), fmt.Sprintf("narration line %d", i), "\x1b7\x1b[1;1Htitle\x1b[2;1H\x1b[2K\x1b8", "\r\n")
+		want = append(want, fmt.Sprintf("narration line %d", i))
+	}
+	got := texts(linesOfFrames(frames(d...), 31))
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("got %q\nwant %q", got, want)
+	}
+}
+
+func TestTheScrollRegionIsWhereLinesScrollFrom(t *testing.T) {
+	// the rows above the region stay, whatever scrolls in it; a region that is the whole screen is no region
+	s := newScreenLog(5)
+	s.run("\x1b[2;4r\x1b[2;1Ha\r\nb\r\nc\r\nd\r\ne", func(int) int { return 0 })
+	text, _ := s.lines()
+	if got := strings.Join(text, "|"); got != "a|b|c|d|e" {
+		t.Errorf("%q", got)
+	}
+	if !s.region() {
+		t.Errorf("rows 2 to 4 of 5 are a region")
+	}
+	s.run("\x1b[r", func(int) int { return 0 })
+	if s.region() {
+		t.Errorf("ESC [ r resets the region to the whole screen")
+	}
+}
+
+func TestAScreenSetUpInThePromptsFrameIsKnownToTheLines(t *testing.T) {
+	// A text film: its first frame clears the screen, draws a rule, sets the scroll region and puts the cursor on its last row, and
+	// ends with the prompt; what the command prints is typed there and scrolls in the region, while the top is drawn by address.
+	// The recording makes that first frame the prompt's. The command's lines are the narration, and the picture is not one.
+	var out []TerminalFrame
+	for i := 1; i <= 14; i++ {
+		out = append(out,
+			TerminalFrame{Timestamp: int64(100 + 10*i), Data: fmt.Sprintf("\x1b7\x1b[3;40Hpicture %d\x1b8", i)},
+			TerminalFrame{Timestamp: int64(100 + 10*i), Data: fmt.Sprintf("narration %d about the coast", i)},
+			TerminalFrame{Timestamp: int64(105 + 10*i), Data: "\r\n"})
+	}
+	c := cmd("cat film", 50, out...)
+	c.HasPrompt = true
+	c.PromptFrame = TerminalFrame{Timestamp: 0, Data: "\x1b[2J\x1b[H\x1b[22;1H------\x1b[23;31r\x1b[31;1H$ "}
+	idx := BuildSearchIndexFor([]Command{c}, nil, 31)
+	var want []string
+	for i := 1; i <= 14; i++ {
+		want = append(want, fmt.Sprintf("narration %d about the coast", i))
+	}
+	if len(idx) != 1 || strings.Join(texts(idx[0].Lines), "|") != strings.Join(want, "|") {
+		t.Fatalf("%q", texts(idx[0].Lines))
+	}
+	re, _ := CompileSearchPattern("coast", true, false)
+	if got := RunSearch(idx, re, 0).MatchedLines; got != 14 {
+		t.Errorf("%d lines match", got)
 	}
 }

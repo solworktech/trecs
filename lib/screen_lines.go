@@ -17,8 +17,10 @@ import (
 // (and those a program that draws on the screen uses, to leave out what they draw). It keeps every row that was on it, in the order
 // they were: what scrolled off is the log of the session, and is what a search is made over.
 //
-// What it is not: a terminal. Lines are not wrapped (a long line is one row); colours, widths of wide characters and the scroll region
-// are not followed. A program that paints the screen by addressing its cells (htop, top, a full-screen menu that does not switch to
+// What it is not: a terminal. Lines are not wrapped (a long line is one row); colours and widths of wide characters are not followed.
+// The scroll region is: a program that keeps the top of the screen (a title, a picture) and scrolls only the bottom, as a film made of
+// text does, leaves what scrolls out of the region in the log, and the top where it is. Lines are only scrolled out of the region
+// by a line feed on its last row. A program that paints the screen by addressing its cells (htop, top, a full-screen menu that does not switch to
 // the alternate screen) is recognised by it: a row that was written to after the cursor was placed by address, and that the cursor never left by a line feed, is a painting
 // and not a line of output, and is left out. (A prompt drawn at the top of a cleared screen is placed by address too, but it is
 // ended by a line feed when the command is run.)
@@ -46,14 +48,41 @@ type screenLog struct {
 	alt        bool // the alternate screen is on: what is drawn there is not part of the log
 	savedR     int
 	savedCol   int
-	frame      int // the frame that is being read
+	savedPos   bool // what ESC 7 and ESC 8 keep with the cursor: whether it was placed by address
+	frame      int  // the frame that is being read
+	// the scroll region (ESC [ top ; bottom r), as rows of the screen from 0; the whole screen when regTop == 0 and regBot == h-1
+	regTop, regBot int
 }
 
 func newScreenLog(rows int) *screenLog {
 	if rows <= 0 || rows > maxScreenRows {
 		rows = defaultScreenRows
 	}
-	return &screenLog{rows: make([]screenRow, 1), h: rows}
+	return &screenLog{rows: make([]screenRow, 1), h: rows, regBot: rows - 1}
+}
+
+// region is true when only part of the screen scrolls.
+func (s *screenLog) region() bool { return s.regTop > 0 || s.regBot < s.h-1 }
+
+// scrollRegion moves the rows of the scroll region up by one: the first leaves the region, and goes to the log, above the screen; a
+// blank row comes in at the bottom. The cursor stays on the row it is on, which now holds what was under it.
+func (s *screenLog) scrollRegion() {
+	first, last := s.top+s.regTop, s.top+s.regBot
+	s.ensure(max(last, s.r))
+	gone := s.rows[first]
+	gone.fed = true
+	s.rows = append(s.rows, screenRow{})
+	copy(s.rows[s.top+1:], s.rows[s.top:]) // room for it in the log, in front of the screen
+	s.rows[s.top] = gone
+	s.top++
+	s.r++
+	if s.savedR >= s.top-1 {
+		s.savedR++
+	}
+	for r := first + 1; r < last+1; r++ {
+		s.rows[r] = s.rows[r+1]
+	}
+	s.rows[last+1] = screenRow{frame: s.frame}
 }
 
 func (s *screenLog) ensure(r int) {
@@ -84,10 +113,14 @@ func (s *screenLog) lineFeed() {
 	s.ensure(s.r)
 	s.rows[s.r].frame = s.frame // the line is complete in this frame
 	s.rows[s.r].fed = true
-	s.r++
-	s.ensure(s.r)
-	if s.r > s.top+s.h-1 {
-		s.top = s.r - s.h + 1
+	if s.region() && s.r == s.top+s.regBot {
+		s.scrollRegion()
+	} else {
+		s.r++
+		s.ensure(s.r)
+		if s.r > s.top+s.h-1 {
+			s.top = s.r - s.h + 1
+		}
 	}
 	s.col = 0
 	s.positioned = false
@@ -159,11 +192,17 @@ func (s *screenLog) csi(params string, final byte) {
 		s.ensure(s.r)
 		s.positioned = true
 	case 'r': // setting the scroll region puts the cursor at the home position
+		top, bot := paramOr(nums, 0, 1)-1, paramOr(nums, 1, s.h)-1
+		if top < 0 || bot > s.h-1 || top >= bot { // not a region: the whole screen scrolls
+			top, bot = 0, s.h-1
+		}
+		s.regTop, s.regBot = top, bot
 		s.r, s.col = s.top, 0
+		s.ensure(s.r)
 	case 's':
-		s.savedR, s.savedCol = s.r, s.col
+		s.savedR, s.savedCol, s.savedPos = s.r, s.col, s.positioned
 	case 'u':
-		s.r, s.col = s.savedR, s.savedCol
+		s.r, s.col, s.positioned = s.savedR, s.savedCol, s.savedPos
 		s.ensure(s.r)
 	case 'J':
 		s.ensure(s.r)
@@ -240,9 +279,9 @@ func (s *screenLog) run(out string, frameAt func(pos int) int) {
 				i = end
 				continue
 			case '7':
-				s.savedR, s.savedCol = s.r, s.col
+				s.savedR, s.savedCol, s.savedPos = s.r, s.col, s.positioned
 			case '8':
-				s.r, s.col = s.savedR, s.savedCol
+				s.r, s.col, s.positioned = s.savedR, s.savedCol, s.savedPos
 				s.ensure(s.r)
 			case 'M':
 				if !s.alt {

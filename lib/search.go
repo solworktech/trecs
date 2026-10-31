@@ -238,6 +238,13 @@ func BuildSearchIndexFor(commands []Command, frames []TerminalFrame, rows int) [
 		var lines []SearchLine
 		if !isInteractiveOutput(c.OutputTextRaw) {
 			var own []searchFrame
+			// What the prompt's frame does to the screen (a program that sets up the screen before it prints: clears it, sets a scroll
+			// region, puts the cursor on a row) is part of how what follows is read; its text is not output.
+			if c.HasPrompt {
+				if st := escapesOf(c.PromptFrame.Data); st != "" {
+					own = append(own, searchFrame{data: st, ts: c.PromptFrame.Timestamp, fi: at(c.PromptFrame)})
+				}
+			}
 			for i, f := range seq {
 				if f.Kind != 'o' || skip[f.Out] {
 					continue
@@ -249,6 +256,21 @@ func BuildSearchIndexFor(commands []Command, frames []TerminalFrame, rows int) [
 		out = append(out, SearchEntry{Idx: idx, Command: command, Time: time, Input: input, Lines: lines})
 	}
 	return out
+}
+
+// escapesOf is the escape sequences of data, in order, and nothing else.
+func escapesOf(data string) string {
+	var b strings.Builder
+	for i := 0; i < len(data); {
+		if data[i] == 0x1b && i+1 < len(data) {
+			end := skipEscape(data, i)
+			b.WriteString(data[i:end])
+			i = end
+			continue
+		}
+		i++
+	}
+	return b.String()
 }
 
 // ---- the pattern -----------------------------------------------------------------------------------------------------------------
