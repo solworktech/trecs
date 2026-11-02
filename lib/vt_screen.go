@@ -477,9 +477,11 @@ func (s *VTScreen) Render() string {
 	}
 
 	var out strings.Builder
+	var run tviewRun
 	lastTag := ""
 	for y := 0; y <= lastContentRow; y++ {
 		if y > 0 {
+			run.flush(&out)
 			out.WriteByte('\n')
 		}
 
@@ -502,6 +504,7 @@ func (s *VTScreen) Render() string {
 				tag = toggleReverse(tag)
 			}
 			if tag != lastTag {
+				run.flush(&out)
 				fg, bg, attrs := splitTag(tag)
 				out.WriteString("[" + fg + ":" + bg + ":" + attrs + "]")
 				lastTag = tag
@@ -515,12 +518,9 @@ func (s *VTScreen) Render() string {
 					ch = s.imageFill
 				}
 			}
-			if ch == '[' {
-				out.WriteString("[[")
-			} else {
-				out.WriteRune(ch)
-			}
+			run.add(ch)
 		}
 	}
+	run.flush(&out)
 	return out.String()
 }

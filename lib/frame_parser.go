@@ -2165,9 +2165,11 @@ func reverseTag(tag string) string {
 // the ONLY visible change in the entire frame.
 func (db *DisplayBuffer) Render() string {
 	var out strings.Builder
+	var run tviewRun
 	lastTag := ""
 	for rowIdx := 0; rowIdx < len(db.grid); rowIdx++ {
 		if rowIdx > 0 {
+			run.flush(&out)
 			out.WriteByte('\n')
 		}
 		row := db.grid[rowIdx]
@@ -2192,17 +2194,15 @@ func (db *DisplayBuffer) Render() string {
 				tag = reverseTag(tag)
 			}
 			if tag != lastTag {
+				run.flush(&out)
 				fg, bg, attrs := splitTag(tag)
 				out.WriteString("[" + fg + ":" + bg + ":" + attrs + "]")
 				lastTag = tag
 			}
-			if c.ch == '[' {
-				out.WriteString("[[")
-			} else {
-				out.WriteRune(c.ch)
-			}
+			run.add(c.ch)
 		}
 	}
+	run.flush(&out)
 	return out.String()
 }
 
