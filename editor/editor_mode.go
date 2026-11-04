@@ -123,6 +123,8 @@ type EditorMode struct {
 	lastImageDir   string      // where the last image was chosen from
 	help           *helpModal
 	idleTrim       *idleTrimModal
+	jumpTime       *jumpTimeModal
+	pausedSeek     pausedSeek
 	timedLast      int64 // the position of playback when they were last looked at: those since are shown
 	timedShown     bool
 	timedRemaining time.Duration // how long what is up has still to be shown: counted down by the progress clock, while playback is not paused
@@ -224,6 +226,7 @@ func (em *EditorMode) Run() error {
 	em.createSearchModal()    // and this by / on the same screen
 	em.createImageModal()     // and this by Ctrl+G, or Ctrl+E on an image in the list of commands
 	em.createIdleTrimModal()  // and this by Ctrl+Y
+	em.createJumpTimeModal()  // and this by Ctrl+J
 
 	em.previousPage = "playback"
 
@@ -760,6 +763,9 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	if pageName == idleTrimPage {
 		return em.handleIdleTrimInput(event)
 	}
+	if pageName == jumpTimePage {
+		return em.handleJumpTimeInput(event)
+	}
 	if pageName == searchPage {
 		return em.handleSearchInput(event)
 	}
@@ -884,6 +890,23 @@ func (em *EditorMode) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 		em.openImageEntry()
+		return nil
+	}
+	// Ctrl+J jumps to a time; Left and Right move playback by ten seconds.
+	if event.Key() == jumpTimeKey {
+		if em.annotationModalVisible || em.cueActive {
+			em.setStatus("Dismiss what is showing first." + em.currentAnnotationHint())
+			return nil
+		}
+		em.openJumpTime()
+		return nil
+	}
+	if event.Key() == tcell.KeyLeft && event.Modifiers() == tcell.ModNone {
+		em.seekBy(-seekStepMs)
+		return nil
+	}
+	if event.Key() == tcell.KeyRight && event.Modifiers() == tcell.ModNone {
+		em.seekBy(seekStepMs)
 		return nil
 	}
 	// Ctrl+Y cuts the long pauses of the recording down to a length.
@@ -1672,7 +1695,7 @@ func (em *EditorMode) runProgressClock(done <-chan struct{}) {
 				em.fireTimed(pos) // the timed annotation that its time has come - which may pause playback
 			}
 			em.syncMouse(p.GetPlaybackState())
-			em.updateImage(p.Position()) // the image that is on show at this position - playing, or paused in it
+			em.updateImage(em.currentTimeMs()) // the image that is on show at this position - playing, or paused in it
 			em.tickTimed(p.GetPlaybackState() == libtrecs.PlaybackPaused, time.Now())
 		})
 	}

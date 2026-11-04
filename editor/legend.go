@@ -153,6 +153,8 @@ func playbackLegendItems() []legendItem {
 		{"^A", "Timed Annotations", 3},
 		{"^G", "Add Image", 4},
 		{"^P/^N", "Prev/Next Command", 6},
+		{"Left/Right", "-/+10s", 10},
+		{"^J", "Jump to Time", 11},
 		{"^L", "Browse Commands", 2},
 		{"^F", "Full Screen", 7},
 		{"^Y", "Trim Pauses", 9},
@@ -220,6 +222,8 @@ func helpRows(page string) (title string, rows []helpRow) {
 	return "Playback", []helpRow{
 		{"Space / P", "Pause or resume (replay, at the end)"},
 		{"^P / ^N", "Previous / next command"},
+		{"Left / Right", "Back / forward 10 seconds"},
+		{"^J", "Jump to a time (H:M:S)"},
 		{"^L", "Browse the commands and images, and jump to one"},
 		{"^E", "Edit the command being played, or the image on show"},
 		{"^A", "Timed annotations: list them, edit one, or add one at this time"},
