@@ -137,7 +137,8 @@ func TestBashIntegrationEmitsMarksInOrder(t *testing.T) {
 	cmd := exec.Command(bash, integ.args...)
 	cmd.Env = append(os.Environ(), "HOME="+home, "TERM=xterm-256color", "HISTFILE=/dev/null")
 	cmd.Env = append(cmd.Env, integ.env...)
-	ptmx, err := pty.Start(cmd)
+	// A size from the start: with none, bash 5.3 (Ubuntu 26.04) draws the first prompt twice.
+	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: 24, Cols: 80})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,10 +146,25 @@ func TestBashIntegrationEmitsMarksInOrder(t *testing.T) {
 
 	var buf syncBuffer
 	go func() { _, _ = io.Copy(&buf, ptmx) }()
+	// readline may redraw a prompt (a resize, a bash that does it on its own): the same prompt twice in a row is one prompt.
+	marks := func() []string {
+		var seq []string
+		for _, m := range markSeq.FindAllStringSubmatch(buf.String(), -1) {
+			seq = append(seq, m[1]+m[2])
+		}
+		var out []string
+		for i := 0; i < len(seq); i++ {
+			if i+3 < len(seq) && seq[i] == "A" && seq[i+1] == "B" && seq[i+2] == "A" && seq[i+3] == "B" {
+				i += 2
+			}
+			out = append(out, seq[i])
+		}
+		return out
+	}
 	waitFor := func(n int) {
 		t.Helper()
 		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-			if len(markSeq.FindAllString(buf.String(), -1)) >= n {
+			if len(marks()) >= n {
 				return
 			}
 		}
@@ -162,11 +178,7 @@ func TestBashIntegrationEmitsMarksInOrder(t *testing.T) {
 	_, _ = ptmx.WriteString("b\r")
 	waitFor(13) // C D A B
 
-	var seq []string
-	for _, m := range markSeq.FindAllStringSubmatch(buf.String(), -1) {
-		seq = append(seq, m[1]+m[2])
-	}
-	if got, want := strings.Join(seq, " "), "D;0 A B C D;0 A B A;k=s B C D;0 A B"; got != want {
+	if got, want := strings.Join(marks(), " "), "D;0 A B C D;0 A B A;k=s B C D;0 A B"; got != want {
 		t.Errorf("marks:\n got  %s\n want %s\nthe bytes: %q\nthis machine's bash, as the integration starts it:\n%s", got, want, buf.String(), bashSetup(bash, integ.args, cmd.Env))
 	}
 	if !strings.Contains(buf.String(), "\x1b]133;B\x07") || !strings.Contains(buf.String(), "λ ") {

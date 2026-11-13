@@ -148,3 +148,25 @@ func TestSavingAMarkedRecordingChangesNothing(t *testing.T) {
 		t.Error("the saved recording lost its marks")
 	}
 }
+
+// bash 5.3 on a pty with no size draws every primary prompt twice: A, the prompt, B, a carriage return, and the same again,
+// before anything is typed. That must be one prompt, and the commands must come out as typed.
+func TestAPromptDrawnTwiceBeforeTheCommandIsOnePrompt(t *testing.T) {
+	p := mark("A") + "λ " + mark("B") + "\r" + mark("A") + "λ " + mark("B")
+	frames := framesOf(
+		mark("D;0")+p, "echo hi\r\n", mark("C")+"hi\r\n",
+		mark("D;0")+p, "echo a \\\r\n", mark("A;k=s")+"> "+mark("B")+"b\r\n", mark("C")+"a b\r\n",
+		mark("D;0")+p,
+	)
+	cmds, err := groupIntoCommands(frames, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, c := range cmds {
+		got = append(got, c.InputText)
+	}
+	if want := []string{"echo hi", "echo a \\\nb"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
