@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -166,7 +167,7 @@ func TestBashIntegrationEmitsMarksInOrder(t *testing.T) {
 		seq = append(seq, m[1]+m[2])
 	}
 	if got, want := strings.Join(seq, " "), "D;0 A B C D;0 A B A;k=s B C D;0 A B"; got != want {
-		t.Errorf("marks:\n got  %s\n want %s", got, want)
+		t.Errorf("marks:\n got  %s\n want %s\nthe bytes: %q\nthis machine's bash, as the integration starts it:\n%s", got, want, buf.String(), bashSetup(bash, integ.args, cmd.Env))
 	}
 	if !strings.Contains(buf.String(), "\x1b]133;B\x07") || !strings.Contains(buf.String(), "λ ") {
 		t.Error("the custom prompt must be wrapped, not replaced")
@@ -297,4 +298,20 @@ func TestScriptedSizeExplicitWins(t *testing.T) {
 	if defaultCols != 172 || defaultRows != 38 {
 		t.Errorf("the defaults are %dx%d, want 172x38", defaultCols, defaultRows)
 	}
+}
+
+// bashSetup says what a bash started with args and env has at its first prompt, for a test that fails on a machine other than the
+// author's: the version, the prompt variables (a system-wide /etc/bash.bashrc or /etc/profile.d may have set them) and where the
+// system files mention profile.d.
+func bashSetup(bash string, args, env []string) string {
+	probe := `echo "bash $BASH_VERSION"; declare -p PROMPT_COMMAND PS0 PS1 PS2 2>&1; echo "---"; ` +
+		`grep -n "profile.d\|PROMPT_COMMAND\|PS0" /etc/bash.bashrc /etc/bash.bashrc.d/* 2>/dev/null; ` +
+		`ls /etc/profile.d 2>/dev/null | tr '\n' ' '; echo; cat /etc/os-release 2>/dev/null | head -2`
+	cmd := exec.Command(bash, append(append([]string{}, args...), "-i", "-c", probe)...)
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("%s\n(%v)", out, err)
+	}
+	return string(out)
 }

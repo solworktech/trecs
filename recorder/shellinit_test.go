@@ -139,9 +139,11 @@ func TestTheBashFileDoesNothingWhereTheShellIsNotInteractiveOrNotOnATerminal(t *
 		return out.String()
 	}
 	for name, got := range map[string]string{
-		"a script":               run("--norc", "-c", probe),
-		"interactive, no tty":    run("--norc", "-i", "-c", probe),
-		"a login script (no -i)": run("--norc", "--login", "-c", probe),
+		"a script":            run("--norc", "-c", probe),
+		"interactive, no tty": run("--norc", "-i", "-c", probe),
+		// --noprofile: a login shell reads /etc/profile and /etc/profile.d, which on a current distribution can set PS0 and
+		// PROMPT_COMMAND of their own (systemd's 80-systemd-osc-context.sh does): not the file's doing, and not what is tested here
+		"a login script (no -i)": run("--norc", "--noprofile", "--login", "-c", probe),
 	} {
 		if strings.Contains(got, "\x1b]133") || strings.Contains(got, "__trecs_pre is a function") || !strings.Contains(got, "[PC=unset][PS0=unset]") {
 			t.Errorf("%s: the file did something: %q", name, got)
