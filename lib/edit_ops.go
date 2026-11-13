@@ -56,6 +56,7 @@ type EditError struct {
 	Message string
 }
 
+// Error is the message, naming the operation of the batch it is about when there is one (Op is from 0; -1 for the batch as a whole).
 func (e *EditError) Error() string {
 	if e.Op < 0 {
 		return e.Message

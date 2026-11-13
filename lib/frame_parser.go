@@ -1196,6 +1196,9 @@ func RemovedSpans(commands []Command, deleted map[int]bool) []Span {
 	return out
 }
 
+// CompressTimestamps returns the commands without the ones marked in deleted (by index), with what came after them moved back by the
+// time they took, so a deleted command leaves no gap in the playback. What was put after a deleted command's last frame (a picture,
+// a timed note) stays, at the same moment of what is left.
 func CompressTimestamps(commands []Command, deleted map[int]bool) []Command {
 	var result []Command
 	var shift int64

@@ -62,6 +62,7 @@ type FramesAnswer struct {
 // ErrGap is a batch that begins after the line the server wants: it is missing lines before. NextSeq is the one it wants.
 type ErrGap struct{ NextSeq int }
 
+// Error says which line the server wants.
 func (e *ErrGap) Error() string {
 	return fmt.Sprintf("the server is missing lines before this batch (it wants line %d)", e.NextSeq)
 }

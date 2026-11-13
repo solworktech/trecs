@@ -160,8 +160,10 @@ type TerminalPlayer interface {
 	Position() int64
 }
 
+// PlaybackState is what a player is doing: playing, paused or stopped.
 type PlaybackState string
 
+// The states a player can be in.
 const (
 	PlaybackPlaying PlaybackState = "playing"
 	PlaybackPaused  PlaybackState = "paused"

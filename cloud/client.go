@@ -39,6 +39,7 @@ type FieldError struct {
 	Message string `json:"message"`
 }
 
+// Error is the server's message (or the status text, when it sent none), with one line for each field it found wrong.
 func (e *APIError) Error() string {
 	msg := e.Message
 	if msg == "" {
@@ -342,6 +343,7 @@ type RecordingEdit struct {
 	Visibility  string `json:"visibility"`
 }
 
+// MarshalJSON is the edit with "preview_at_ms": null added, which the server requires to be present.
 func (e RecordingEdit) MarshalJSON() ([]byte, error) {
 	type plain RecordingEdit
 	return json.Marshal(struct {

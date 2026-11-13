@@ -32,6 +32,7 @@ const (
 	Block
 )
 
+// String is "BLOCK" or "warn".
 func (s Severity) String() string {
 	if s == Block {
 		return "BLOCK"
@@ -48,6 +49,7 @@ type Finding struct {
 	Text     string // the command, as it is written
 }
 
+// String is the finding on one line: where, how serious, which rule, what it says and the command.
 func (f Finding) String() string {
 	return fmt.Sprintf("line %d: %s [%s] %s: %s", f.Line, f.Severity, f.Rule, f.Message, f.Text)
 }
