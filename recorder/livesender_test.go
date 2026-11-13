@@ -306,3 +306,18 @@ func TestAQuietRecordingKeepsTheStreamAlive(t *testing.T) {
 		t.Errorf("only %d signs of life in 900 ms: the server would end the stream", f.requests)
 	}
 }
+
+// A server that has more lines than this recorder has sent (it answers a heartbeat with a line beyond the pending ones) must not
+// bring the recorder down: there is nothing to forget.
+func TestDroppingLinesBeyondThePendingOnesIsHarmless(t *testing.T) {
+	s := &liveSender{}
+	s.dropTo(5)
+	if s.first != 0 || len(s.ends) != 0 {
+		t.Errorf("first %d, ends %v", s.first, s.ends)
+	}
+	s = &liveSender{first: 2, pending: []byte("ab\ncd\n"), ends: []int{3, 6}}
+	s.dropTo(9) // more than are pending: all of them go
+	if s.first != 4 || len(s.ends) != 0 || len(s.pending) != 0 {
+		t.Errorf("first %d, ends %v, pending %q", s.first, s.ends, s.pending)
+	}
+}

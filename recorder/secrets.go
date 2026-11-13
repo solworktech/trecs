@@ -119,5 +119,5 @@ func runScan(args []string) {
 		return
 	}
 	reportSecrets(os.Stdout, hits)
-	os.Exit(1)
+	exit(1)
 }

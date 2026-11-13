@@ -80,7 +80,7 @@ func main() {
 
 	if len(os.Args) < 2 {
 		printUsage()
-		os.Exit(1)
+		exit(1)
 	}
 
 	switch os.Args[1] {
@@ -90,7 +90,7 @@ func main() {
 	case "record":
 		if err := recordCmd.Parse(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to parse record flags: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		runRecord(recordTerminal, recordAudio, recordCamera, recordScreen,
 			outputDir, sessionName, terminalCmd, audioDevice, audioCodec, audioBitrate,
@@ -127,12 +127,12 @@ func main() {
 		runScan(os.Args[2:])
 
 	case "shell-init":
-		os.Exit(runShellInit(os.Args[2:], os.Stdout, os.Stderr))
+		exit(runShellInit(os.Args[2:], os.Stdout, os.Stderr))
 
 	case "play":
 		if err := playCmd.Parse(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to parse play flags: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		runPlay(playFile, playSpeed)
 
@@ -142,7 +142,7 @@ func main() {
 	default:
 		fmt.Printf("Unknown command: %s\n", os.Args[1])
 		printUsage()
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -159,15 +159,15 @@ func runRecord(terminal, audio, camera, screen *bool,
 
 	if *extras.humanLike && *extras.commandsFile == "" {
 		fmt.Fprintln(os.Stderr, "Error: -human-like only applies with -commands-file")
-		os.Exit(1)
+		exit(1)
 	}
 	if err := checkSessionName(*sessionName); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if *uploadAfter && *extras.noUpload {
 		fmt.Fprintln(os.Stderr, "Error: -upload and -no-upload contradict each other")
-		os.Exit(1)
+		exit(1)
 	}
 	if *extras.commandsFile == "" && (*extras.cols != 0 || *extras.rows != 0) {
 		// A person at the keyboard is typing in a real terminal of its own size;
@@ -180,16 +180,16 @@ func runRecord(terminal, audio, camera, screen *bool,
 		// a file that cannot be typed as it is (a keystroke hidden in it) is refused before anything is asked
 		if _, err := readScript(*extras.commandsFile); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: commands file: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		shell := cmp.Or(*terminalCmd, detectShell())
 		if !*extras.allowUnmarked && !supportsMarks(shell, *extras.noMarks) {
 			fmt.Fprintln(os.Stderr, "Error: "+unmarkedRefusal(shell, *extras.noMarks, markShellsAvailable()))
-			os.Exit(1)
+			exit(1)
 		}
 		ok, n := auditScript(*extras.commandsFile, shell, *extras.allowRisky, os.Stderr)
 		if !ok {
-			os.Exit(1)
+			exit(1)
 		}
 		warnings = n
 	} else if *terminal && !*extras.allowUnmarked && !*extras.noMarks && stdinIsTerminal() {
@@ -198,7 +198,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 			use, ok := confirmUnmarked(shell, markShellsAvailable(), os.Stdin, os.Stderr)
 			if !ok {
 				fmt.Fprintln(os.Stderr, "Aborted; nothing was recorded.")
-				os.Exit(1)
+				exit(1)
 			}
 			if use != "" { // one of the shells that can be recorded with its commands told apart was chosen
 				*terminalCmd = use
@@ -208,11 +208,11 @@ func runRecord(terminal, audio, camera, screen *bool,
 	if live != nil {
 		if !live.confirm(*extras.commandsFile, warnings) {
 			fmt.Fprintln(os.Stderr, "Aborted; nothing was streamed.")
-			os.Exit(1)
+			exit(1)
 		}
 	} else if *extras.commandsFile != "" && !confirmScript(*extras.commandsFile, os.Stdin, os.Stderr, stdinIsTerminal(), warnings) {
 		fmt.Fprintln(os.Stderr, "Aborted; nothing was run.")
-		os.Exit(1)
+		exit(1)
 	}
 
 	config := &libtrecs.RecordingConfig{
@@ -244,7 +244,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 	// A recording that is there is not written over without a word
 	if err := chooseSessionTarget(config, os.Stdin, os.Stderr, stdinIsTerminal(), *extras.overwrite); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 	if config.SessionName != *sessionName { // another name was chosen
 		*sessionName = config.SessionName
@@ -255,7 +255,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 	if live != nil {
 		if err := live.start(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exit(1)
 		}
 		config.OnRecord = live.sender.Add
 	}
@@ -267,7 +267,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 			live.release()
 		}
 		fmt.Fprintf(os.Stderr, "Failed to create recorder: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	// Print the recording message, then reset cursor to column 0 before entering raw mode
@@ -289,7 +289,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 			live.release()
 		}
 		fmt.Fprintf(os.Stderr, "Failed to start recording: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	// Wait for either shell to exit or SIGTERM
@@ -368,7 +368,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 	if live != nil {
 		// the server has the recording (or, if the stream stopped early, a part of it); nothing is offered to be uploaded
 		live.finish(metadata.TerminalFile)
-		os.Exit(exitCode)
+		exit(exitCode)
 	}
 
 	if metadata.TerminalFile != "" && !*extras.noUpload {
@@ -380,7 +380,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 				if *uploadAfter {
 					exitCode = cmp.Or(exitCode, 1)
 				}
-				os.Exit(exitCode)
+				exit(exitCode)
 			}
 			if _, err := cloud.LoadSession(); errors.Is(err, cloud.ErrNotLoggedIn) && stdinIsTerminal() {
 				runLogin(nil)
@@ -393,7 +393,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 			fmt.Print(uploadHint(os.Stdout, *sessionName, metadata.TerminalFile))
 		}
 	}
-	os.Exit(exitCode)
+	exit(exitCode)
 }
 
 func printVersion() {
@@ -406,14 +406,14 @@ func printVersion() {
 func runPlay(playFile *string, playSpeed *float64) {
 	if *playFile == "" {
 		fmt.Fprintf(os.Stderr, "Error: --file is required for playback\n")
-		os.Exit(1)
+		exit(1)
 	}
 
 	player := libtrecs.NewTerminalPlayer()
 
 	if err := player.Play(*playFile); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to play recording: %v\n", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	player.SetSpeed(*playSpeed)

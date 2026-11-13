@@ -279,6 +279,9 @@ func (s *liveSender) dropTo(seq int) {
 		return
 	}
 	k = min(k, len(s.ends))
+	if k == 0 { // the server has lines this recorder has not got (or sent): there is nothing to forget
+		return
+	}
 	cut := s.ends[k-1]
 	s.pending = append(s.pending[:0:0], s.pending[cut:]...)
 	rest := make([]int, len(s.ends)-k)

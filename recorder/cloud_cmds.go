@@ -18,9 +18,12 @@ import (
 	"golang.org/x/term"
 )
 
+// exit is os.Exit; the tests replace it, to see what a command that ends the program said and with what status.
+var exit = os.Exit
+
 func fail(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, red(os.Stderr, "Error:")+" "+format+"\n", args...)
-	os.Exit(1)
+	exit(1)
 }
 
 // savedServer is the server of the saved session, "" if there is none.
@@ -180,7 +183,7 @@ func runUpload(args []string) {
 			strings.Join(missing, ", "), pluralIs(len(missing)), libtrecs.ImagesPath(terminal), pluralThem(len(missing)))
 	}
 	if !checkBeforeUpload(terminal, *allowSecrets) {
-		os.Exit(1)
+		exit(1)
 	}
 	uploadFiles(cloud.Upload{Name: *name, Description: *description, Visibility: *visibility, TerminalPath: terminal, AudioPath: *audio, MarkdownPath: *markdown, ImagePaths: images}, fromAnnotations)
 }
@@ -256,7 +259,7 @@ func runUpdate(args []string) {
 	}
 
 	if u.TerminalPath != "" && !checkBeforeUpload(u.TerminalPath, *allowSecrets) {
-		os.Exit(1)
+		exit(1)
 	}
 	session, err := cloud.LoadSession()
 	if err != nil {
