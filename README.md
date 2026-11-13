@@ -1,7 +1,7 @@
 # Trecs
 
 [![CI](https://github.com/solworktech/trecs/actions/workflows/ci.yaml/badge.svg)](https://github.com/solworktech/trecs/actions/workflows/ci.yaml)
-[![codecov](https://codecov.io/gh/solworktech/trecs/branch/main/graph/badge.svg)](https://codecov.io/gh/solworktech/trecs)
+[![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsolworktech%2Ftrecs%2Fbadges%2Fcoverage.json)](https://github.com/solworktech/trecs/blob/badges/coverage.md)
 [![Go Reference](https://pkg.go.dev/badge/github.com/solworktech/trecs.svg)](https://pkg.go.dev/github.com/solworktech/trecs)
 [![License][badge-license]][license]
 

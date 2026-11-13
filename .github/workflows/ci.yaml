@@ -1,15 +1,16 @@
 # The basics, on every push and every pull request: formatting, go.mod, vet,
 # a build for every platform the releases are made for, and the tests with
-# coverage, which is sent to Codecov (https://codecov.io/gh/solworktech/trecs).
+# coverage.
 #
 # The linter is in golang-ci-lint.yml; the shell fuzzer and the recordings
 # made against a server are in recorder-ci.yml (run by hand: they take long and
 # need secrets).
 #
-# One-time setup for the coverage upload: add the repository on codecov.io and
-# put the upload token in Settings > Secrets and variables > Actions, as the
-# secret CODECOV_TOKEN. Without it the tests still run; only the upload is
-# skipped (a pull request from a fork has no secrets either).
+# The coverage badge in the README is made here, with no service and no secret:
+# on a push to main the Linux run writes the total as a shields.io endpoint file
+# (coverage.json) and the per-function report (coverage.md), and the last job
+# commits both to the branch "badges" with the workflow's own GITHUB_TOKEN. The
+# branch is created the first time. Nothing to set up.
 name: ci
 
 "on":
@@ -107,12 +108,68 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # one upload is enough: the Linux run
-      - name: Send the coverage to Codecov
-        if: runner.os == 'Linux' && hashFiles('coverage.out') != ''
-        uses: codecov/codecov-action@v5
+      # The badge and the report come from the Linux run, and only for main: a branch or a pull request must not move the badge.
+      - name: Make the coverage badge and report
+        if: runner.os == 'Linux' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir badge
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ { sub("%", "", $NF); print $NF }')
+          color=$(awk -v t="$total" 'BEGIN { print (t >= 80 ? "brightgreen" : t >= 70 ? "green" : t >= 60 ? "yellowgreen" : t >= 50 ? "yellow" : t >= 40 ? "orange" : "red") }')
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}\n' "$total" "$color" > badge/coverage.json
+          {
+            echo "# Test coverage: ${total}%"
+            echo
+            echo "Statement coverage of \`go test ./...\` on Linux, commit [${GITHUB_SHA::7}](https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}), made by the \`ci\` workflow."
+            echo
+            echo '```'
+            go tool cover -func=coverage.out
+            echo '```'
+          } > badge/coverage.md
+          cat badge/coverage.json
+
+      - name: Keep the badge files for the publishing job
+        if: hashFiles('badge/coverage.json') != ''
+        uses: actions/upload-artifact@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.out
-          flags: unittests
-          fail_ci_if_error: false
+          name: coverage-badge
+          path: badge
+          retention-days: 1
+
+  # Commits the badge files to the branch "badges" (made on the first run). Only
+  # this job can write to the repository; it runs no code from the repository.
+  publish-coverage:
+    name: publish the coverage badge
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: coverage-badge
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-badge
+          path: badge
+
+      - name: Commit to the badges branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if ! git clone --quiet --depth 1 --branch badges "$remote" out 2>/dev/null; then
+            git init --quiet -b badges out
+            git -C out remote add origin "$remote"
+          fi
+          cp badge/coverage.json badge/coverage.md out/
+          cd out
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add coverage.json coverage.md
+          if git diff --cached --quiet; then
+            echo "the coverage did not change"
+            exit 0
+          fi
+          git commit --quiet -m "Coverage for ${GITHUB_SHA::7}"
+          git push --quiet origin badges
