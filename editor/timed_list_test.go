@@ -6,8 +6,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // Two timed annotations, a second apart in the stretched recording: the first with a long first line after a blank one.

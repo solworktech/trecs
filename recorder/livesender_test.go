@@ -14,9 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"trecs/cloud"
-
-	libtrecs "trecs/lib"
+	"github.com/solworktech/trecs/cloud"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // fakeServer is the server end of a stream: it keeps the lines it is sent, as the real one does, and can be told to misbehave.

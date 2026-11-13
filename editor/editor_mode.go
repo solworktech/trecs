@@ -15,7 +15,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // EditorMode wraps playback with interactive editing

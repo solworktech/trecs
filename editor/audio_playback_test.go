@@ -4,7 +4,7 @@ import (
 	"os/exec"
 	"testing"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // fakePlayer is the part of a player the sound follows: its state and where it is.

@@ -8,8 +8,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // Ctrl+Y: cut the recording's long pauses down to a length. The same as `trecs-edit -idle-trim 3s <file>`, from the playback page. It

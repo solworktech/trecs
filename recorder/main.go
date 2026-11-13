@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
-	"trecs/cloud"
 
-	libtrecs "trecs/lib"
+	"github.com/solworktech/trecs/cloud"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // recordExtras are the record options for scripted sessions and shell integration.
@@ -323,11 +323,11 @@ func runRecord(terminal, audio, camera, screen *bool,
 	if exitCode != 0 && recorder.Failure() != "" {
 		fmt.Printf("\nRecording ended early: %s\n", recorder.Failure())
 	} else {
-		fmt.Printf("\nRecording completed successfully!\n")
+		fmt.Printf("\n%s\n", libtrecs.Paint(os.Stdout, libtrecs.Green, "Recording completed successfully!"))
 	}
 	fmt.Printf("Session ID: %s\n", metadata.SessionID)
 	fmt.Printf("Duration: %v\n", metadata.EndTime.Sub(metadata.StartTime))
-	fmt.Printf("Terminal: %s\n", metadata.TerminalFile)
+	fmt.Printf("Terminal: %s\n", libtrecs.Paint(os.Stdout, libtrecs.Blue, metadata.TerminalFile))
 	commands, err := libtrecs.ParseRecording(metadata.TerminalFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to parse recording: %v\n", err)
@@ -348,7 +348,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 	if metadata.ScreenFile != "" {
 		fmt.Printf("Screen: %s\n", metadata.ScreenFile)
 	}
-	fmt.Print(viewHint(metadata.TerminalFile))
+	fmt.Print(viewHint(os.Stdout, metadata.TerminalFile))
 
 	// What was on the screen is checked for secrets, whether it is to be uploaded or not: the file holds them either way.
 	var secretHits []secretHit
@@ -373,7 +373,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 
 	if metadata.TerminalFile != "" && !*extras.noUpload {
 		// -upload uploads without asking. Otherwise a person at the keyboard is asked; with nobody to ask (CI, a pipe) nothing is uploaded.
-		if *uploadAfter || (stdinIsTerminal() && askYes("Upload to the Trecs Platform?", os.Stdin, os.Stdout)) {
+		if *uploadAfter || (stdinIsTerminal() && askYes(libtrecs.Paint(os.Stdout, libtrecs.Magenta, "Upload to the Trecs Platform?"), os.Stdin, os.Stdout)) {
 			fmt.Println()
 			// the hits were shown above: only the decision is left. A recording that could not be checked is not sent.
 			if !letSecretsGo(secretHits, *extras.allowSecrets, os.Stdin, os.Stderr, stdinIsTerminal(), true) || scanErr != nil {
@@ -390,7 +390,7 @@ func runRecord(terminal, audio, camera, screen *bool,
 				TerminalPath: metadata.TerminalFile, AudioPath: metadata.AudioFile,
 			}, false)
 		} else {
-			fmt.Printf("You can always upload it later with:\ntrecs upload -name %s %s\n", *sessionName, metadata.TerminalFile)
+			fmt.Print(uploadHint(os.Stdout, *sessionName, metadata.TerminalFile))
 		}
 	}
 	os.Exit(exitCode)

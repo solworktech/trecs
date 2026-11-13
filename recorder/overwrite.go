@@ -12,8 +12,7 @@ import (
 	"time"
 
 	"github.com/ergochat/readline"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // A recording is not overwritten without being asked about: a second `record -name demo` would otherwise replace the first

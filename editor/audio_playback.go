@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // The sound of a recording is played by the ffmpeg command line tool, which is started at the position playback is at and killed

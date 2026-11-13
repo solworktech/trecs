@@ -6,8 +6,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 func TestParseJumpTime(t *testing.T) {

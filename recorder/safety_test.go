@@ -9,9 +9,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"trecs/secrets"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
+	"github.com/solworktech/trecs/secrets"
 )
 
 func TestSplitUTF8HoldsBackACharacterCutByTheRead(t *testing.T) {

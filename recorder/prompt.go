@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	libtrecs "github.com/solworktech/trecs/lib"
 	"golang.org/x/term"
 )
 
@@ -30,18 +31,12 @@ func serverDefaultHelp() string {
 func stdinIsTerminal() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 
 // yellow wraps s in the escape sequences for yellow, when w is a terminal that would show it (and NO_COLOR, no-color.org, is not set).
-func yellow(w io.Writer, s string) string { return colour(w, "33", s) }
+func yellow(w io.Writer, s string) string { return colour(w, libtrecs.Yellow, s) }
 
 // red is yellow's for what stops the run.
-func red(w io.Writer, s string) string { return colour(w, "31", s) }
+func red(w io.Writer, s string) string { return colour(w, libtrecs.Red, s) }
 
-func colour(w io.Writer, code, s string) string {
-	f, ok := w.(*os.File)
-	if !ok || os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" || !term.IsTerminal(int(f.Fd())) {
-		return s
-	}
-	return "\x1b[" + code + "m" + s + "\x1b[0m"
-}
+func colour(w io.Writer, code, s string) string { return libtrecs.Paint(w, code, s) }
 
 const scriptWarning = `WARNING: -commands-file is not interactive. Every line of %s
 is typed into a real shell, with your permissions, exactly as if it were a shell script you had written

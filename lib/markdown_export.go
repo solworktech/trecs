@@ -312,6 +312,6 @@ func ExportToMarkdown(filePath, title string, commands []Command) error {
 	if err := os.WriteFile(mdPath, []byte(MarkdownFromCommands(title, commands)), 0o600); err != nil {
 		return fmt.Errorf("cannot write %s: %w", mdPath, err)
 	}
-	fmt.Printf("Successfully exported as %s\n", mdPath)
+	fmt.Printf("Successfully exported as %s\n", Paint(os.Stdout, Blue, mdPath))
 	return nil
 }

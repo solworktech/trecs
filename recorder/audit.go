@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"trecs/scriptaudit"
+	"github.com/solworktech/trecs/scriptaudit"
 )
 
 // A script given to -commands-file is typed into a shell with the person's permissions. Before anything is run it is read: by

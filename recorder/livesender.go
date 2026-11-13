@@ -10,9 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"trecs/cloud"
-
-	libtrecs "trecs/lib"
+	"github.com/solworktech/trecs/cloud"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // The sender is what takes the records of a recording as they are written and gets them to the server, which is a different thing from

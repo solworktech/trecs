@@ -1,5 +1,10 @@
 # Trecs
 
+[![CI](https://github.com/solworktech/trecs/actions/workflows/ci.yaml/badge.svg)](https://github.com/solworktech/trecs/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/gh/solworktech/trecs/branch/main/graph/badge.svg)](https://codecov.io/gh/solworktech/trecs)
+[![Go Reference](https://pkg.go.dev/badge/github.com/solworktech/trecs.svg)](https://pkg.go.dev/github.com/solworktech/trecs)
+[![License][badge-license]][license]
+
 A screen video of a terminal is a blurry, unsearchable blob. A Trecs recording is the session itself: sharp at any size, a few kilobytes instead of hundreds of megabytes, and every command is a jump point - so viewers go straight to the step they need instead of scrubbing a timeline.
 
 - **Copy, don't retype.** Select and copy commands straight out of the player.
@@ -56,7 +61,7 @@ Two options are set when building, with `-ldflags`:
 
 ```sh
 # the version to report, instead of the commit
-go build -ldflags "-X trecs/lib.Version=v1.2.3" -o trecs ./recorder
+go build -ldflags "-X github.com/solworktech/trecs/lib.Version=v1.2.3" -o trecs ./recorder
 # the server `trecs login` uses when there is no -server, no saved login and no $TRECS_SERVER
 go build -ldflags "-X main.defaultServer=https://trecs.example.com" -o trecs ./recorder
 ```
@@ -525,3 +530,6 @@ A note on the AGPLv3 and your changes: nothing obliges you to send them to us, b
 ## Licence
 
 Trecs is released under the [GNU Affero General Public License v3.0](LICENSE). Enterprise licences are available separately; see [above](#enterprise-licences).
+
+[license]: ./LICENSE
+[badge-license]: https://img.shields.io/github/license/solworktech/trecs.svg

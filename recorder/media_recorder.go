@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // A media recorder is an ffmpeg that records a device - the microphone, the camera, the screen - to a file.

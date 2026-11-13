@@ -146,8 +146,10 @@ After Recording:
   - When standard input is not a terminal nothing is uploaded unless -upload is given.
 
 Build Options (go build -ldflags "-X ..."):
-  trecs/lib.Version=TAG           The version shown by --version (default: the commit built from)
-  main.defaultServer=URL          The server for login when there is no -server, no saved login and no $TRECS_SERVER
+  github.com/solworktech/trecs/lib.Version=TAG
+      The version shown by --version (default: the commit built from)
+  main.defaultServer=URL
+      The server for login when there is no -server, no saved login and no $TRECS_SERVER
 
 During Recording:
   - Use Ctrl+C to interrupt commands in the shell (works normally)

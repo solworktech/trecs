@@ -1,0 +1,118 @@
+# The basics, on every push and every pull request: formatting, go.mod, vet,
+# a build for every platform the releases are made for, and the tests with
+# coverage, which is sent to Codecov (https://codecov.io/gh/solworktech/trecs).
+#
+# The linter is in golang-ci-lint.yml; the shell fuzzer and the recordings
+# made against a server are in recorder-ci.yml (run by hand: they take long and
+# need secrets).
+#
+# One-time setup for the coverage upload: add the repository on codecov.io and
+# put the upload token in Settings > Secrets and variables > Actions, as the
+# secret CODECOV_TOKEN. Without it the tests still run; only the upload is
+# skipped (a pull request from a fork has no secrets either).
+name: ci
+
+"on":
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# a newer push to the same branch makes the run for the older one pointless
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check (formatting, go.mod, vet, builds)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go.mod and go.sum are tidy
+        run: go mod tidy -diff
+
+      - name: go vet
+        run: go vet ./...
+
+      # the platforms .goreleaser.yaml builds for, so a change that only breaks
+      # FreeBSD or NetBSD shows up here and not at release time
+      - name: Build for every release platform
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          for goos in linux darwin freebsd netbsd; do
+            for goarch in amd64 arm64; do
+              echo "== $goos/$goarch"
+              GOOS=$goos GOARCH=$goarch go build ./... || exit 1
+            done
+          done
+
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build the recorder and the editor
+        run: |
+          go build -o trecs ./recorder
+          go build -o trecs-edit ./editor
+          ./trecs help | head -5
+
+      # macOS ships bash 3.2, which cannot mark its prompts (that needs 4.4):
+      # the scripted-session tests use a newer one
+      - name: A bash the prompt marks work in (macOS)
+        if: runner.os == 'macOS'
+        run: brew install bash
+
+      - name: Test
+        run: go test ./... -skip "TestNewVTScreenSizedClampsInput" -covermode=atomic -coverprofile=coverage.out
+
+      - name: Coverage summary
+        if: always() && hashFiles('coverage.out') != ''
+        run: |
+          {
+            echo "### coverage / ${{ runner.os }}"
+            echo '```'
+            go tool cover -func=coverage.out | tail -1
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # one upload is enough: the Linux run
+      - name: Send the coverage to Codecov
+        if: runner.os == 'Linux' && hashFiles('coverage.out') != ''
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.out
+          flags: unittests
+          fail_ci_if_error: false

@@ -1,4 +1,4 @@
-module trecs
+module github.com/solworktech/trecs
 
 go 1.27.2
 

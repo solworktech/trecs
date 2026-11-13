@@ -3,7 +3,7 @@ package main
 import (
 	"strings"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // dcsFilter decides which graphics and which Device Control Strings (ESC P ... ESC \) of the shell's output go into the

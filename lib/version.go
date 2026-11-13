@@ -4,13 +4,13 @@ import "runtime/debug"
 
 // Version is the version of this build. A release sets it when linking, to the tag it was built from:
 //
-//	go build -ldflags "-X trecs/lib.Version=v1.2.3" ./recorder
+//	go build -ldflags "-X github.com/solworktech/trecs/lib.Version=v1.2.3" ./recorder
 //
 // Left empty (a build from a clone), VersionString says which commit it was built from.
 var Version string
 
 // VersionString is the version to show for --version: the release's tag; otherwise the module's version (`go install
-// trecs/recorder@v1.2.3`); otherwise the commit of the clone it was built from, with "-dirty" if it had uncommitted changes.
+// github.com/solworktech/trecs/recorder@v1.2.3`); otherwise the commit of the clone it was built from, with "-dirty" if it had uncommitted changes.
 func VersionString() string {
 	bi, ok := debug.ReadBuildInfo()
 	return versionFrom(Version, bi, ok)

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"trecs/cloud"
+	"github.com/solworktech/trecs/cloud"
 )
 
 func TestDescribeFromAnnotationsPutsTheNavAnnotationsAsLinks(t *testing.T) {

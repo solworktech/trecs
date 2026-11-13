@@ -10,8 +10,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // Cue cards: a card of text shown centred over the terminal, before a command (an intro) or after it (a post), added

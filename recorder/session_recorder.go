@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // SessionRecorderImpl manages all recording streams

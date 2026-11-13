@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 const usage = `Trecs recording editor - edit terminal recordings

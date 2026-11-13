@@ -6,8 +6,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // The list of timed annotations, which Ctrl+A shows when there are some: a row for each, with its time and the first line of its

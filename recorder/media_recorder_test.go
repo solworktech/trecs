@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 func argsString(args []string) string { return strings.Join(args, " ") }

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // runScript records a scripted bash session and returns the recorder and what the recording holds.

@@ -11,8 +11,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // events, in the order they happened

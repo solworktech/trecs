@@ -7,8 +7,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // Ctrl+J: jump to a time in the recording, typed as H:M:S. Left and Right on the playback page move playback back and forward by

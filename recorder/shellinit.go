@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // `trecs shell-init SHELL` prints the prompt marks as a file that a person can load into a shell the recorder did not start: the

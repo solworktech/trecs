@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"trecs/cloud"
-	libtrecs "trecs/lib"
+	"github.com/solworktech/trecs/cloud"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // The sound of a recording is a file of its own beside it (audio.opus and the like), played against the position of the terminal. An

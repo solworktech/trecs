@@ -9,10 +9,8 @@ import (
 	"testing"
 
 	"github.com/creack/pty"
-
-	"trecs/secrets"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
+	"github.com/solworktech/trecs/secrets"
 )
 
 func writeTemp(t *testing.T, content string) string {

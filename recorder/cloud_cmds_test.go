@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"trecs/cloud"
+	"github.com/solworktech/trecs/cloud"
 )
 
 func TestARefusedLoginPointsAtForgotPasswordForAccountsMadeWithGitHub(t *testing.T) {

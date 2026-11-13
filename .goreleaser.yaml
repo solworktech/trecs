@@ -16,7 +16,7 @@ builds:
     main: ./recorder
     binary: trecs
     ldflags:
-      - -s -w -X trecs/lib.Version={{ .Tag }} -X main.defaultServer=https://trecs.run
+      - -s -w -X github.com/solworktech/trecs/lib.Version={{ .Tag }} -X main.defaultServer=https://trecs.run
     goos:
       - linux
       - darwin
@@ -30,7 +30,7 @@ builds:
     main: ./editor
     binary: trecs-edit
     ldflags:
-      - -s -w -X trecs/lib.Version={{ .Tag }}
+      - -s -w -X github.com/solworktech/trecs/lib.Version={{ .Tag }}
     goos:
       - linux
       - darwin

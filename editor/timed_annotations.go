@@ -9,8 +9,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // Timed annotations: an annotation at a second of playback, added from the playback screen with Ctrl+A. It is not with a command,

@@ -12,8 +12,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // Images: a picture shown over the terminal at a time of the recording, for a number of seconds (see lib/images.go for how it is

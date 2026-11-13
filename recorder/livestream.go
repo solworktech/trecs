@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"trecs/cloud"
+	"github.com/solworktech/trecs/cloud"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // `trecs livestream create` makes a stream, which has an address and an id and is waiting; `trecs livestream ID` records a shell as
@@ -109,7 +110,7 @@ func runLivestreamCreate(args []string) {
 	}
 	fmt.Printf("Created the livestream \"%s\" (%s).\n", ls.Name, ls.Visibility)
 	fmt.Printf("ID: %s\n", ls.ID)
-	fmt.Printf("Watch page: %s\n", ls.URL)
+	fmt.Printf("Watch page: %s\n", libtrecs.Paint(os.Stdout, libtrecs.Blue, ls.URL))
 	fmt.Printf("To start streaming, type `%s livestream %s`\n", os.Args[0], ls.ID)
 }
 

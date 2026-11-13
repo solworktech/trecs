@@ -13,10 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/solworktech/trecs/cloud"
+	libtrecs "github.com/solworktech/trecs/lib"
 	"golang.org/x/term"
-
-	"trecs/cloud"
-	libtrecs "trecs/lib"
 )
 
 func fail(format string, args ...any) {
@@ -306,7 +305,7 @@ func runUpdate(args []string) {
 	}
 	secs := rec.DurationMs / 1000
 	fmt.Printf("Updated \"%s\" (%d:%02d, %s): %s, in %v\n", rec.Name, secs/60, secs%60, rec.Visibility, strings.Join(sent, ", "), time.Since(start).Round(time.Millisecond))
-	fmt.Printf("Watch: %s\n", watchURL)
+	fmt.Printf("Watch: %s\n", libtrecs.Paint(os.Stdout, libtrecs.Blue, watchURL))
 }
 
 // quotaRefusal says whether the server refused because the account has used its storage: its message already says what is left and
@@ -356,7 +355,7 @@ func uploadFiles(u cloud.Upload, annotationsAsDescription bool) {
 	secs := rec.DurationMs / 1000
 	fmt.Printf("Uploaded \"%s\" (%d:%02d, %s) in %v\n", rec.Name, secs/60, secs%60, rec.Visibility, time.Since(start).Round(time.Millisecond))
 	watchURL := session.Server + "/watch/" + rec.ID
-	fmt.Printf("Watch: %s\n", watchURL)
+	fmt.Printf("Watch: %s\n", libtrecs.Paint(os.Stdout, libtrecs.Blue, watchURL))
 	if annotationsAsDescription {
 		if err := describeFromAnnotations(ctx, client, rec, u.TerminalPath, watchURL); err != nil {
 			fail("the recording is uploaded, but its description could not be set: %v\nChange it from the recording's edit page.", err)

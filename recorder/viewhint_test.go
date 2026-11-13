@@ -1,12 +1,29 @@
 package main
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
 func TestViewHint(t *testing.T) {
-	got := viewHint("/home/jesse/.config/trecs/recordings/ls/terminal.jsonl")
+	// a buffer is not a terminal: no colours
+	got := viewHint(&bytes.Buffer{}, "/home/jesse/.config/trecs/recordings/ls/terminal.jsonl")
 	want := "Play it back and edit with:\ntrecs-edit view /home/jesse/.config/trecs/recordings/ls/terminal.jsonl\n"
 	if got != want {
 		t.Errorf("viewHint = %q, want %q", got, want)
+	}
+}
+
+func TestUploadHint(t *testing.T) {
+	const path = "/home/jesse/.config/trecs/recordings/ls/terminal.jsonl"
+	for _, c := range []struct{ name, want string }{
+		{"", "You can always upload it later with:\ntrecs upload " + path + "\n"}, // `-name` with no name would swallow the path
+		{"demo", "You can always upload it later with:\ntrecs upload -name demo " + path + "\n"},
+		{"my demo", "You can always upload it later with:\ntrecs upload -name 'my demo' " + path + "\n"},
+	} {
+		if got := uploadHint(&bytes.Buffer{}, c.name, path); got != c.want {
+			t.Errorf("uploadHint(%q) = %q, want %q", c.name, got, c.want)
+		}
 	}
 }
 

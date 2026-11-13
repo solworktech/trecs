@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 func TestMergeSubcommandTakesFlagsBeforeAndAfterTheFiles(t *testing.T) {

@@ -9,8 +9,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // pausedSix writes a recording of six commands with 8.5 s of quiet between them (it is 52 s long), and returns its path.

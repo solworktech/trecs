@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 const testToken = "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"

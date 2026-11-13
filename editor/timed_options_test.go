@@ -8,8 +8,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // What a timed annotation has besides its text: whether playback is paused when it is shown, and whether its first line is in the list of

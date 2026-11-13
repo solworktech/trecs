@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // A scripted session that prints a sixel graphic: it is in the recording, whole, and the screen the player builds from it

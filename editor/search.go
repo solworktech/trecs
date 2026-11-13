@@ -6,8 +6,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // Search, on the playback page: "/" opens a box over what the commands were and what they printed - the web player's search (see

@@ -17,9 +17,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/creack/pty"
+	libtrecs "github.com/solworktech/trecs/lib"
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
-	libtrecs "trecs/lib"
 )
 
 // TerminalRecorderImpl implements TerminalRecorder

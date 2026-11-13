@@ -7,10 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"trecs/cloud"
-	"trecs/secrets"
-
-	libtrecs "trecs/lib"
+	"github.com/solworktech/trecs/cloud"
+	libtrecs "github.com/solworktech/trecs/lib"
+	"github.com/solworktech/trecs/secrets"
 )
 
 // A terminal recording keeps everything that was on the screen: the tokens that were exported, the key that was catted, the

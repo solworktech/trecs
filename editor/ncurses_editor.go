@@ -5,7 +5,7 @@ import (
 	//"path/filepath"
 	"time"
 
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
 )
 
 // TerminalEditor manages the NCurses-based editing interface

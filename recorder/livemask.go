@@ -5,9 +5,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"trecs/secrets"
-
-	libtrecs "trecs/lib"
+	libtrecs "github.com/solworktech/trecs/lib"
+	"github.com/solworktech/trecs/secrets"
 )
 
 // A live stream is seen while it is made, so what is on the screen is checked for secrets as it goes by, and what viewers get has
