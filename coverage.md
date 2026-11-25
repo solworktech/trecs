@@ -1,6 +1,6 @@
 # Test coverage: 83.7%
 
-Statement coverage of `go test ./...` on Linux, commit [e47dc2c](https://github.com/solworktech/trecs/commit/e47dc2cebdc6b32c86005e4e41f16836ed4fa846), made by the `ci` workflow.
+Statement coverage of `go test ./...` on Linux, commit [3d96f2b](https://github.com/solworktech/trecs/commit/3d96f2b42459f827bcb7e155504b53e5264d1543), made by the `ci` workflow.
 
 ```
 github.com/solworktech/trecs/cloud/client.go:32:		QuotaExceeded			100.0%
@@ -601,13 +601,13 @@ github.com/solworktech/trecs/lib/sixel.go:270:			DecodeSixel			90.0%
 github.com/solworktech/trecs/lib/sixel.go:321:			Resize				88.5%
 github.com/solworktech/trecs/lib/sixel.go:359:			Crop				100.0%
 github.com/solworktech/trecs/lib/sixel.go:376:			EncodeSixel			97.8%
-github.com/solworktech/trecs/lib/sixel.go:446:			quantize			97.4%
+github.com/solworktech/trecs/lib/sixel.go:446:			quantize			96.1%
 github.com/solworktech/trecs/lib/terminal_player.go:60:		SetFrameCallback		100.0%
 github.com/solworktech/trecs/lib/terminal_player.go:67:		PlayWithoutRawMode		100.0%
 github.com/solworktech/trecs/lib/terminal_player.go:76:		NewTerminalPlayer		100.0%
 github.com/solworktech/trecs/lib/terminal_player.go:95:		Play				52.2%
 github.com/solworktech/trecs/lib/terminal_player.go:148:	loadFrames			80.0%
-github.com/solworktech/trecs/lib/terminal_player.go:181:	playbackLoop			86.3%
+github.com/solworktech/trecs/lib/terminal_player.go:181:	playbackLoop			87.2%
 github.com/solworktech/trecs/lib/terminal_player.go:416:	wakeLoop			100.0%
 github.com/solworktech/trecs/lib/terminal_player.go:424:	flushTerminalInput		0.0%
 github.com/solworktech/trecs/lib/terminal_player.go:452:	Pause				100.0%
@@ -625,7 +625,7 @@ github.com/solworktech/trecs/lib/terminal_player.go:599:	GetTotalDurationMs		0.0
 github.com/solworktech/trecs/lib/terminal_player.go:609:	RestoreTerminal			0.0%
 github.com/solworktech/trecs/lib/terminal_player.go:628:	Position			100.0%
 github.com/solworktech/trecs/lib/terminal_player.go:634:	positionLocked			100.0%
-github.com/solworktech/trecs/lib/terminal_player.go:642:	interpolatedLocked		80.0%
+github.com/solworktech/trecs/lib/terminal_player.go:642:	interpolatedLocked		100.0%
 github.com/solworktech/trecs/lib/terminal_player.go:655:	freezePositionLocked		100.0%
 github.com/solworktech/trecs/lib/tview_text.go:15:		escapeTviewTags			100.0%
 github.com/solworktech/trecs/lib/tview_text.go:25:		add				100.0%
@@ -786,7 +786,7 @@ github.com/solworktech/trecs/recorder/script.go:58:		keystrokes			100.0%
 github.com/solworktech/trecs/recorder/script.go:88:		noteOutput			90.0%
 github.com/solworktech/trecs/recorder/script.go:112:		waitPrompt			92.0%
 github.com/solworktech/trecs/recorder/script.go:166:		abortScript			100.0%
-github.com/solworktech/trecs/recorder/script.go:172:		feedScript			83.0%
+github.com/solworktech/trecs/recorder/script.go:172:		feedScript			81.1%
 github.com/solworktech/trecs/recorder/secrets.go:26:		scanRecording			81.2%
 github.com/solworktech/trecs/recorder/secrets.go:52:		reportSecrets			100.0%
 github.com/solworktech/trecs/recorder/secrets.go:60:		shortDescription		100.0%
