@@ -44,7 +44,7 @@ func readLine(r *bufio.Reader) (string, error) {
 
 func runLogin(args []string) {
 	fs := flag.NewFlagSet("login", flag.ExitOnError)
-	server := fs.String("server", "", "Server address, e.g. https://trecs.example.com (default: "+serverDefaultHelp()+")")
+	server := fs.String("server", "", "Server address, e.g. https://trecs.run (default: "+serverDefaultHelp()+")")
 	email := fs.String("email", "", "Account email (asked for if omitted)")
 	passStdin := fs.Bool("password-stdin", false, "Read the password from standard input instead of asking for it")
 	insecure := fs.Bool("allow-insecure-endpoint", false, "Accept a plain http:// server that is not on this machine: your password and session then cross the network unencrypted")

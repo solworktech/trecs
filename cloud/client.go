@@ -60,7 +60,7 @@ func NormalizeServerOpt(raw string, allowInsecure bool) (string, error) {
 	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
-		return "", fmt.Errorf("%q does not include a schema: use something like https://trecs.example.com", raw)
+		return "", fmt.Errorf("%q does not include a schema: use something like https://trecs.run", raw)
 	}
 	if u.Scheme == "http" && !allowInsecure && !isLoopback(u.Hostname()) {
 		// the password and the session cookie would cross the network in the clear
